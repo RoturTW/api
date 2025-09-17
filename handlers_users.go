@@ -98,7 +98,7 @@ func getUser(c *gin.Context) {
 				userCopy := copyUser(users[i])
 				if userCopy.Get("sys.tos_accepted") != true {
 					usersMutex.RUnlock()
-					c.JSON(403, gin.H{"error": "Terms-Of-Service are not accepted or outdated", "username": userCopy.GetUsername(), "sys.tos_accepted": false})
+					c.JSON(403, gin.H{"error": "Terms-Of-Service are not accepted or outdated", "username": userCopy.GetUsername(), "token": userCopy.GetKey(), "sys.tos_accepted": false})
 					return
 				}
 				delete(userCopy, "password")
@@ -119,12 +119,12 @@ func getUser(c *gin.Context) {
 		usersMutex.RLock()
 		for i := range users {
 			if strings.ToLower(users[i].GetUsername()) == usernameLower && users[i].GetPassword() == password {
+				userCopy := copyUser(users[i])
 				if users[i].Get("sys.tos_accepted") != true {
 					usersMutex.RUnlock()
-					c.JSON(403, gin.H{"error": "Terms-Of-Service are not accepted or outdated", "username": username, "sys.tos_accepted": false})
+					c.JSON(403, gin.H{"error": "Terms-Of-Service are not accepted or outdated", "username": username, "token": userCopy.GetKey(), "sys.tos_accepted": false})
 					return
 				}
-				userCopy := copyUser(users[i])
 				delete(userCopy, "password")
 				usersMutex.RUnlock()
 				c.JSON(200, userCopy)
