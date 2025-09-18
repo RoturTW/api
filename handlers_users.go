@@ -1444,3 +1444,36 @@ func acceptTos(c *gin.Context) {
 
 	c.JSON(200, gin.H{"message": "Terms of Service accepted"})
 }
+
+// Badge API handlers
+
+func getBadges(c *gin.Context) {
+	authKey := c.Query("auth")
+	if authKey == "" {
+		c.JSON(403, gin.H{"error": "auth key is required"})
+		return
+	}
+
+	user := authenticateWithKey(authKey)
+	if user == nil {
+		c.JSON(403, gin.H{"error": "Invalid authentication key"})
+		return
+	}
+
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
+	// Find user in users slice to get updated data
+	for _, u := range users {
+		if u.GetUsername() == user.GetUsername() {
+			badgeNames := calculateUserBadges(u)
+
+			c.JSON(200, gin.H{
+				"badge_names": badgeNames,
+			})
+			return
+		}
+	}
+
+	c.JSON(404, gin.H{"error": "User not found"})
+}

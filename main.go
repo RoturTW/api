@@ -127,6 +127,13 @@ func main() {
 	r.POST("/friends/remove/:username", removeFriend)
 	r.GET("/friends", getFriends)
 
+	// Marriage endpoints
+	r.POST("/marriage/propose/:username", proposeMarriage)
+	r.POST("/marriage/accept", acceptMarriage)
+	r.POST("/marriage/reject", rejectMarriage)
+	r.POST("/marriage/divorce", divorceMarriage)
+	r.GET("/marriage/status", getMarriageStatus)
+
 	r.GET("/link/code", getLinkCode)
 	r.POST("/link/code", linkCodeToAccount)
 	r.GET("/link/status", getLinkStatus)
@@ -138,6 +145,9 @@ func main() {
 
 	r.GET("/claim_daily", claimDaily)
 	r.GET("/supporters", getSupporters)
+
+	// Badges endpoints
+	r.GET("/badges", getBadges)
 
 	// DevFund endpoints
 	r.POST("/devfund/escrow_transfer", escrowTransfer)

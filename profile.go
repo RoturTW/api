@@ -178,22 +178,20 @@ func getProfile(c *gin.Context) {
 		sub = "Free"
 	}
 
-	var badges []string
-	if val := foundUser.Get("sys.badges"); val != nil {
-		if b, ok := val.([]string); ok {
-			badges = b
-		} else if b, ok := val.([]interface{}); ok {
-			for _, v := range b {
-				if s, ok := v.(string); ok {
-					badges = append(badges, s)
-				}
-			}
-		}
-	}
+	// Calculate dynamic badges
+	calculatedBadges := calculateUserBadges(*foundUser)
 
 	st, err := loadUserStatus(foundUser.GetUsername())
 	if err != nil {
 		st = nil
+	}
+
+	// Get marriage status if applicable
+	var marriageStatus map[string]any
+	if marriage := foundUser.Get("sys.marriage"); marriage != nil {
+		if marriageMap, ok := marriage.(map[string]any); ok {
+			marriageStatus = marriageMap
+		}
 	}
 
 	profileData := gin.H{
@@ -205,7 +203,8 @@ func getProfile(c *gin.Context) {
 		"pronouns":     getStringOrEmpty(foundUser.Get("pronouns")),
 		"system":       getStringOrEmpty(foundUser.Get("system")),
 		"created":      foundUser.GetCreated(),
-		"badges":       badges,
+		"badges":       calculatedBadges,
+		"marriage":     marriageStatus,
 		"subscription": sub,
 		"theme":        foundUser.Get("theme"),
 		"max_size":     maxSizeStr,
