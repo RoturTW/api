@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -189,6 +190,24 @@ func cleanRateLimitStorage() {
 }
 
 // Middleware
+func rateLimit(limitType string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rateLimitKey := getRateLimitKey(c)
+		isAllowed, remaining, resetTime := applyRateLimit(rateLimitKey, limitType)
+
+		if !isAllowed {
+			c.Header("X-RateLimit-Limit", strconv.Itoa(rateLimits[limitType].Count))
+			c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
+			c.Header("X-RateLimit-Reset", strconv.FormatFloat(resetTime, 'f', 0, 64))
+			c.JSON(429, gin.H{"error": "Rate limit exceeded. Try again later."})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
 func corsMiddleware() gin.HandlerFunc {
 	config := cors.DefaultConfig()
 	config.AllowAllOrigins = true

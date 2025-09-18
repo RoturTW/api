@@ -363,6 +363,92 @@ func divorceMarriage(c *gin.Context) {
 	})
 }
 
+func cancelMarriage(c *gin.Context) {
+	authKey := c.Query("auth")
+	if authKey == "" {
+		c.JSON(403, gin.H{"error": "auth key is required"})
+		return
+	}
+
+	user := authenticateWithKey(authKey)
+	if user == nil {
+		c.JSON(403, gin.H{"error": "Invalid authentication key"})
+		return
+	}
+
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
+
+	// Find user
+	userIndex := -1
+	for i, u := range users {
+		if u.GetUsername() == user.GetUsername() {
+			userIndex = i
+			break
+		}
+	}
+
+	if userIndex == -1 {
+		c.JSON(404, gin.H{"error": "User not found"})
+		return
+	}
+
+	// Check marriage status
+	marriageData := users[userIndex].Get("sys.marriage")
+	if marriageData == nil {
+		c.JSON(400, gin.H{"error": "No pending proposal"})
+		return
+	}
+
+	marriageMap, ok := marriageData.(map[string]interface{})
+	if !ok {
+		c.JSON(400, gin.H{"error": "No pending proposal"})
+		return
+	}
+
+	status, statusExists := marriageMap["status"]
+	if !statusExists || status != "proposed" {
+		c.JSON(400, gin.H{"error": "No pending proposal"})
+		return
+	}
+
+	partnerUsername, partnerExists := marriageMap["partner"].(string)
+	proposerUsername, proposerExists := marriageMap["proposer"].(string)
+
+	if !partnerExists || !proposerExists {
+		c.JSON(400, gin.H{"error": "Invalid proposal data"})
+		return
+	}
+
+	// Can only cancel if you're the proposer
+	if user.GetUsername() != proposerUsername {
+		c.JSON(400, gin.H{"error": "Can only cancel your own proposal"})
+		return
+	}
+
+	// Find partner
+	partnerIndex := -1
+	for i, u := range users {
+		if u.GetUsername() == partnerUsername {
+			partnerIndex = i
+			break
+		}
+	}
+
+	if partnerIndex == -1 {
+		c.JSON(404, gin.H{"error": "Partner not found"})
+		return
+	}
+
+	// Remove marriage data entirely for both users
+	delete(users[userIndex], "sys.marriage")
+	delete(users[partnerIndex], "sys.marriage")
+
+	go saveUsers()
+
+	c.JSON(200, gin.H{"message": "Marriage proposal cancelled"})
+}
+
 func getMarriageStatus(c *gin.Context) {
 	authKey := c.Query("auth")
 	if authKey == "" {

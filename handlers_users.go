@@ -1143,8 +1143,8 @@ func searchUsers(c *gin.Context) {
 	if err != nil || limit <= 0 {
 		limit = 20
 	}
-	if limit > 50 {
-		limit = 50
+	if limit > 20 {
+		limit = 20
 	}
 
 	queryLower := strings.ToLower(query)

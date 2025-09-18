@@ -35,6 +35,7 @@ var (
 		"reply":   {Count: 10, Period: 60},
 		"follow":  {Count: 20, Period: 60},
 		"profile": {Count: 30, Period: 60},
+		"search":  {Count: 20, Period: 60},
 	}
 )
 
