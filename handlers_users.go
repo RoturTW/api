@@ -286,7 +286,9 @@ func registerUser(c *gin.Context) {
 
 	users = append(users, newUser)
 	go saveUsers()
-	c.JSON(201, newUser)
+	userCopy := copyUser(newUser)
+	delete(userCopy, "password")
+	c.JSON(201, userCopy)
 }
 
 func findUserSize(username string) int {
