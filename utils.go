@@ -32,7 +32,7 @@ func roundVal(val float64) float64 {
 	return math.Round(val*100) / 100
 }
 
-func getStringOrEmpty(val interface{}) string {
+func getStringOrEmpty(val any) string {
 	if s, ok := val.(string); ok {
 		return s
 	}

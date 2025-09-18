@@ -50,7 +50,7 @@ func getStringSlice(u User, key string) []string {
 		switch s := v.(type) {
 		case []string:
 			return s
-		case []interface{}:
+		case []any:
 			out := make([]string, 0, len(s))
 			for _, val := range s {
 				if str, ok := val.(string); ok {
@@ -66,6 +66,6 @@ func getStringSlice(u User, key string) []string {
 func setStringSlice(u User, key string, vals []string) { u[key] = vals }
 
 func isValidJSON(s string) bool {
-	var js interface{}
+	var js any
 	return json.Unmarshal([]byte(s), &js) == nil
 }

@@ -230,14 +230,14 @@ func replyToPost(c *gin.Context) {
 	go savePosts()
 
 	go func() {
-		broadcastEvent("update_post", map[string]interface{}{
+		broadcastEvent("update_post", map[string]any{
 			"id":   postID,
 			"key":  "replies",
 			"data": targetPost.Replies,
 		})
 	}()
 
-	addUserEvent(targetPost.User, "reply", map[string]interface{}{
+	addUserEvent(targetPost.User, "reply", map[string]any{
 		"post_id":  postID,
 		"reply_id": newReply.ID,
 		"user":     strings.ToLower(user.GetUsername()),
@@ -298,7 +298,7 @@ func deletePost(c *gin.Context) {
 
 	// Broadcast deletion event for public posts
 	if wasPublic {
-		go broadcastEvent("delete_post", map[string]interface{}{"id": postID})
+		go broadcastEvent("delete_post", map[string]any{"id": postID})
 	}
 
 	c.JSON(200, gin.H{"message": "Post deleted successfully"})
@@ -387,7 +387,7 @@ func ratePost(c *gin.Context) {
 
 	// Broadcast rating update for public posts
 	if !targetPost.ProfileOnly {
-		go broadcastEvent("update_post", map[string]interface{}{
+		go broadcastEvent("update_post", map[string]any{
 			"id":   postID,
 			"key":  "likes",
 			"data": targetPost.Likes,
@@ -473,7 +473,7 @@ func repost(c *gin.Context) {
 
 	go savePosts()
 
-	addUserEvent(originalPost.User, "repost", map[string]interface{}{
+	addUserEvent(originalPost.User, "repost", map[string]any{
 		"repost_id":        newRepost.ID,
 		"user":             user.GetUsername(),
 		"original_post_id": originalPost.ID,
@@ -530,7 +530,7 @@ func pinPost(c *gin.Context) {
 
 	// Broadcast pin update for public posts
 	if !targetPost.ProfileOnly {
-		go broadcastEvent("update_post", map[string]interface{}{
+		go broadcastEvent("update_post", map[string]any{
 			"id":   postID,
 			"key":  "pinned",
 			"data": true,
@@ -588,7 +588,7 @@ func unpinPost(c *gin.Context) {
 
 	// Broadcast unpin update for public posts
 	if !targetPost.ProfileOnly {
-		go broadcastEvent("update_post", map[string]interface{}{
+		go broadcastEvent("update_post", map[string]any{
 			"id":   postID,
 			"key":  "pinned",
 			"data": false,

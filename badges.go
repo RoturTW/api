@@ -19,7 +19,7 @@ func calculateUserBadges(user User) []string {
 	}
 
 	if friends := user.Get("sys.friends"); friends != nil {
-		if friendsList, ok := friends.([]interface{}); ok && len(friendsList) >= 10 {
+		if friendsList, ok := friends.([]any); ok && len(friendsList) >= 10 {
 			badges = append(badges, "friendly")
 		}
 	}
@@ -29,7 +29,7 @@ func calculateUserBadges(user User) []string {
 	}
 
 	if marriage := user.Get("sys.marriage"); marriage != nil {
-		if marriageMap, ok := marriage.(map[string]interface{}); ok {
+		if marriageMap, ok := marriage.(map[string]any); ok {
 			if status, ok := marriageMap["status"].(string); ok && status == "married" {
 				badges = append(badges, "married")
 			}

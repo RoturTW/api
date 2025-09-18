@@ -56,7 +56,7 @@ func proposeMarriage(c *gin.Context) {
 
 	proposerMarriage := users[proposerIndex].Get("sys.marriage")
 	if proposerMarriage != nil {
-		if marriageMap, ok := proposerMarriage.(map[string]interface{}); ok {
+		if marriageMap, ok := proposerMarriage.(map[string]any); ok {
 			if status, exists := marriageMap["status"]; exists && status != "single" {
 				c.JSON(400, gin.H{"error": "You are already married or have a pending proposal"})
 				return
@@ -66,7 +66,7 @@ func proposeMarriage(c *gin.Context) {
 
 	targetMarriage := users[targetIndex].Get("sys.marriage")
 	if targetMarriage != nil {
-		if marriageMap, ok := targetMarriage.(map[string]interface{}); ok {
+		if marriageMap, ok := targetMarriage.(map[string]any); ok {
 			if status, exists := marriageMap["status"]; exists && status != "single" {
 				c.JSON(400, gin.H{"error": "Target user is already married or has a pending proposal"})
 				return
@@ -81,14 +81,14 @@ func proposeMarriage(c *gin.Context) {
 
 	timestamp := time.Now().UnixMilli()
 
-	users[proposerIndex]["sys.marriage"] = map[string]interface{}{
+	users[proposerIndex]["sys.marriage"] = map[string]any{
 		"status":    "proposed",
 		"partner":   targetUsername,
 		"timestamp": timestamp,
 		"proposer":  user.GetUsername(),
 	}
 
-	users[targetIndex]["sys.marriage"] = map[string]interface{}{
+	users[targetIndex]["sys.marriage"] = map[string]any{
 		"status":    "proposed",
 		"partner":   user.GetUsername(),
 		"timestamp": timestamp,
@@ -135,7 +135,7 @@ func acceptMarriage(c *gin.Context) {
 		return
 	}
 
-	marriageMap, ok := marriageData.(map[string]interface{})
+	marriageMap, ok := marriageData.(map[string]any)
 	if !ok {
 		c.JSON(400, gin.H{"error": "No pending proposal"})
 		return
@@ -176,14 +176,14 @@ func acceptMarriage(c *gin.Context) {
 	// Update marriage status for both users
 	timestamp := time.Now().UnixMilli()
 
-	users[userIndex]["sys.marriage"] = map[string]interface{}{
+	users[userIndex]["sys.marriage"] = map[string]any{
 		"status":    "married",
 		"partner":   partnerUsername,
 		"timestamp": timestamp,
 		"proposer":  proposerUsername,
 	}
 
-	users[partnerIndex]["sys.marriage"] = map[string]interface{}{
+	users[partnerIndex]["sys.marriage"] = map[string]any{
 		"status":    "married",
 		"partner":   user.GetUsername(),
 		"timestamp": timestamp,
@@ -234,7 +234,7 @@ func rejectMarriage(c *gin.Context) {
 		return
 	}
 
-	marriageMap, ok := marriageData.(map[string]interface{})
+	marriageMap, ok := marriageData.(map[string]any)
 	if !ok {
 		c.JSON(400, gin.H{"error": "No pending proposal"})
 		return
@@ -320,7 +320,7 @@ func divorceMarriage(c *gin.Context) {
 		return
 	}
 
-	marriageMap, ok := marriageData.(map[string]interface{})
+	marriageMap, ok := marriageData.(map[string]any)
 	if !ok {
 		c.JSON(400, gin.H{"error": "Not married"})
 		return
@@ -393,7 +393,7 @@ func getMarriageStatus(c *gin.Context) {
 				return
 			}
 
-			if marriageMap, ok := marriageData.(map[string]interface{}); ok {
+			if marriageMap, ok := marriageData.(map[string]any); ok {
 				c.JSON(200, marriageMap)
 			} else {
 				c.JSON(200, gin.H{

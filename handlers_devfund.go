@@ -114,33 +114,33 @@ func escrowTransfer(c *gin.Context) {
 	}
 
 	// Helper to add transaction
-	addTransaction := func(u *User, tx map[string]interface{}) {
+	addTransaction := func(u *User, tx map[string]any) {
 		raw := (*u)["sys.transactions"]
-		var txs []map[string]interface{}
+		var txs []map[string]any
 
 		switch v := raw.(type) {
 		case nil:
-			txs = make([]map[string]interface{}, 0)
-		case []interface{}:
+			txs = make([]map[string]any, 0)
+		case []any:
 			for _, item := range v {
-				if m, ok := item.(map[string]interface{}); ok {
+				if m, ok := item.(map[string]any); ok {
 					txs = append(txs, m)
 				}
 			}
-		case []map[string]interface{}:
+		case []map[string]any:
 			txs = v
 		default:
-			txs = make([]map[string]interface{}, 0)
+			txs = make([]map[string]any, 0)
 		}
 
-		txs = append([]map[string]interface{}{tx}, txs...)
+		txs = append([]map[string]any{tx}, txs...)
 		if len(txs) > 20 {
 			txs = txs[:20]
 		}
 		(*u)["sys.transactions"] = txs
 	}
 
-	addTransaction(fromUser, map[string]interface{}{
+	addTransaction(fromUser, map[string]any{
 		"note":        note,
 		"user":        "devfund-escrow",
 		"time":        now,
@@ -265,33 +265,33 @@ func escrowRelease(c *gin.Context) {
 	}
 
 	// Helper to add transaction
-	addTransaction := func(u *User, tx map[string]interface{}) {
+	addTransaction := func(u *User, tx map[string]any) {
 		raw := (*u)["sys.transactions"]
-		var txs []map[string]interface{}
+		var txs []map[string]any
 
 		switch v := raw.(type) {
 		case nil:
-			txs = make([]map[string]interface{}, 0)
-		case []interface{}:
+			txs = make([]map[string]any, 0)
+		case []any:
 			for _, item := range v {
-				if m, ok := item.(map[string]interface{}); ok {
+				if m, ok := item.(map[string]any); ok {
 					txs = append(txs, m)
 				}
 			}
-		case []map[string]interface{}:
+		case []map[string]any:
 			txs = v
 		default:
-			txs = make([]map[string]interface{}, 0)
+			txs = make([]map[string]any, 0)
 		}
 
-		txs = append([]map[string]interface{}{tx}, txs...)
+		txs = append([]map[string]any{tx}, txs...)
 		if len(txs) > 20 {
 			txs = txs[:20]
 		}
 		(*u)["sys.transactions"] = txs
 	}
 
-	addTransaction(toUser, map[string]interface{}{
+	addTransaction(toUser, map[string]any{
 		"note":        note,
 		"user":        "devfund-escrow",
 		"time":        now,

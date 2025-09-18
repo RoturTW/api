@@ -42,7 +42,7 @@ func getNotifications(c *gin.Context) {
 	currentTime := time.Now().UnixMilli()
 	cutoffTime := currentTime - int64(timePeriod*24*60*60*1000)
 
-	notifications := make([]map[string]interface{}, 0)
+	notifications := make([]map[string]any, 0)
 
 	eventsHistoryMutex.RLock()
 	userEvents, exists := eventsHistory[username]
@@ -51,7 +51,7 @@ func getNotifications(c *gin.Context) {
 	if exists {
 		for _, event := range userEvents {
 			if event.Timestamp >= cutoffTime {
-				notification := map[string]interface{}{
+				notification := map[string]any{
 					"type":      event.Type,
 					"id":        event.ID,
 					"timestamp": event.Timestamp,
@@ -71,7 +71,7 @@ func getNotifications(c *gin.Context) {
 	c.JSON(200, notifications)
 }
 
-func makeHTTPRequest(method, url string, payload interface{}, timeout time.Duration, logPrefix string, expectedStatusCode int) bool {
+func makeHTTPRequest(method, url string, payload any, timeout time.Duration, logPrefix string, expectedStatusCode int) bool {
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		log.Printf("[%s] Error marshaling payload: %v", logPrefix, err)

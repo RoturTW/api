@@ -8,7 +8,7 @@ import (
 )
 
 // User represents a user with dynamic fields
-type User map[string]interface{}
+type User map[string]any
 
 // Helper methods for User
 func (u User) GetUsername() string {
@@ -51,7 +51,7 @@ func (u User) GetCreated() int64 {
 	return 0
 }
 
-func (u User) Get(key string) interface{} {
+func (u User) Get(key string) any {
 	value, ok := u[key]
 	if ok {
 		return value
@@ -59,7 +59,7 @@ func (u User) Get(key string) interface{} {
 	return nil
 }
 
-func (u User) Set(key string, value interface{}) {
+func (u User) Set(key string, value any) {
 	u[key] = value
 }
 
@@ -118,7 +118,7 @@ type Transaction struct {
 // UnmarshalJSON custom unmarshaler to handle timestamp as string or number
 func (r *Reply) UnmarshalJSON(data []byte) error {
 	// First try to unmarshal into a map to handle flexible timestamp type
-	var rawData map[string]interface{}
+	var rawData map[string]any
 	if err := json.Unmarshal(data, &rawData); err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ type Item struct {
 	Selling         bool              `json:"selling"`
 	Author          string            `json:"author"`
 	Owner           string            `json:"owner"`
-	PrivateData     interface{}       `json:"private_data,omitempty"`
+	PrivateData     any               `json:"private_data,omitempty"`
 	Created         float64           `json:"created"`
 	TransferHistory []TransferHistory `json:"transfer_history"`
 	TotalIncome     int               `json:"total_income"`
@@ -197,7 +197,7 @@ type Key struct {
 	TotalIncome  int                    `json:"total_income,omitempty"`
 }
 
-func (k *Key) setKey(key string, value interface{}) {
+func (k *Key) setKey(key string, value any) {
 	switch key {
 	case "name":
 		if v, ok := value.(string); ok {
@@ -226,25 +226,25 @@ func (k *Key) setKey(key string, value interface{}) {
 
 // KeyUserData represents user data for a key
 type KeyUserData struct {
-	Time        float64     `json:"time"`
-	Price       int         `json:"price,omitempty"`
-	NextBilling interface{} `json:"next_billing,omitempty"`
+	Time        float64 `json:"time"`
+	Price       int     `json:"price,omitempty"`
+	NextBilling any     `json:"next_billing,omitempty"`
 }
 
 // Subscription represents subscription information
 type Subscription struct {
-	Active      bool        `json:"active"`
-	Frequency   int         `json:"frequency"`
-	Period      string      `json:"period"`
-	NextBilling interface{} `json:"next_billing"`
+	Active      bool   `json:"active"`
+	Frequency   int    `json:"frequency"`
+	Period      string `json:"period"`
+	NextBilling any    `json:"next_billing"`
 }
 
 // Event represents a user event/notification
 type Event struct {
-	Type      string                 `json:"type"`
-	Data      map[string]interface{} `json:"data"`
-	Timestamp int64                  `json:"timestamp"`
-	ID        string                 `json:"id"`
+	Type      string         `json:"type"`
+	Data      map[string]any `json:"data"`
+	Timestamp int64          `json:"timestamp"`
+	ID        string         `json:"id"`
 }
 
 // RateLimit represents rate limiting data

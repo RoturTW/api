@@ -257,15 +257,15 @@ func registerUser(c *gin.Context) {
 		"max_size":         5000000,
 		"sys.friends":      []string{},
 		"sys.requests":     []string{},
-		"sys.links":        []map[string]interface{}{},
+		"sys.links":        []map[string]any{},
 		"sys.currency":     float64(0),
-		"sys.transactions": []interface{}{},
-		"sys.items":        []interface{}{},
+		"sys.transactions": []any{},
+		"sys.items":        []any{},
 		"sys.badges":       []string{},
-		"sys.purchases":    []interface{}{},
+		"sys.purchases":    []any{},
 		"private":          false,
 		"id":               strconv.FormatInt(time.Now().UnixNano(), 10),
-		"theme": map[string]interface{}{
+		"theme": map[string]any{
 			"primary":    "#222",
 			"secondary":  "#555",
 			"tertiary":   "#777",
@@ -305,13 +305,13 @@ func findUserSize(username string) int {
 					for _, item := range v {
 						totalSize += len(item)
 					}
-				case []interface{}:
+				case []any:
 					for _, item := range v {
 						if strItem, ok := item.(string); ok {
 							totalSize += len(strItem)
 						}
 					}
-				case map[string]interface{}:
+				case map[string]any:
 					for mk, mv := range v {
 						if strMv, ok := mv.(string); ok {
 							totalSize += len(strMv)
@@ -606,7 +606,7 @@ func updateUserAdmin(c *gin.Context) {
 	}
 
 	// Parse request body - expects user_data object from Python client
-	var userData map[string]interface{}
+	var userData map[string]any
 	if err := c.ShouldBindJSON(&userData); err != nil {
 		c.JSON(400, gin.H{"error": "Invalid request body"})
 		return
@@ -744,7 +744,7 @@ func updateUserAdmin(c *gin.Context) {
 
 			go saveUsers()
 
-			go notify("sys.delete", map[string]interface{}{
+			go notify("sys.delete", map[string]any{
 				"username": username,
 				"key":      key,
 			})
@@ -899,7 +899,7 @@ func deleteUserKey(c *gin.Context) {
 
 	go saveUsers()
 
-	go notify("sys.delete", map[string]interface{}{
+	go notify("sys.delete", map[string]any{
 		"username": username,
 		"key":      key,
 	})
@@ -950,28 +950,28 @@ func transferCredits(c *gin.Context) {
 	defer usersMutex.Unlock()
 
 	// Helper to normalize / validate transactions slice
-	ensureTxSlice := func(u *User) []map[string]interface{} {
+	ensureTxSlice := func(u *User) []map[string]any {
 		raw := (*u)["sys.transactions"]
-		list := make([]map[string]interface{}, 0)
+		list := make([]map[string]any, 0)
 		switch v := raw.(type) {
 		case nil:
 			// leave empty
-		case []interface{}:
+		case []any:
 			for _, item := range v {
-				if m, ok := item.(map[string]interface{}); ok {
+				if m, ok := item.(map[string]any); ok {
 					list = append(list, m)
 				}
 			}
-		case []map[string]interface{}:
+		case []map[string]any:
 			list = v
 		default:
 			// invalid type, reset
 		}
 		return list
 	}
-	appendTx := func(u *User, tx map[string]interface{}) {
+	appendTx := func(u *User, tx map[string]any) {
 		txs := ensureTxSlice(u)
-		txs = append([]map[string]interface{}{tx}, txs...)
+		txs = append([]map[string]any{tx}, txs...)
 		if len(txs) > 20 { // keep most recent 20
 			txs = txs[:20]
 		}

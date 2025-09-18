@@ -92,7 +92,7 @@ func transferItem(c *gin.Context) {
 	go saveItems()
 
 	// Notify target user
-	addUserEvent(strings.ToLower(targetUsername), "item_received", map[string]interface{}{
+	addUserEvent(strings.ToLower(targetUsername), "item_received", map[string]any{
 		"item_name":     targetItem.Name,
 		"from":          user.GetUsername(),
 		"transfer_type": "transfer",
@@ -203,13 +203,13 @@ func buyItem(c *gin.Context) {
 	go broadcastUserUpdate(user.GetUsername(), "sys.currency", userCurrency-targetItem.Price)
 
 	// Notify both users
-	addUserEvent(oldOwner, "item_sold", map[string]interface{}{
+	addUserEvent(oldOwner, "item_sold", map[string]any{
 		"item_name": targetItem.Name,
 		"buyer":     user.GetUsername(),
 		"price":     targetItem.Price,
 	})
 
-	addUserEvent(strings.ToLower(user.GetUsername()), "item_purchased", map[string]interface{}{
+	addUserEvent(strings.ToLower(user.GetUsername()), "item_purchased", map[string]any{
 		"item_name": targetItem.Name,
 		"seller":    oldOwner,
 		"price":     targetItem.Price,
@@ -342,7 +342,7 @@ func createItem(c *gin.Context) {
 		return
 	}
 
-	var itemData map[string]interface{}
+	var itemData map[string]any
 	if err := json.Unmarshal([]byte(itemStr), &itemData); err != nil {
 		c.JSON(400, gin.H{"error": "Invalid item data"})
 		return
@@ -540,7 +540,7 @@ func updateItem(c *gin.Context) {
 		return
 	}
 
-	var newData map[string]interface{}
+	var newData map[string]any
 	if err := json.Unmarshal([]byte(newDataStr), &newData); err != nil {
 		c.JSON(400, gin.H{"error": "Invalid data"})
 		return
