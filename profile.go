@@ -237,6 +237,14 @@ func getProfile(c *gin.Context) {
 		profileData["follows_me"] = *isFollowedBy
 	}
 
+	if marriage := foundUser.Get("sys.marriage"); marriage != nil {
+		if marriageMap, ok := marriage.(map[string]any); ok {
+			if partner, ok := marriageMap["partner"].(string); ok && partner != "" {
+				profileData["married_to"] = partner
+			}
+		}
+	}
+
 	c.JSON(200, profileData)
 }
 
