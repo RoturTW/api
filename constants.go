@@ -36,6 +36,7 @@ var (
 		"follow":  {Count: 20, Period: 60},
 		"profile": {Count: 30, Period: 60},
 		"search":  {Count: 20, Period: 60},
+		"global":  {Count: 10, Period: 10}, // Global rate limit: 10 requests per 10 seconds
 	}
 )
 

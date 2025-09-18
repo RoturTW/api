@@ -148,9 +148,25 @@ func applyRateLimit(key string, limitType string) (bool, int, float64) {
 	if remaining < 0 {
 		remaining = 0
 	}
+
+	// If rate limit exceeded, add 10 seconds penalty
+	// Fuck scrapers and bots ngl
+	if !isAllowed {
+		rateLimit.ResetAt += 10
+	}
+
 	resetTime := float64(rateLimit.ResetAt)
 
 	return isAllowed, remaining, resetTime
+}
+
+func checkGlobalRateLimit(c *gin.Context) (bool, int, float64) {
+	clientIP := c.ClientIP()
+	if clientIP == "" {
+		clientIP = "unknown_client"
+	}
+
+	return applyRateLimit(clientIP, "global")
 }
 
 func getRateLimitKey(c *gin.Context) string {
@@ -189,7 +205,23 @@ func cleanRateLimitStorage() {
 	}
 }
 
-// Middleware
+func globalRateLimitMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		isAllowed, remaining, resetTime := checkGlobalRateLimit(c)
+
+		if !isAllowed {
+			c.Header("X-RateLimit-Limit", strconv.Itoa(rateLimits["global"].Count))
+			c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
+			c.Header("X-RateLimit-Reset", strconv.FormatFloat(resetTime, 'f', 0, 64))
+			c.JSON(429, gin.H{"error": "Too many requests from this IP address. Rate limit extended by 5 seconds due to violation."})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
 func rateLimit(limitType string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rateLimitKey := getRateLimitKey(c)
@@ -199,7 +231,7 @@ func rateLimit(limitType string) gin.HandlerFunc {
 			c.Header("X-RateLimit-Limit", strconv.Itoa(rateLimits[limitType].Count))
 			c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
 			c.Header("X-RateLimit-Reset", strconv.FormatFloat(resetTime, 'f', 0, 64))
-			c.JSON(429, gin.H{"error": "Rate limit exceeded. Try again later."})
+			c.JSON(429, gin.H{"error": "Rate limit exceeded. Rate limit extended by 5 seconds due to violation."})
 			c.Abort()
 			return
 		}

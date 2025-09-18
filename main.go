@@ -35,6 +35,7 @@ func main() {
 	r := gin.Default()
 
 	r.Use(corsMiddleware())
+	r.Use(globalRateLimitMiddleware())
 
 	r.GET("/post", createPost)
 	r.GET("/reply", replyToPost)

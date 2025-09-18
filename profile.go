@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -9,6 +10,11 @@ import (
 )
 
 func getProfile(c *gin.Context) {
+	name := c.Query("username")
+	if name == "" {
+		name = c.Query("name")
+	}
+
 	// Rate limiting check
 	rateLimitKey := getRateLimitKey(c)
 	isAllowed, remaining, resetTime := applyRateLimit(rateLimitKey, "profile")
@@ -17,14 +23,10 @@ func getProfile(c *gin.Context) {
 		c.Header("X-RateLimit-Limit", strconv.Itoa(rateLimits["profile"].Count))
 		c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
 		c.Header("X-RateLimit-Reset", strconv.FormatFloat(resetTime, 'f', 0, 64))
-		c.JSON(429, gin.H{"error": "Rate limit exceeded. Try again later."})
+		c.JSON(429, gin.H{"error": "Rate limit exceeded. Rate limit extended by 5 seconds due to violation."})
 		return
 	}
 
-	name := c.Query("username")
-	if name == "" {
-		name = c.Query("name")
-	}
 	discord_id := c.Query("discord_id")
 	if name == "" && discord_id == "" {
 		c.JSON(400, gin.H{"error": "Name or Discord ID is required"})
@@ -99,11 +101,8 @@ func getProfile(c *gin.Context) {
 	// Get following count
 	followingCount := 0
 	for _, data := range followersData {
-		for _, follower := range data.Followers {
-			if follower == nameLower {
-				followingCount++
-				break
-			}
+		if slices.Contains(data.Followers, nameLower) {
+			followingCount++
 		}
 	}
 	followersMutex.RUnlock()
@@ -121,12 +120,9 @@ func getProfile(c *gin.Context) {
 			// Check if the authenticated user is following the target user
 			followersMutex.RLock()
 			if data, exists := followersData[nameLower]; exists {
-				for _, follower := range data.Followers {
-					if follower == authenticatedUsername {
-						following := true
-						isFollowing = &following
-						break
-					}
+				if slices.Contains(data.Followers, authenticatedUsername) {
+					following := true
+					isFollowing = &following
 				}
 			}
 			if isFollowing == nil {
@@ -136,12 +132,9 @@ func getProfile(c *gin.Context) {
 
 			// Check if the target user is following the authenticated user
 			if data, exists := followersData[authenticatedUsername]; exists {
-				for _, follower := range data.Followers {
-					if follower == nameLower {
-						followedBy := true
-						isFollowedBy = &followedBy
-						break
-					}
+				if slices.Contains(data.Followers, nameLower) {
+					followedBy := true
+					isFollowedBy = &followedBy
 				}
 			}
 			if isFollowedBy == nil {
