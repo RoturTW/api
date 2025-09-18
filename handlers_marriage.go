@@ -140,7 +140,7 @@ func acceptMarriage(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "No pending proposal"})
 		return
 	}
-	
+
 	status, statusExists := marriageMap["status"]
 	if !statusExists || status != "proposed" {
 		c.JSON(400, gin.H{"error": "No pending proposal"})
@@ -149,7 +149,7 @@ func acceptMarriage(c *gin.Context) {
 
 	partnerUsername, partnerExists := marriageMap["partner"].(string)
 	proposerUsername, proposerExists := marriageMap["proposer"].(string)
-	
+
 	if !partnerExists || !proposerExists {
 		c.JSON(400, gin.H{"error": "Invalid proposal data"})
 		return
@@ -239,7 +239,7 @@ func rejectMarriage(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "No pending proposal"})
 		return
 	}
-	
+
 	status, statusExists := marriageMap["status"]
 	if !statusExists || status != "proposed" {
 		c.JSON(400, gin.H{"error": "No pending proposal"})
@@ -248,7 +248,7 @@ func rejectMarriage(c *gin.Context) {
 
 	partnerUsername, partnerExists := marriageMap["partner"].(string)
 	proposerUsername, proposerExists := marriageMap["proposer"].(string)
-	
+
 	if !partnerExists || !proposerExists {
 		c.JSON(400, gin.H{"error": "Invalid proposal data"})
 		return
@@ -325,7 +325,7 @@ func divorceMarriage(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "Not married"})
 		return
 	}
-	
+
 	status, statusExists := marriageMap["status"]
 	if !statusExists || status != "married" {
 		c.JSON(400, gin.H{"error": "Not married"})
