@@ -95,7 +95,7 @@ func proposeMarriage(c *gin.Context) {
 		"proposer":  user.GetUsername(),
 	}
 
-	saveUsers()
+	go saveUsers()
 
 	c.JSON(200, gin.H{"message": "Marriage proposal sent successfully"})
 }
@@ -190,7 +190,7 @@ func acceptMarriage(c *gin.Context) {
 		"proposer":  proposerUsername,
 	}
 
-	saveUsers()
+	go saveUsers()
 
 	c.JSON(200, gin.H{
 		"message": "Marriage accepted successfully",
@@ -278,7 +278,7 @@ func rejectMarriage(c *gin.Context) {
 	delete(users[userIndex], "sys.marriage")
 	delete(users[partnerIndex], "sys.marriage")
 
-	saveUsers()
+	go saveUsers()
 
 	c.JSON(200, gin.H{"message": "Marriage proposal rejected"})
 }
@@ -356,7 +356,7 @@ func divorceMarriage(c *gin.Context) {
 	delete(users[userIndex], "sys.marriage")
 	delete(users[partnerIndex], "sys.marriage")
 
-	saveUsers()
+	go saveUsers()
 
 	c.JSON(200, gin.H{
 		"message": "Divorce processed successfully",
