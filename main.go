@@ -61,7 +61,6 @@ func main() {
 	r.GET("/stats/followers", rateLimit("default"), getFollowersStats)
 
 	r.GET("/search_posts", rateLimit("search"), searchPosts)
-	r.GET("/search_users", rateLimit("search"), searchUsers)
 
 	r.GET("/get_user", rateLimit("profile"), getUser)
 	r.GET("/get_user_new", rateLimit("profile"), getUser)
