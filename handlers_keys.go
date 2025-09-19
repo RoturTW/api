@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"strconv"
 	"strings"
@@ -279,7 +280,13 @@ func updateKey(c *gin.Context) {
 				return
 			}
 
-			keys[i].setKey(key, data)
+			var parsedData any
+			if err := json.Unmarshal([]byte(data), &parsedData); err != nil {
+				c.JSON(400, gin.H{"error": "Failed to parse JSON data"})
+				return
+			}
+
+			keys[i].setKey(key, parsedData)
 
 			go saveKeys()
 
