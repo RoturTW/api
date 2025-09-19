@@ -64,12 +64,13 @@ func createKey(c *gin.Context) {
 	}
 
 	newKey := Key{
-		Key:     generateToken(),
-		Creator: strings.ToLower(user.GetUsername()),
-		Users:   make(map[string]KeyUserData),
-		Name:    &name,
-		Price:   price,
-		Type:    "standard",
+		Key:         generateToken(),
+		Creator:     strings.ToLower(user.GetUsername()),
+		Users:       make(map[string]KeyUserData),
+		Name:        &name,
+		Price:       price,
+		Type:        "standard",
+		TotalIncome: 0,
 	}
 
 	if description != "" {
@@ -512,6 +513,9 @@ func buyKey(c *gin.Context) {
 
 			keys[i].Users[username] = userData
 
+			// Update total income for the key
+			keys[i].TotalIncome += keys[i].Price
+
 			go saveKeys()
 
 			// Deduct the price from user's balance
@@ -730,6 +734,9 @@ func checkSubscriptions() {
 						usersMutex.Unlock()
 						go saveUsers()
 						go broadcastUserUpdate(username, "sys.currency", currencyFloat)
+
+						// Update total income for the key
+						key.TotalIncome += userData.Price
 
 						frequency := key.Subscription.Frequency
 						if frequency == 0 {
