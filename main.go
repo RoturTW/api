@@ -56,7 +56,6 @@ func main() {
 	r.GET("/stats/economy", rateLimit("default"), getEconomyStats)
 	r.GET("/stats/users", rateLimit("default"), getUserStats)
 	r.GET("/stats/rich", rateLimit("default"), getRichList)
-	r.GET("/stats/aura", rateLimit("default"), getAuraStats)
 	r.GET("/stats/systems", rateLimit("default"), getSystemStats)
 	r.GET("/stats/followers", rateLimit("default"), getFollowersStats)
 

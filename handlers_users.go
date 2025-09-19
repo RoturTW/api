@@ -95,6 +95,8 @@ func getUser(c *gin.Context) {
 		usersMutex.RLock()
 		for i := range users {
 			if users[i].GetKey() == authKey {
+				users[i].Set("sys.last_login", time.Now().UnixMilli())
+				users[i].Set("sys.total_logins", users[i].GetInt("sys.total_logins")+1)
 				userCopy := copyUser(users[i])
 				if userCopy.Get("sys.tos_accepted") != true {
 					usersMutex.RUnlock()
@@ -119,6 +121,8 @@ func getUser(c *gin.Context) {
 		usersMutex.RLock()
 		for i := range users {
 			if strings.ToLower(users[i].GetUsername()) == usernameLower && users[i].GetPassword() == password {
+				users[i].Set("sys.last_login", time.Now().UnixMilli())
+				users[i].Set("sys.total_logins", users[i].GetInt("sys.total_logins")+1)
 				userCopy := copyUser(users[i])
 				if users[i].Get("sys.tos_accepted") != true {
 					usersMutex.RUnlock()
@@ -252,9 +256,10 @@ func registerUser(c *gin.Context) {
 		"password":         password,
 		"email":            email,
 		"key":              generateAccountToken(),
-		"last_login":       time.Now().UnixMilli(),
 		"system":           matchedSystem.Name,
 		"max_size":         5000000,
+		"sys.last_login":   time.Now().UnixMilli(),
+		"sys.total_logins": 0,
 		"sys.friends":      []string{},
 		"sys.requests":     []string{},
 		"sys.links":        []map[string]any{},

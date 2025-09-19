@@ -59,6 +59,25 @@ func (u User) Get(key string) any {
 	return nil
 }
 
+func (u User) GetInt(key string) int {
+	value, ok := u[key]
+	if ok {
+		switch v := value.(type) {
+		case int:
+			return v
+		case float64:
+			return int(v)
+		case int64:
+			return int(v)
+		case string:
+			if intValue, err := strconv.Atoi(v); err == nil {
+				return intValue
+			}
+		}
+	}
+	return 0
+}
+
 func (u User) Set(key string, value any) {
 	u[key] = value
 }
