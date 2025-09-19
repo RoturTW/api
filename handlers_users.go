@@ -1443,6 +1443,7 @@ func acceptTos(c *gin.Context) {
 
 	// Accept the TOS by setting a flag in the user data
 	go patchUserUpdate(user.GetUsername(), "sys.tos_accepted", true)
+	go patchUserUpdate(user.GetUsername(), "sys.tos_time", time.Now().Unix())
 
 	c.JSON(200, gin.H{"message": "Terms of Service accepted"})
 }
