@@ -106,6 +106,7 @@ func main() {
 	r.GET("/admin/get_user_by", getUserBy)
 	r.POST("/admin/update_user", updateUserAdmin)
 	r.POST("/admin/delete_user", deleteUserAdmin)
+	r.GET("/admin/tos_update", tosUpdate)
 
 	// Users endpoints
 	r.POST("/create_user", registerUser)

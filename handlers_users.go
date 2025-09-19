@@ -1448,6 +1448,23 @@ func acceptTos(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "Terms of Service accepted"})
 }
 
+func tosUpdate(c *gin.Context) {
+	if !authenticateAdmin(c) {
+		return
+	}
+
+	// Loop through all users and set sys.tos_accepted to false
+	usersMutex.Lock()
+	for i := range users {
+		users[i]["sys.tos_accepted"] = false
+	}
+	usersMutex.Unlock()
+
+	go saveUsers()
+
+	c.JSON(200, gin.H{"message": "All users marked as not having accepted the updated Terms of Service"})
+}
+
 // Badge API handlers
 
 func getBadges(c *gin.Context) {
