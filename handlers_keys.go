@@ -200,6 +200,10 @@ func revokeKey(c *gin.Context) {
 				c.JSON(403, gin.H{"error": "You can only revoke access to keys you created"})
 				return
 			}
+			if strings.EqualFold(targetUser, keys[i].Creator) {
+				c.JSON(400, gin.H{"error": "You cannot revoke access from the key creator"})
+				return
+			}
 
 			delete(keys[i].Users, strings.ToLower(targetUser))
 
