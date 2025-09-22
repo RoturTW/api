@@ -3,6 +3,8 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"math"
@@ -217,4 +219,12 @@ func corsMiddleware() gin.HandlerFunc {
 	config.AllowMethods = []string{"GET", "POST", "PATCH", "DELETE", "PUT", "OPTIONS"}
 	config.AllowHeaders = []string{"Content-Type", "Authorization"}
 	return cors.New(config)
+}
+
+func JSONStringify(v any) string {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprintf(`%v`, v)
+	}
+	return string(data)
 }

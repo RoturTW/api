@@ -378,8 +378,11 @@ func updateUser(c *gin.Context) {
 	key := req.Key
 	value := req.Value
 	stringValue := fmt.Sprintf("%v", value)
-	if authKey == "" || key == "" {
-		c.JSON(400, gin.H{"error": "auth key and key are required"})
+
+	fmt.Fprintln(os.Stderr, "Update request:", key, "=", stringValue) // Debug log
+
+	if authKey == "" {
+		c.JSON(403, gin.H{"error": "auth key is required"})
 		return
 	}
 
@@ -532,25 +535,33 @@ func updateUser(c *gin.Context) {
 		admin = adminToken != "" && ADMIN_TOKEN != "" && adminToken == ADMIN_TOKEN
 	}
 
-	if strings.HasPrefix(key, "sys.") && !admin {
-		c.JSON(400, gin.H{"error": "System keys cannot be modified directly"})
-		return
-	} else if len(key) > 20 {
-		c.JSON(400, gin.H{"error": "Key length exceeds 20 characters"})
-		return
-	} else if strVal, ok := value.(string); ok && len(strVal) > 1000 {
+	if len(stringValue) > 1000 {
 		c.JSON(400, gin.H{"error": "Value length exceeds 1000 characters"})
 		return
 	}
-
+	if strings.HasPrefix(key, "sys.") && !admin {
+		c.JSON(400, gin.H{"error": "System keys cannot be modified directly"})
+		return
+	}
+	if len(key) > 20 {
+		c.JSON(400, gin.H{"error": "Key length exceeds 20 characters"})
+		return
+	}
 	if slices.Contains(lockedKeys, key) {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Key '%s' cannot be updated", key)})
 		return
 	}
 
-	go saveUsers()
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
+	for i := range users {
+		if strings.EqualFold(users[i].GetUsername(), username) {
+			users[i].Set(key, value)
+			break
+		}
+	}
 
-	go broadcastUserUpdate(username, key, value)
+	go saveUsers()
 
 	c.JSON(200, gin.H{"message": "User key updated successfully", "username": username, "key": key, "value": value})
 }
