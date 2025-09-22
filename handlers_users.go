@@ -401,7 +401,15 @@ func updateUser(c *gin.Context) {
 	}
 	authKey := req.Auth
 	key := req.Key
+	if key == "" {
+		c.JSON(400, gin.H{"error": "Key is required"})
+		return
+	}
 	value := req.Value
+	if value == nil {
+		c.JSON(400, gin.H{"error": "Value is required"})
+		return
+	}
 	stringValue := fmt.Sprintf("%v", value)
 
 	fmt.Fprintln(os.Stderr, "Update request:", key, "=", stringValue) // Debug log
@@ -462,32 +470,26 @@ func updateUser(c *gin.Context) {
 			c.JSON(400, gin.H{"error": "Banner must be a valid data URI or HTTP/HTTPS URL"})
 			return
 		}
-		usersMutex.Lock()
 		userIndex := getIdxOfAccountBy("username", username)
 		if userIndex == -1 {
-			usersMutex.Unlock()
 			c.JSON(403, gin.H{"error": "User not found"})
 			return
 		}
 		// Flexible currency extraction (int / float32 / float64)
 		var currencyFloat float64 = users[userIndex].GetCredits()
 		if currencyFloat < 10 {
-			usersMutex.Unlock()
 			c.JSON(403, gin.H{"error": "Not enough credits to set banner (10 required)"})
 			return
 		}
 		statusCode, err := uploadUserImage("banner", imageData, user.GetKey())
 		if err != nil {
-			usersMutex.Unlock()
 			c.JSON(500, gin.H{"error": "Failed to upload banner"})
 			return
 		}
 		if statusCode != 200 {
-			usersMutex.Unlock()
 			c.JSON(statusCode, gin.H{"error": "Banner upload failed"})
 			return
 		}
-		usersMutex.Unlock()
 		users[userIndex].SetBalance(currencyFloat - 10)
 		go saveUsers()
 		go broadcastUserUpdate(user.GetUsername(), "sys.banner", "https://avatars.rotur.dev/.banners/"+user.GetUsername())
@@ -571,8 +573,6 @@ func updateUser(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
 	if err := setAccountKey(username, key, value); err != nil {
 		c.JSON(404, gin.H{"error": err.Error()})
 		return
