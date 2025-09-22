@@ -936,43 +936,6 @@ func transferCredits(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "Transfer successful", "from": fromUser.GetUsername(), "to": toUsername, "amount": nAmount, "debited": nAmount + totalTax})
 }
 
-func searchUsers(c *gin.Context) {
-	query := c.Query("q")
-	if query == "" {
-		c.JSON(400, gin.H{"error": "Search query is required"})
-		return
-	}
-
-	limitStr := c.DefaultQuery("limit", "20")
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		limit = 20
-	}
-	if limit > 20 {
-		limit = 20
-	}
-
-	queryLower := strings.ToLower(query)
-
-	searchResults := make([]gin.H, 0)
-	usersMutex.RLock()
-	for _, user := range users {
-		if strings.Contains(strings.ToLower(user.GetUsername()), queryLower) {
-			searchResults = append(searchResults, gin.H{
-				"username": user.GetUsername(),
-				"bio":      getStringOrEmpty(user.Get("bio")),
-				"system":   getStringOrEmpty(user.Get("system")),
-			})
-			if len(searchResults) >= limit {
-				break
-			}
-		}
-	}
-	usersMutex.RUnlock()
-
-	c.JSON(200, searchResults)
-}
-
 func deleteUser(c *gin.Context) {
 	authKey := c.Query("auth")
 	if authKey == "" {
