@@ -31,22 +31,17 @@ func sendFriendRequest(c *gin.Context) {
 
 	usersMutex.Lock()
 
-	var target *User
-	for i := range users {
-		if strings.ToLower(users[i].GetUsername()) == targetLower {
-			target = &users[i]
-			break
-		}
-	}
-	if target == nil {
+	idx := getIdxOfAccountBy("username", targetLower)
+	if idx == -1 {
 		usersMutex.Unlock()
 		c.JSON(404, gin.H{"error": "Account Does Not Exist"})
 		return
 	}
+	var target User = users[idx]
 
-	senderFriends := getStringSlice(*sender, "sys.friends")
-	targetFriends := getStringSlice(*target, "sys.friends")
-	targetRequests := getStringSlice(*target, "sys.requests")
+	senderFriends := sender.GetFriends()
+	targetFriends := target.GetFriends()
+	targetRequests := target.GetRequests()
 
 	for _, f := range senderFriends {
 		if strings.ToLower(f) == targetLower {
@@ -71,14 +66,11 @@ func sendFriendRequest(c *gin.Context) {
 	}
 
 	targetRequests = append(targetRequests, senderName)
-	setStringSlice(*target, "sys.requests", targetRequests)
-	setStringSlice(*sender, "sys.friends", senderFriends)
+	target.SetRequests(targetRequests)
+	sender.SetFriends(senderFriends)
 
 	usersMutex.Unlock()
-	go saveUsers() // async to avoid holding lock during disk IO
-
-	// Broadcast the user account update for the target user
-	go broadcastUserUpdate(targetLower, "sys.requests", targetRequests)
+	go saveUsers()
 
 	c.JSON(200, gin.H{"message": "Friend request sent successfully"})
 }
@@ -103,21 +95,15 @@ func acceptFriendRequest(c *gin.Context) {
 		return
 	}
 
-	var requester *User
-	for i := range users {
-		if strings.ToLower(users[i].GetUsername()) == requesterName {
-			requester = &users[i]
-			break
-		}
-	}
-	if requester == nil {
+	idx := getIdxOfAccountBy("username", requesterName)
+	if idx == -1 {
 		c.JSON(404, gin.H{"error": "Account Does Not Exist"})
 		return
 	}
-
+	var requester User = users[idx]
 	usersMutex.Lock()
 
-	currentRequests := getStringSlice(*current, "sys.requests")
+	currentRequests := current.GetRequests()
 	found := false
 	newRequests := make([]string, 0, len(currentRequests))
 	for _, r := range currentRequests {
@@ -133,9 +119,7 @@ func acceptFriendRequest(c *gin.Context) {
 		return
 	}
 
-	currentFriends := getStringSlice(*current, "sys.friends")
-	requesterFriends := getStringSlice(*requester, "sys.friends")
-
+	currentFriends := current.GetFriends()
 	alreadyFriends := false
 	for _, f := range currentFriends {
 		if strings.ToLower(f) == requesterName {
@@ -147,6 +131,7 @@ func acceptFriendRequest(c *gin.Context) {
 		currentFriends = append(currentFriends, requesterName)
 	}
 
+	requesterFriends := requester.GetFriends()
 	requesterAlreadyHas := false
 	for _, f := range requesterFriends {
 		if strings.ToLower(f) == currentName {
@@ -158,17 +143,13 @@ func acceptFriendRequest(c *gin.Context) {
 		requesterFriends = append(requesterFriends, currentName)
 	}
 
-	setStringSlice(*current, "sys.requests", newRequests)
-	setStringSlice(*current, "sys.friends", currentFriends)
-	setStringSlice(*requester, "sys.friends", requesterFriends)
-
 	usersMutex.Unlock()
-	go saveUsers()
 
-	// Broadcast user account updates for both users
-	go broadcastUserUpdate(currentName, "sys.requests", newRequests)
-	go broadcastUserUpdate(currentName, "sys.friends", currentFriends)
-	go broadcastUserUpdate(requesterName, "sys.friends", requesterFriends)
+	current.SetRequests(newRequests)
+	current.SetFriends(currentFriends)
+	requester.SetFriends(requesterFriends)
+
+	go saveUsers()
 
 	c.JSON(200, gin.H{"message": "Friend request accepted"})
 }
@@ -232,27 +213,19 @@ func removeFriend(c *gin.Context) {
 
 	currentName := strings.ToLower(current.GetUsername())
 	if currentName == otherName {
-		c.JSON(400, gin.H{"error": "Invalid Operation"})
+		c.JSON(400, gin.H{"error": "Cannot Remove Yourself"})
 		return
 	}
 
-	usersMutex.Lock()
-
-	var other *User
-	for i := range users {
-		if strings.ToLower(users[i].GetUsername()) == otherName {
-			other = &users[i]
-			break
-		}
-	}
-	if other == nil {
-		usersMutex.Unlock()
+	idx := getIdxOfAccountBy("username", otherName)
+	if idx == -1 {
 		c.JSON(404, gin.H{"error": "Account Does Not Exist"})
 		return
 	}
+	var other User = users[idx]
 
-	currentFriends := getStringSlice(*current, "sys.friends")
-	otherFriends := getStringSlice(*other, "sys.friends")
+	currentFriends := current.GetFriends()
+	otherFriends := other.GetFriends()
 
 	isFriend := false
 	for _, f := range currentFriends {
@@ -262,7 +235,6 @@ func removeFriend(c *gin.Context) {
 		}
 	}
 	if !isFriend {
-		usersMutex.Unlock()
 		c.JSON(400, gin.H{"error": "Not Friends"})
 		return
 	}
@@ -280,15 +252,10 @@ func removeFriend(c *gin.Context) {
 		}
 	}
 
-	setStringSlice(*current, "sys.friends", newCurrentFriends)
-	setStringSlice(*other, "sys.friends", newOtherFriends)
+	current.Set("sys.friends", newCurrentFriends)
+	other.Set("sys.friends", newOtherFriends)
 
-	usersMutex.Unlock()
 	go saveUsers()
-
-	// Broadcast user account updates for both users
-	go broadcastUserUpdate(currentName, "sys.friends", newCurrentFriends)
-	go broadcastUserUpdate(otherName, "sys.friends", newOtherFriends)
 
 	c.JSON(200, gin.H{"message": "Friend removed"})
 }
@@ -305,6 +272,6 @@ func getFriends(c *gin.Context) {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 
-	friends := getStringSlice(*user, "sys.friends")
+	friends := user.GetFriends()
 	c.JSON(200, gin.H{"friends": friends})
 }

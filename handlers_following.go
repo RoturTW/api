@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -45,17 +46,8 @@ func followUser(c *gin.Context) {
 	currentUsername := strings.ToLower(user.GetUsername())
 
 	// Check if the target user exists
-	usersMutex.RLock()
-	var targetUserExists bool
-	for _, u := range users {
-		if strings.ToLower(u.GetUsername()) == targetUsername {
-			targetUserExists = true
-			break
-		}
-	}
-	usersMutex.RUnlock()
-
-	if !targetUserExists {
+	idx := getIdxOfAccountBy("username", targetUsername)
+	if idx == -1 {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
@@ -74,11 +66,9 @@ func followUser(c *gin.Context) {
 	}
 
 	// Check if already following
-	for _, follower := range followersData[targetUsername].Followers {
-		if follower == currentUsername {
-			c.JSON(400, gin.H{"error": "You are already following " + targetUsername})
-			return
-		}
+	if slices.Contains(followersData[targetUsername].Followers, currentUsername) {
+		c.JSON(400, gin.H{"error": "You are already following " + targetUsername})
+		return
 	}
 
 	// Add to followers list
@@ -203,17 +193,8 @@ func getFollowing(c *gin.Context) {
 	name = strings.ToLower(name)
 
 	// Check if the user exists
-	usersMutex.RLock()
-	var userExists bool
-	for _, u := range users {
-		if strings.ToLower(u.GetUsername()) == name {
-			userExists = true
-			break
-		}
-	}
-	usersMutex.RUnlock()
-
-	if !userExists {
+	idx := getIdxOfAccountBy("username", name)
+	if idx == -1 {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
@@ -254,17 +235,8 @@ func getFollowers(c *gin.Context) {
 	name = strings.ToLower(name)
 
 	// Check if the user exists
-	usersMutex.RLock()
-	var userExists bool
-	for _, u := range users {
-		if strings.ToLower(u.GetUsername()) == name {
-			userExists = true
-			break
-		}
-	}
-	usersMutex.RUnlock()
-
-	if !userExists {
+	idx := getIdxOfAccountBy("username", name)
+	if idx == -1 {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}

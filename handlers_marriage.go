@@ -275,8 +275,8 @@ func rejectMarriage(c *gin.Context) {
 	}
 
 	// Remove marriage data entirely for both users
-	delete(users[userIndex], "sys.marriage")
-	delete(users[partnerIndex], "sys.marriage")
+	users[userIndex].DelKey("sys.marriage")
+	users[partnerIndex].DelKey("sys.marriage")
 
 	go saveUsers()
 
@@ -353,8 +353,8 @@ func divorceMarriage(c *gin.Context) {
 	}
 
 	// Remove marriage data entirely
-	delete(users[userIndex], "sys.marriage")
-	delete(users[partnerIndex], "sys.marriage")
+	users[userIndex].DelKey("sys.marriage")
+	users[partnerIndex].DelKey("sys.marriage")
 
 	go saveUsers()
 
@@ -441,8 +441,8 @@ func cancelMarriage(c *gin.Context) {
 	}
 
 	// Remove marriage data entirely for both users
-	delete(users[userIndex], "sys.marriage")
-	delete(users[partnerIndex], "sys.marriage")
+	users[userIndex].DelKey("sys.marriage")
+	users[partnerIndex].DelKey("sys.marriage")
 
 	go saveUsers()
 

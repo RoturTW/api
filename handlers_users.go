@@ -56,6 +56,41 @@ func getAccountsBy(key string, value string, max int) ([]User, error) {
 	return matches, nil
 }
 
+func getIdxOfAccountBy(key string, value string) int {
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
+	if key == "username" {
+		for i, user := range users {
+			if strings.EqualFold(user.GetUsername(), value) {
+				return i
+			}
+		}
+		return -1
+	}
+
+	for i, user := range users {
+		if user.Get(key) == value {
+			return i
+		}
+	}
+	return -1
+}
+
+// helper function to update user keys
+func setAccountKey(username, key string, value any) error {
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
+
+	i := getIdxOfAccountBy("username", username)
+
+	if i != -1 {
+		users[i].Set(key, value)
+		return nil
+	}
+	return fmt.Errorf("user not found: %s", username)
+}
+
 func getUserBy(c *gin.Context) {
 	if !authenticateAdmin(c) {
 		return
@@ -91,51 +126,40 @@ func getUserBy(c *gin.Context) {
 
 func getUser(c *gin.Context) {
 	authKey := c.Query("auth")
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
+	var foundUser User
+
 	if authKey != "" {
-		usersMutex.RLock()
-		for i := range users {
-			if users[i].GetKey() == authKey {
-				users[i].Set("sys.last_login", time.Now().UnixMilli())
-				users[i].Set("sys.total_logins", users[i].GetInt("sys.total_logins")+1)
-				userCopy := copyUser(users[i])
-				if userCopy.Get("sys.tos_accepted") != true {
-					usersMutex.RUnlock()
-					c.JSON(403, gin.H{"error": "Terms-Of-Service are not accepted or outdated", "username": userCopy.GetUsername(), "token": userCopy.GetKey(), "sys.tos_accepted": false})
-					return
-				}
-				delete(userCopy, "password")
-				usersMutex.RUnlock()
-				c.JSON(200, userCopy)
-				return
-			}
+		foundUsers, _ := getAccountsBy("key", authKey, 1)
+		if foundUsers != nil {
+			foundUser = foundUsers[0]
 		}
-		usersMutex.RUnlock()
 	}
 
 	username := c.Query("username")
 	password := c.Query("password")
 
-	if username != "" && password != "" {
-		usernameLower := strings.ToLower(username)
-
-		usersMutex.RLock()
-		for i := range users {
-			if strings.ToLower(users[i].GetUsername()) == usernameLower && users[i].GetPassword() == password {
-				users[i].Set("sys.last_login", time.Now().UnixMilli())
-				users[i].Set("sys.total_logins", users[i].GetInt("sys.total_logins")+1)
-				userCopy := copyUser(users[i])
-				if users[i].Get("sys.tos_accepted") != true {
-					usersMutex.RUnlock()
-					c.JSON(403, gin.H{"error": "Terms-Of-Service are not accepted or outdated", "username": username, "token": userCopy.GetKey(), "sys.tos_accepted": false})
-					return
-				}
-				delete(userCopy, "password")
-				usersMutex.RUnlock()
-				c.JSON(200, userCopy)
-				return
-			}
+	if username != "" && password != "" && foundUser == nil {
+		foundUsers, _ := getAccountsBy("username", username, 1)
+		if foundUsers != nil {
+			foundUser = foundUsers[0]
 		}
-		usersMutex.RUnlock()
+	}
+
+	if foundUser != nil {
+		if foundUser.Get("sys.tos_accepted") != true {
+			// early return - TOS not accepted
+			c.JSON(403, gin.H{"error": "Terms-Of-Service are not accepted or outdated", "username": foundUser.GetUsername(), "token": foundUser.GetKey(), "sys.tos_accepted": false})
+			return
+		}
+		foundUser.Set("sys.last_login", time.Now().UnixMilli())
+		foundUser.Set("sys.total_logins", foundUser.GetInt("sys.total_logins")+1)
+		userCopy := copyUser(foundUser)
+		delete(userCopy, "password")
+		c.JSON(200, userCopy)
+		return
 	}
 
 	c.JSON(403, gin.H{"error": "Invalid authentication credentials"})
@@ -180,11 +204,12 @@ func refreshToken(c *gin.Context) {
 	}
 
 	newToken := generateAccountToken()
+
 	usersMutex.Lock()
+	defer usersMutex.Unlock()
+
 	user.Set("key", newToken)
 	go saveUsers()
-	usersMutex.Unlock()
-	go broadcastUserUpdate(user.GetUsername(), "key", newToken)
 
 	c.JSON(200, gin.H{"token": newToken})
 }
@@ -438,13 +463,7 @@ func updateUser(c *gin.Context) {
 			return
 		}
 		usersMutex.Lock()
-		var userIndex int = -1
-		for i := range users {
-			if strings.EqualFold(users[i].GetUsername(), username) {
-				userIndex = i
-				break
-			}
-		}
+		userIndex := getIdxOfAccountBy("username", username)
 		if userIndex == -1 {
 			usersMutex.Unlock()
 			c.JSON(403, gin.H{"error": "User not found"})
@@ -554,11 +573,9 @@ func updateUser(c *gin.Context) {
 
 	usersMutex.Lock()
 	defer usersMutex.Unlock()
-	for i := range users {
-		if strings.EqualFold(users[i].GetUsername(), username) {
-			users[i].Set(key, value)
-			break
-		}
+	if err := setAccountKey(username, key, value); err != nil {
+		c.JSON(404, gin.H{"error": err.Error()})
+		return
 	}
 
 	go saveUsers()
@@ -588,7 +605,8 @@ func updateUserAdmin(c *gin.Context) {
 			return
 		}
 
-		if operationType == "update" {
+		switch operationType {
+		case "update":
 			key, hasKey := userData["key"].(string)
 			value, hasValue := userData["value"]
 			if !hasKey || !hasValue {
@@ -597,35 +615,24 @@ func updateUserAdmin(c *gin.Context) {
 			}
 
 			// Find the user by username
-			usersMutex.Lock()
-			var userIndex int = -1
-			for i := range users {
-				if strings.EqualFold(users[i].GetUsername(), username) {
-					userIndex = i
-					break
-				}
-			}
+			userIndex := getIdxOfAccountBy("username", username)
 
 			if userIndex == -1 {
-				usersMutex.Unlock()
 				c.JSON(404, gin.H{"error": "User not found"})
 				return
 			}
 
 			// Validate key and value constraints
 			if len(key) > 50 {
-				usersMutex.Unlock()
 				c.JSON(400, gin.H{"error": fmt.Sprintf("Key '%s' length exceeds 50 characters", key)})
 				return
 			}
 			if strVal, ok := value.(string); ok && len(strVal) > 5000 {
-				usersMutex.Unlock()
 				c.JSON(400, gin.H{"error": fmt.Sprintf("Value for key '%s' length exceeds 5000 characters", key)})
 				return
 			}
 
 			// Ensure sys.currency stays a float64 when updated via admin endpoint
-			usersMutex.Unlock()
 			if key == "sys.currency" {
 				users[userIndex].SetBalance(value)
 			} else {
@@ -642,7 +649,7 @@ func updateUserAdmin(c *gin.Context) {
 			})
 			return
 
-		} else if operationType == "remove" {
+		case "remove":
 			key, hasKey := userData["key"].(string)
 			if !hasKey || key == "" {
 				c.JSON(400, gin.H{"error": "key is required for remove operation"})
@@ -650,15 +657,7 @@ func updateUserAdmin(c *gin.Context) {
 			}
 
 			// Find the user by username
-			usersMutex.Lock()
-			defer usersMutex.Unlock()
-			var userIndex int = -1
-			for i := range users {
-				if strings.EqualFold(users[i].GetUsername(), username) {
-					userIndex = i
-					break
-				}
-			}
+			userIndex := getIdxOfAccountBy("username", username)
 
 			if userIndex == -1 {
 				c.JSON(404, gin.H{"error": "User not found"})
@@ -675,14 +674,9 @@ func updateUserAdmin(c *gin.Context) {
 				return
 			}
 
-			delete(users[userIndex], key)
+			users[userIndex].DelKey(key)
 
 			go saveUsers()
-
-			go notify("sys.delete", map[string]any{
-				"username": username,
-				"key":      key,
-			})
 
 			c.JSON(200, gin.H{
 				"message":  "User key deleted successfully",
@@ -691,7 +685,7 @@ func updateUserAdmin(c *gin.Context) {
 			})
 			return
 
-		} else {
+		default:
 			c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid operation type '%s'. Must be 'update' or 'remove'", operationType)})
 			return
 		}
@@ -728,30 +722,21 @@ func gambleCredits(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-
-	for i := range users {
-		if strings.EqualFold(users[i].GetUsername(), user.GetUsername()) {
-			cf := users[i].GetCredits()
-			if cf < nAmount {
-				c.JSON(400, gin.H{"error": "Insufficient funds"})
-				usersMutex.Unlock()
-				return
-			}
-
-			usersMutex.Unlock()
-			r := rand.New(rand.NewSource(time.Now().UnixNano()))
-			if r.Intn(100) < 40 {
-				users[i].SetBalance(roundVal(cf + nAmount))
-				c.JSON(200, gin.H{"message": "You won!", "won": true, "amount": nAmount, "balance": users[i].GetCredits()})
-			} else {
-				users[i].SetBalance(roundVal(cf - nAmount))
-				c.JSON(200, gin.H{"message": "You lost!", "won": false, "amount": nAmount, "balance": users[i].GetCredits()})
-			}
-			go saveUsers()
-			break
-		}
+	cf := user.GetCredits()
+	if cf < nAmount {
+		c.JSON(400, gin.H{"error": "Insufficient funds"})
+		return
 	}
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	if r.Intn(100) < 40 {
+		user.SetBalance(roundVal(cf + nAmount))
+		c.JSON(200, gin.H{"message": "You won!", "won": true, "amount": nAmount, "balance": user.GetCredits()})
+	} else {
+		user.SetBalance(roundVal(cf - nAmount))
+		c.JSON(200, gin.H{"message": "You lost!", "won": false, "amount": nAmount, "balance": user.GetCredits()})
+	}
+	go saveUsers()
 }
 
 func deleteUserKey(c *gin.Context) {
@@ -797,22 +782,9 @@ func deleteUserKey(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
-
-	for i := range users {
-		if strings.EqualFold(users[i].GetUsername(), username) {
-			delete(users[i], key)
-			break
-		}
-	}
+	user.DelKey(key)
 
 	go saveUsers()
-
-	go notify("sys.delete", map[string]any{
-		"username": username,
-		"key":      key,
-	})
 
 	c.JSON(204, gin.H{"message": "User key deleted successfully", "username": username, "key": key})
 }
@@ -856,9 +828,6 @@ func transferCredits(c *gin.Context) {
 	const totalTax = 1.0
 	const taxRecipientShare = 0.5
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
-
 	// Helper to normalize / validate transactions slice
 	ensureTxSlice := func(u *User) []map[string]any {
 		raw := (*u)["sys.transactions"]
@@ -898,99 +867,73 @@ func transferCredits(c *gin.Context) {
 		return n
 	}
 
-	var fromUser *User
-	for i := range users {
-		if strings.EqualFold(users[i].GetUsername(), user.GetUsername()) {
-			fromUser = &users[i]
-			break
-		}
-	}
-	if fromUser == nil {
+	idx := getIdxOfAccountBy("username", user.GetUsername())
+	if idx == -1 {
 		c.JSON(404, gin.H{"error": "Sender user not found"})
 		return
 	}
-	fromCurrency := fromUser.GetCredits()
-	if fromCurrency == 0 {
-		c.JSON(400, gin.H{"error": "Sender user has no currency"})
-		return
-	}
+	var fromUser User = users[idx]
+	fromCurrency := roundVal(fromUser.GetCredits())
 
-	fromCurrency = roundVal(fromCurrency)
 	if fromCurrency < (nAmount + totalTax) {
 		c.JSON(400, gin.H{"error": "Insufficient funds including tax", "required": nAmount + totalTax, "available": fromCurrency})
 		return
 	}
-	var toUser *User
-	for i := range users {
-		if strings.EqualFold(users[i].GetUsername(), toUsername) {
-			toUser = &users[i]
-			break
-		}
-	}
-	if toUser == nil {
+
+	idx = getIdxOfAccountBy("username", toUsername)
+	if idx == -1 {
 		c.JSON(404, gin.H{"error": "Recipient user not found"})
 		return
 	}
-	toCurrency := toUser.GetCredits()
-	if toCurrency == 0 {
-		c.JSON(400, gin.H{"error": "Recipient user has no currency"})
-		return
-	}
+	var toUser User = users[idx]
+	toCurrency := roundVal(toUser.GetCredits())
 
-	toCurrency = roundVal(toCurrency)
+	now := time.Now().UnixMilli()
 
-	var taxUser *User
-	for i := range users {
-		if strings.EqualFold(users[i].GetUsername(), "mist") {
-			taxUser = &users[i]
-			break
-		}
-	}
-	usersMutex.Unlock()
-	if fromUser.GetUsername() != "rotur" { // prevent the rotur account from having currency deducted
-		fromUser.SetBalance(roundVal(fromCurrency - (nAmount + totalTax)))
-	}
-	if toUser.GetUsername() != "rotur" { // prevent the rotur account from accumulating currency
-		toUser.SetBalance(roundVal(toCurrency + nAmount))
-	}
-	if taxUser != nil {
+	idx = getIdxOfAccountBy("username", "mist")
+	if idx != -1 {
+		var taxUser User = users[idx]
 		curr := taxUser.GetCredits()
 		taxUser.SetBalance(roundVal(curr + taxRecipientShare))
-	}
-	usersMutex.Lock()
-	now := time.Now().UnixMilli()
-	note := mkNote(req.Note)
-	appendTx(fromUser, map[string]any{
-		"note":   note,
-		"user":   toUser.GetUsername(),
-		"time":   now,
-		"amount": nAmount + totalTax,
-		"type":   "out",
-	})
-	appendTx(toUser, map[string]any{
-		"note":   note,
-		"user":   fromUser.GetUsername(),
-		"time":   now,
-		"amount": nAmount,
-		"type":   "in",
-	})
-	if taxUser != nil {
-		appendTx(taxUser, map[string]any{
+		usersMutex.Lock()
+		appendTx(&taxUser, map[string]any{
 			"note":   "transfer tax",
 			"user":   fromUser.GetUsername(),
 			"time":   now,
 			"amount": taxRecipientShare,
 			"type":   "tax",
 		})
+		usersMutex.Unlock()
+		go broadcastUserUpdate(taxUser.GetUsername(), "sys.transactions", taxUser.Get("sys.transactions"))
 	}
+	if fromUser.GetUsername() != "rotur" { // prevent the rotur account from having currency deducted
+		fromUser.SetBalance(roundVal(fromCurrency - (nAmount + totalTax)))
+	}
+	if toUser.GetUsername() != "rotur" { // prevent the rotur account from accumulating currency
+		toUser.SetBalance(roundVal(toCurrency + nAmount))
+	}
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
+	note := mkNote(req.Note)
+	appendTx(&fromUser, map[string]any{
+		"note":   note,
+		"user":   toUser.GetUsername(),
+		"time":   now,
+		"amount": nAmount + totalTax,
+		"type":   "out",
+	})
+	appendTx(&toUser, map[string]any{
+		"note":   note,
+		"user":   fromUser.GetUsername(),
+		"time":   now,
+		"amount": nAmount,
+		"type":   "in",
+	})
 
 	go saveUsers()
 
 	go broadcastUserUpdate(fromUser.GetUsername(), "sys.transactions", fromUser.Get("sys.transactions"))
 	go broadcastUserUpdate(toUser.GetUsername(), "sys.transactions", toUser.Get("sys.transactions"))
-	if taxUser != nil {
-		go broadcastUserUpdate(taxUser.GetUsername(), "sys.transactions", taxUser.Get("sys.transactions"))
-	}
 
 	c.JSON(200, gin.H{"message": "Transfer successful", "from": fromUser.GetUsername(), "to": toUsername, "amount": nAmount, "debited": nAmount + totalTax})
 }

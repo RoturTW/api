@@ -39,6 +39,22 @@ func (u User) GetPassword() string {
 	return ""
 }
 
+func (u User) SetFriends(friends []string) {
+	u.Set("sys.friends", friends)
+}
+
+func (u User) SetRequests(requests []string) {
+	u.Set("sys.requests", requests)
+}
+
+func (u User) GetFriends() []string {
+	return getStringSlice(u, "sys.friends")
+}
+
+func (u User) GetRequests() []string {
+	return getStringSlice(u, "sys.requests")
+}
+
 func (u User) GetCreated() int64 {
 	if created, ok := u["created"]; ok {
 		switch v := created.(type) {
@@ -123,6 +139,17 @@ func (u User) GetInt(key string) int {
 		}
 	}
 	return 0
+}
+
+func (u User) DelKey(key string) error {
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
+	delete(u, key)
+	go notify("sys.delete", map[string]any{
+		"username": u.GetUsername(),
+		"key":      key,
+	})
+	return nil
 }
 
 func (u User) Set(key string, value any) {

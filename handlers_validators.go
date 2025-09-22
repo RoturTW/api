@@ -73,20 +73,12 @@ func validateToken(c *gin.Context) {
 	encryptedData := parts[1]
 
 	// Find the user in the users list
-	usersMutex.RLock()
-	var foundUser *User
-	for i := range users {
-		if strings.EqualFold(users[i].GetUsername(), username) {
-			foundUser = &users[i]
-			break
-		}
-	}
-	usersMutex.RUnlock()
-
-	if foundUser == nil {
+	idx := getIdxOfAccountBy("username", username)
+	if idx == -1 {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
+	var foundUser User = users[idx]
 
 	// Get the user's key (token)
 	userKey := foundUser.GetKey()

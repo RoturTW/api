@@ -676,17 +676,10 @@ func checkSubscriptions() {
 					if userData.Price != 0 {
 						log.Printf("Processing subscription payment for %s for key %s (amount: %.2f)", username, key.Key, float64(userData.Price))
 
-						usersMutex.Lock()
-						userIndex := -1
-						for i := range users {
-							if strings.EqualFold(users[i].GetUsername(), username) {
-								userIndex = i
-								break
-							}
-						}
+						userIndex := getIdxOfAccountBy("username", username)
+
 						if userIndex == -1 {
 							log.Printf("User %s not found for key %s", username, key.Key)
-							usersMutex.Unlock()
 							usersToRemove = append(usersToRemove, username)
 							continue
 						}
@@ -695,12 +688,10 @@ func checkSubscriptions() {
 						if currencyFloat < float64(userData.Price) {
 							log.Printf("User %s does not have enough currency for key %s (needed: %.2f, available: %.2f)",
 								username, key.Key, float64(userData.Price), currencyFloat)
-							usersMutex.Unlock()
 							usersToRemove = append(usersToRemove, username)
 							continue
 						}
 						currencyFloat -= float64(userData.Price)
-						usersMutex.Unlock()
 						users[userIndex].SetBalance(currencyFloat)
 						go saveUsers()
 

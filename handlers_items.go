@@ -35,17 +35,8 @@ func transferItem(c *gin.Context) {
 	}
 
 	// Check if target user exists
-	usersMutex.RLock()
-	var targetUserExists bool
-	for _, u := range users {
-		if strings.EqualFold(u.GetUsername(), targetUsername) {
-			targetUserExists = true
-			break
-		}
-	}
-	usersMutex.RUnlock()
-
-	if !targetUserExists {
+	idx := getIdxOfAccountBy("username", strings.ToLower(targetUsername))
+	if idx == -1 {
 		c.JSON(404, gin.H{"error": "Target user not found"})
 		return
 	}
