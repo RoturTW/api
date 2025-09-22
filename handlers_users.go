@@ -79,12 +79,13 @@ func getIdxOfAccountBy(key string, value string) int {
 
 // helper function to update user keys
 func setAccountKey(username, key string, value any) error {
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
 
 	i := getIdxOfAccountBy("username", username)
 
 	if i != -1 {
+		usersMutex.Lock()
+		defer usersMutex.Unlock()
+
 		users[i].Set(key, value)
 		return nil
 	}
@@ -426,10 +427,6 @@ func updateUser(c *gin.Context) {
 	}
 
 	username := user.GetUsername()
-	if username == "" {
-		c.JSON(403, gin.H{"error": "User not found"})
-		return
-	}
 
 	totalSize := findUserSize(username)
 	if totalSize+len(fmt.Sprintf("%v", value)) > 25000 {
@@ -437,7 +434,7 @@ func updateUser(c *gin.Context) {
 		return
 	}
 
-	if key == "banner" && value != nil {
+	if key == "banner" {
 		// Allow both data URIs and normal URLs
 		var imageData string
 		if strings.HasPrefix(stringValue, "data:") {
@@ -475,7 +472,7 @@ func updateUser(c *gin.Context) {
 			c.JSON(403, gin.H{"error": "User not found"})
 			return
 		}
-		// Flexible currency extraction (int / float32 / float64)
+
 		var currencyFloat float64 = users[userIndex].GetCredits()
 		if currencyFloat < 10 {
 			c.JSON(403, gin.H{"error": "Not enough credits to set banner (10 required)"})
@@ -491,8 +488,9 @@ func updateUser(c *gin.Context) {
 			return
 		}
 		users[userIndex].SetBalance(currencyFloat - 10)
+		users[userIndex].Set("sys.banner", "https://avatars.rotur.dev/.banners/"+user.GetUsername())
+
 		go saveUsers()
-		go broadcastUserUpdate(user.GetUsername(), "sys.banner", "https://avatars.rotur.dev/.banners/"+user.GetUsername())
 		c.JSON(200, gin.H{"message": "Banner uploaded successfully"})
 		return
 	}
