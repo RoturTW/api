@@ -201,7 +201,7 @@ func getProfile(c *gin.Context) {
 		"subscription": sub,
 		"theme":        foundUser.Get("theme"),
 		"max_size":     maxSizeStr,
-		"currency":     foundUser.Get("sys.currency"),
+		"currency":     foundUser.GetCredits(),
 		"index":        userIndex + 1,
 		"private":      strings.ToLower(getStringOrEmpty(foundUser.Get("private"))) == "true",
 		"status":       st,

@@ -147,17 +147,9 @@ func buyItem(c *gin.Context) {
 	}
 
 	// Check if user has enough currency
-	userCurrency := 0
-	if currency := user.Get("sys.currency"); currency != nil {
-		switch v := currency.(type) {
-		case float64:
-			userCurrency = int(v)
-		case int:
-			userCurrency = v
-		}
-	}
+	userCurrency := user.GetCredits()
 
-	if userCurrency < targetItem.Price {
+	if userCurrency < float64(targetItem.Price) {
 		c.JSON(403, gin.H{"error": "Insufficient currency"})
 		return
 	}
@@ -196,11 +188,9 @@ func buyItem(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
-	// store as float64 to keep currency consistently typed
-	users[userIndex]["sys.currency"] = float64(userCurrency - targetItem.Price)
 	usersMutex.Unlock()
+	users[userIndex].SetBalance(userCurrency - float64(targetItem.Price))
 	go saveUsers()
-	go broadcastUserUpdate(user.GetUsername(), "sys.currency", userCurrency-targetItem.Price)
 
 	// Notify both users
 	addUserEvent(oldOwner, "item_sold", map[string]any{

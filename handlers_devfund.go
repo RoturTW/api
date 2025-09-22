@@ -53,7 +53,6 @@ func escrowTransfer(c *gin.Context) {
 	}
 
 	usersMutex.Lock()
-	defer usersMutex.Unlock()
 
 	// Find sender user
 	var fromUser *User
@@ -69,24 +68,9 @@ func escrowTransfer(c *gin.Context) {
 	}
 
 	// Check sender balance
-	amtAny := fromUser.Get("sys.currency")
-	if amtAny == nil {
+	fromCurrency := fromUser.GetCredits()
+	if fromCurrency == 0 {
 		c.JSON(400, gin.H{"error": "Sender user has no currency"})
-		return
-	}
-
-	var fromCurrency float64
-	switch v := amtAny.(type) {
-	case int:
-		fromCurrency = float64(v)
-	case int64:
-		fromCurrency = float64(v)
-	case float32:
-		fromCurrency = float64(v)
-	case float64:
-		fromCurrency = v
-	default:
-		c.JSON(400, gin.H{"error": "Invalid currency amount"})
 		return
 	}
 	fromCurrency = roundVal(fromCurrency)
@@ -101,7 +85,12 @@ func escrowTransfer(c *gin.Context) {
 	if newBal < 0 { // guard against tiny floating error
 		newBal = 0
 	}
-	fromUser.Set("sys.currency", newBal)
+	usersMutex.Unlock()
+
+	fromUser.SetBalance(newBal)
+
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
 
 	// Add escrow transaction to sender
 	now := time.Now().UnixMilli()
@@ -150,7 +139,6 @@ func escrowTransfer(c *gin.Context) {
 	})
 
 	go saveUsers()
-	go broadcastUserUpdate(fromUser.GetUsername(), "sys.currency", fromUser.Get("sys.currency"))
 	go broadcastUserUpdate(fromUser.GetUsername(), "sys.transactions", fromUser.Get("sys.transactions"))
 
 	c.JSON(200, gin.H{
@@ -213,7 +201,6 @@ func escrowRelease(c *gin.Context) {
 	toUsername := strings.ToLower(req.ToUsername)
 
 	usersMutex.Lock()
-	defer usersMutex.Unlock()
 
 	// Find recipient user
 	var toUser *User
@@ -228,31 +215,20 @@ func escrowRelease(c *gin.Context) {
 		return
 	}
 
+	usersMutex.Unlock()
 	// Get recipient balance
-	toAny := toUser.Get("sys.currency")
-	if toAny == nil {
-		toUser.Set("sys.currency", float64(0))
-		toAny = float64(0)
+	toCurrency := toUser.GetCredits()
+	if toCurrency == 0 {
+		toUser.SetBalance(float64(0))
+		toCurrency = float64(0)
 	}
-
-	var toCurrency float64
-	switch v := toAny.(type) {
-	case int:
-		toCurrency = float64(v)
-	case int64:
-		toCurrency = float64(v)
-	case float32:
-		toCurrency = float64(v)
-	case float64:
-		toCurrency = v
-	default:
-		toCurrency = 0
-	}
-	toCurrency = roundVal(toCurrency)
 
 	// Add credits to recipient
 	newBal := roundVal(toCurrency + nAmount)
-	toUser.Set("sys.currency", newBal)
+	toUser.SetBalance(newBal)
+
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
 
 	// Add transaction to recipient
 	now := time.Now().UnixMilli()
@@ -301,7 +277,6 @@ func escrowRelease(c *gin.Context) {
 	})
 
 	go saveUsers()
-	go broadcastUserUpdate(toUser.GetUsername(), "sys.currency", toUser.Get("sys.currency"))
 	go broadcastUserUpdate(toUser.GetUsername(), "sys.transactions", toUser.Get("sys.transactions"))
 
 	c.JSON(200, gin.H{

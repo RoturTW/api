@@ -51,6 +51,53 @@ func (u User) GetCreated() int64 {
 	return 0
 }
 
+func (u User) GetCredits() float64 {
+	if credits, ok := u["sys.currency"]; ok {
+		switch v := credits.(type) {
+		case float64:
+			return v
+		case int64:
+			return float64(v)
+		case int:
+			return float64(v)
+		case string:
+			if floatValue, err := strconv.ParseFloat(v, 64); err == nil {
+				return floatValue
+			}
+		}
+	}
+	return 0
+}
+
+func (u User) SetBalance(balance any) {
+	var fval float64
+	switch v := balance.(type) {
+	case float64:
+		fval = v
+	case float32:
+		fval = float64(v)
+	case int:
+		fval = float64(v)
+	case int64:
+		fval = float64(v)
+	case string:
+		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
+			fval = parsed
+		} else {
+			usersMutex.Lock()
+			defer usersMutex.Unlock()
+			return
+		}
+	default:
+		usersMutex.Lock()
+		defer usersMutex.Unlock()
+		return
+	}
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
+	u.Set("sys.currency", roundVal(fval))
+}
+
 func (u User) Get(key string) any {
 	value, ok := u[key]
 	if ok {
@@ -80,6 +127,9 @@ func (u User) GetInt(key string) int {
 
 func (u User) Set(key string, value any) {
 	u[key] = value
+	if key != "key" && key != "password" {
+		go broadcastUserUpdate(u.GetUsername(), key, value)
+	}
 }
 
 // FollowerData represents follower information

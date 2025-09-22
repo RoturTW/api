@@ -16,28 +16,14 @@ func getEconomyStats(c *gin.Context) {
 
 	currencies := make([]float64, 0)
 	for _, user := range users {
-		if currency := user.Get("sys.currency"); currency != nil {
-			switch v := currency.(type) {
-			case float64:
-				if v < 0 {
-					continue
-				}
-				currencies = append(currencies, v)
-			case int:
-				if v < 0 {
-					continue
-				}
-				currencies = append(currencies, float64(v))
-			case string:
-				// Try to parse string as number
-				if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-					if parsed < 0 {
-						continue
-					}
-					currencies = append(currencies, parsed)
-				}
-			}
+		userCredits := user.GetCredits()
+		if userCredits < 0 {
+			continue
 		}
+		if user.Get("sys.banned") != nil || user.Get("private") == true {
+			continue
+		}
+		currencies = append(currencies, userCredits)
 	}
 
 	// Skip calculation if no currency data is available
@@ -130,12 +116,14 @@ func getRichList(c *gin.Context) {
 		if isBanned || isPrivate {
 			continue
 		}
-		if currency := user.Get("sys.currency"); currency != nil {
-			richList = append(richList, gin.H{
-				"username": user.Get("username"),
-				"wealth":   currency,
-			})
+		currency := user.GetCredits()
+		if currency <= 0 {
+			continue
 		}
+		richList = append(richList, gin.H{
+			"username": user.Get("username"),
+			"wealth":   currency,
+		})
 	}
 
 	// Sort richList by wealth in descending order

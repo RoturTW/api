@@ -509,8 +509,8 @@ func buyKey(c *gin.Context) {
 				userData.NextBilling = nextBillingTime.UnixMilli()
 			}
 
-			var balance = user.Get("sys.currency")
-			if balance == nil || balance.(float64) < float64(keys[i].Price) {
+			var balance = user.GetCredits()
+			if balance < float64(keys[i].Price) {
 				c.JSON(400, gin.H{"error": "Insufficient balance to buy this key"})
 				return
 			}
@@ -531,38 +531,28 @@ func buyKey(c *gin.Context) {
 					break
 				}
 			}
-			if userIndex != -1 {
-				// Flexible extraction for sys.currency
-				var currencyFloat float64
-				if curAny := user.Get("sys.currency"); curAny != nil {
-					switch v := curAny.(type) {
-					case float64:
-						currencyFloat = v
-					case float32:
-						currencyFloat = float64(v)
-					case int:
-						currencyFloat = float64(v)
-					case int64:
-						currencyFloat = float64(v)
-					case string:
-						if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-							currencyFloat = parsed
-						} else {
-							usersMutex.Unlock()
-							c.JSON(400, gin.H{"error": "Invalid currency value"})
-							return
-						}
-					default:
-						usersMutex.Unlock()
-						c.JSON(400, gin.H{"error": "Invalid currency value type"})
-						return
-					}
+
+			ownerIndex := -1
+			for j, u := range users {
+				if strings.EqualFold(u.GetUsername(), keys[i].Creator) {
+					ownerIndex = j
+					break
 				}
-				newCurrency := currencyFloat - float64(keys[i].Price)
-				users[userIndex]["sys.currency"] = newCurrency
+			}
+
+			if userIndex != -1 {
 				usersMutex.Unlock()
+				// Flexible extraction for sys.currency
+				newCurrency := user.GetCredits() - float64(keys[i].Price)
+				users[userIndex].SetBalance(newCurrency)
+
+				// Pay the creator
+				if ownerIndex != -1 && ownerIndex != userIndex {
+					var ownerCurrency float64 = users[ownerIndex].GetCredits()
+					users[ownerIndex].SetBalance(ownerCurrency + float64(keys[i].Price))
+				}
+
 				go saveUsers()
-				go broadcastUserUpdate(username, "sys.currency", newCurrency)
 			} else {
 				usersMutex.Unlock()
 				c.JSON(500, gin.H{"error": "User not found in users list"})
@@ -701,31 +691,7 @@ func checkSubscriptions() {
 							continue
 						}
 
-						var currencyFloat float64
-						switch v := users[userIndex]["sys.currency"].(type) {
-						case float64:
-							currencyFloat = v
-						case float32:
-							currencyFloat = float64(v)
-						case int:
-							currencyFloat = float64(v)
-						case int64:
-							currencyFloat = float64(v)
-						case string:
-							if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-								currencyFloat = parsed
-							} else {
-								log.Printf("Warning: invalid currency string for user %s: %v", username, v)
-								usersMutex.Unlock()
-								usersToRemove = append(usersToRemove, username)
-								continue
-							}
-						default:
-							log.Printf("Warning: invalid currency type for user %s", username)
-							usersMutex.Unlock()
-							usersToRemove = append(usersToRemove, username)
-							continue
-						}
+						var currencyFloat float64 = users[userIndex].GetCredits()
 						if currencyFloat < float64(userData.Price) {
 							log.Printf("User %s does not have enough currency for key %s (needed: %.2f, available: %.2f)",
 								username, key.Key, float64(userData.Price), currencyFloat)
@@ -734,10 +700,9 @@ func checkSubscriptions() {
 							continue
 						}
 						currencyFloat -= float64(userData.Price)
-						users[userIndex]["sys.currency"] = currencyFloat
 						usersMutex.Unlock()
+						users[userIndex].SetBalance(currencyFloat)
 						go saveUsers()
-						go broadcastUserUpdate(username, "sys.currency", currencyFloat)
 
 						// Update total income for the key
 						key.TotalIncome += userData.Price

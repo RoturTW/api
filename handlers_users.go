@@ -395,6 +395,12 @@ func updateUser(c *gin.Context) {
 		return
 	}
 
+	totalSize := findUserSize(username)
+	if totalSize+len(fmt.Sprintf("%v", value)) > 25000 {
+		c.JSON(400, gin.H{"error": "Total account size exceeds 25000 bytes"})
+		return
+	}
+
 	if key == "banner" && value != nil {
 		// Allow both data URIs and normal URLs
 		var imageData string
@@ -442,21 +448,7 @@ func updateUser(c *gin.Context) {
 			return
 		}
 		// Flexible currency extraction (int / float32 / float64)
-		var currencyFloat float64
-		switch v := users[userIndex]["sys.currency"].(type) {
-		case int:
-			currencyFloat = float64(v)
-		case int64:
-			currencyFloat = float64(v)
-		case float32:
-			currencyFloat = float64(v)
-		case float64:
-			currencyFloat = v
-		default:
-			usersMutex.Unlock()
-			c.JSON(403, gin.H{"error": "Invalid currency type"})
-			return
-		}
+		var currencyFloat float64 = users[userIndex].GetCredits()
 		if currencyFloat < 10 {
 			usersMutex.Unlock()
 			c.JSON(403, gin.H{"error": "Not enough credits to set banner (10 required)"})
@@ -473,11 +465,10 @@ func updateUser(c *gin.Context) {
 			c.JSON(statusCode, gin.H{"error": "Banner upload failed"})
 			return
 		}
-		users[userIndex]["sys.currency"] = currencyFloat - 10
 		usersMutex.Unlock()
+		users[userIndex].SetBalance(currencyFloat - 10)
 		go saveUsers()
 		go broadcastUserUpdate(user.GetUsername(), "sys.banner", "https://avatars.rotur.dev/.banners/"+user.GetUsername())
-		go broadcastUserUpdate(user.GetUsername(), "sys.currency", users[userIndex]["sys.currency"])
 		c.JSON(200, gin.H{"message": "Banner uploaded successfully"})
 		return
 	}
@@ -557,49 +548,6 @@ func updateUser(c *gin.Context) {
 		return
 	}
 
-	totalSize := findUserSize(username)
-	if totalSize > 25000 {
-		c.JSON(400, gin.H{"error": "Total account size exceeds 25000 bytes"})
-		return
-	}
-
-	usersMutex.Lock()
-	for i := range users {
-		if strings.EqualFold(users[i].GetUsername(), username) {
-			// Ensure sys.currency is always stored as a float64
-			if key == "sys.currency" {
-				var fval float64
-				switch v := value.(type) {
-				case float64:
-					fval = v
-				case float32:
-					fval = float64(v)
-				case int:
-					fval = float64(v)
-				case int64:
-					fval = float64(v)
-				case string:
-					if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-						fval = parsed
-					} else {
-						usersMutex.Unlock()
-						c.JSON(400, gin.H{"error": "Invalid currency value"})
-						return
-					}
-				default:
-					usersMutex.Unlock()
-					c.JSON(400, gin.H{"error": "Invalid currency value type"})
-					return
-				}
-				users[i][key] = roundVal(fval)
-			} else {
-				users[i][key] = value
-			}
-			break
-		}
-	}
-	usersMutex.Unlock()
-
 	go saveUsers()
 
 	go broadcastUserUpdate(username, key, value)
@@ -666,40 +614,12 @@ func updateUserAdmin(c *gin.Context) {
 			}
 
 			// Ensure sys.currency stays a float64 when updated via admin endpoint
-			if key == "sys.currency" {
-				var fval float64
-				switch v := value.(type) {
-				case float64:
-					fval = v
-				case float32:
-					fval = float64(v)
-				case int:
-					fval = float64(v)
-				case int64:
-					fval = float64(v)
-				case string:
-					if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-						fval = parsed
-					} else {
-						usersMutex.Unlock()
-						c.JSON(400, gin.H{"error": "Invalid currency value"})
-						return
-					}
-				default:
-					usersMutex.Unlock()
-					c.JSON(400, gin.H{"error": "Invalid currency value type"})
-					return
-				}
-				users[userIndex][key] = roundVal(fval)
-				// Send notification for the updated key
-				go patchUserUpdate(username, key, users[userIndex][key])
-			} else {
-				users[userIndex][key] = value
-				// Send notification for the updated key
-				go patchUserUpdate(username, key, value)
-			}
-
 			usersMutex.Unlock()
+			if key == "sys.currency" {
+				users[userIndex].SetBalance(value)
+			} else {
+				users[userIndex].Set(key, value)
+			}
 
 			go saveUsers()
 
@@ -720,6 +640,7 @@ func updateUserAdmin(c *gin.Context) {
 
 			// Find the user by username
 			usersMutex.Lock()
+			defer usersMutex.Unlock()
 			var userIndex int = -1
 			for i := range users {
 				if strings.EqualFold(users[i].GetUsername(), username) {
@@ -729,25 +650,21 @@ func updateUserAdmin(c *gin.Context) {
 			}
 
 			if userIndex == -1 {
-				usersMutex.Unlock()
 				c.JSON(404, gin.H{"error": "User not found"})
 				return
 			}
 
 			if strings.HasPrefix(key, "sys.") {
-				usersMutex.Unlock()
 				c.JSON(400, gin.H{"error": "System keys cannot be deleted"})
 				return
 			}
 
 			if slices.Contains(lockedKeys, key) {
-				usersMutex.Unlock()
 				c.JSON(400, gin.H{"error": fmt.Sprintf("Key '%s' cannot be deleted", key)})
 				return
 			}
 
 			delete(users[userIndex], key)
-			usersMutex.Unlock()
 
 			go saveUsers()
 
@@ -801,49 +718,24 @@ func gambleCredits(c *gin.Context) {
 	}
 
 	usersMutex.Lock()
-	defer usersMutex.Unlock()
 
 	for i := range users {
 		if strings.EqualFold(users[i].GetUsername(), user.GetUsername()) {
-			currency := users[i].Get("sys.currency")
-			var cf float64
-			switch v := currency.(type) {
-			case float64:
-				cf = v
-			case float32:
-				cf = float64(v)
-			case int:
-				cf = float64(v)
-			case int64:
-				cf = float64(v)
-			case string:
-				if parsed, err := strconv.ParseFloat(v, 64); err == nil {
-					cf = parsed
-				} else {
-					c.JSON(400, gin.H{"error": "Invalid currency amount"})
-					usersMutex.Unlock()
-					return
-				}
-			default:
-				c.JSON(400, gin.H{"error": "Invalid currency amount"})
-				usersMutex.Unlock()
-				return
-			}
+			cf := users[i].GetCredits()
 			if cf < nAmount {
 				c.JSON(400, gin.H{"error": "Insufficient funds"})
 				usersMutex.Unlock()
 				return
 			}
 
+			usersMutex.Unlock()
 			r := rand.New(rand.NewSource(time.Now().UnixNano()))
 			if r.Intn(100) < 40 {
-				users[i]["sys.currency"] = roundVal(cf + nAmount)
-				go broadcastUserUpdate(user.GetUsername(), "sys.currency", users[i]["sys.currency"])
-				c.JSON(200, gin.H{"message": "You won!", "won": true, "amount": nAmount, "balance": users[i].Get("sys.currency")})
+				users[i].SetBalance(roundVal(cf + nAmount))
+				c.JSON(200, gin.H{"message": "You won!", "won": true, "amount": nAmount, "balance": users[i].GetCredits()})
 			} else {
-				users[i]["sys.currency"] = roundVal(cf - nAmount)
-				go broadcastUserUpdate(user.GetUsername(), "sys.currency", users[i]["sys.currency"])
-				c.JSON(200, gin.H{"message": "You lost!", "won": false, "amount": nAmount, "balance": users[i].Get("sys.currency")})
+				users[i].SetBalance(roundVal(cf - nAmount))
+				c.JSON(200, gin.H{"message": "You lost!", "won": false, "amount": nAmount, "balance": users[i].GetCredits()})
 			}
 			go saveUsers()
 			break
@@ -1006,25 +898,12 @@ func transferCredits(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "Sender user not found"})
 		return
 	}
-	amtAny := fromUser.Get("sys.currency")
-	if amtAny == nil {
+	fromCurrency := fromUser.GetCredits()
+	if fromCurrency == 0 {
 		c.JSON(400, gin.H{"error": "Sender user has no currency"})
 		return
 	}
-	var fromCurrency float64
-	switch v := amtAny.(type) {
-	case int:
-		fromCurrency = float64(v)
-	case int64:
-		fromCurrency = float64(v)
-	case float32:
-		fromCurrency = float64(v)
-	case float64:
-		fromCurrency = v
-	default:
-		c.JSON(400, gin.H{"error": "Invalid currency amount"})
-		return
-	}
+
 	fromCurrency = roundVal(fromCurrency)
 	if fromCurrency < (nAmount + totalTax) {
 		c.JSON(400, gin.H{"error": "Insufficient funds including tax", "required": nAmount + totalTax, "available": fromCurrency})
@@ -1041,25 +920,12 @@ func transferCredits(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "Recipient user not found"})
 		return
 	}
-	toAny := toUser.Get("sys.currency")
-	if toAny == nil {
+	toCurrency := toUser.GetCredits()
+	if toCurrency == 0 {
 		c.JSON(400, gin.H{"error": "Recipient user has no currency"})
 		return
 	}
-	var toCurrency float64
-	switch v := toAny.(type) {
-	case int:
-		toCurrency = float64(v)
-	case int64:
-		toCurrency = float64(v)
-	case float32:
-		toCurrency = float64(v)
-	case float64:
-		toCurrency = v
-	default:
-		c.JSON(400, gin.H{"error": "Invalid currency amount for recipient"})
-		return
-	}
+
 	toCurrency = roundVal(toCurrency)
 
 	var taxUser *User
@@ -1069,32 +935,18 @@ func transferCredits(c *gin.Context) {
 			break
 		}
 	}
-	if taxUser != nil {
-		if taxBalAny := taxUser.Get("sys.currency"); taxBalAny == nil {
-			(*taxUser)["sys.currency"] = float64(0)
-		}
+	usersMutex.Unlock()
+	if fromUser.GetUsername() != "rotur" { // prevent the rotur account from having currency deducted
+		fromUser.SetBalance(roundVal(fromCurrency - (nAmount + totalTax)))
 	}
-	fromUser.Set("sys.currency", roundVal(fromCurrency-(nAmount+totalTax)))
-	if toUser.GetUsername() != "rotur" {
-		toUser.Set("sys.currency", roundVal(toCurrency+nAmount))
+	if toUser.GetUsername() != "rotur" { // prevent the rotur account from accumulating currency
+		toUser.SetBalance(roundVal(toCurrency + nAmount))
 	}
 	if taxUser != nil {
-		currAny := taxUser.Get("sys.currency")
-		var curr float64
-		switch v := currAny.(type) {
-		case int:
-			curr = float64(v)
-		case int64:
-			curr = float64(v)
-		case float32:
-			curr = float64(v)
-		case float64:
-			curr = v
-		default:
-			curr = 0
-		}
-		taxUser.Set("sys.currency", roundVal(curr+taxRecipientShare))
+		curr := taxUser.GetCredits()
+		taxUser.SetBalance(roundVal(curr + taxRecipientShare))
 	}
+	usersMutex.Lock()
 	now := time.Now().UnixMilli()
 	note := mkNote(req.Note)
 	appendTx(fromUser, map[string]any{
@@ -1122,12 +974,6 @@ func transferCredits(c *gin.Context) {
 	}
 
 	go saveUsers()
-
-	go broadcastUserUpdate(fromUser.GetUsername(), "sys.currency", fromUser.Get("sys.currency"))
-	go broadcastUserUpdate(toUser.GetUsername(), "sys.currency", toUser.Get("sys.currency"))
-	if taxUser != nil {
-		go broadcastUserUpdate(taxUser.GetUsername(), "sys.currency", taxUser.Get("sys.currency"))
-	}
 
 	go broadcastUserUpdate(fromUser.GetUsername(), "sys.transactions", fromUser.Get("sys.transactions"))
 	go broadcastUserUpdate(toUser.GetUsername(), "sys.transactions", toUser.Get("sys.transactions"))
@@ -1380,23 +1226,11 @@ func claimDaily(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
-	currAny := user.Get("sys.currency")
-	var curr float64
-	switch v := currAny.(type) {
-	case int:
-		curr = float64(v)
-	case int64:
-		curr = float64(v)
-	case float32:
-		curr = float64(v)
-	case float64:
-		curr = v
-	}
+	curr := user.GetCredits()
 	newCurrency := roundVal(curr + 1.00)
-	users[userIndex]["sys.currency"] = newCurrency
 	usersMutex.Unlock()
+	users[userIndex].SetBalance(newCurrency)
 	go saveUsers()
-	go broadcastUserUpdate(user.GetUsername(), "sys.currency", newCurrency)
 
 	c.JSON(200, gin.H{"message": "Daily claim successful"})
 }

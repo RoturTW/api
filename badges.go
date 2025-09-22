@@ -12,10 +12,9 @@ func calculateUserBadges(user User) []string {
 		badges = append(badges, getStringOrEmpty(system))
 	}
 
-	if currency := user.Get("sys.currency"); currency != nil {
-		if currencyFloat, ok := currency.(float64); ok && currencyFloat >= 1000 {
-			badges = append(badges, "rich")
-		}
+	currency := user.GetCredits()
+	if currency >= 1000 {
+		badges = append(badges, "rich")
 	}
 
 	if friends := user.Get("sys.friends"); friends != nil {
