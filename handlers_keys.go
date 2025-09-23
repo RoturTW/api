@@ -559,7 +559,7 @@ func buyKey(c *gin.Context) {
 				return
 			}
 
-			c.JSON(200, gin.H{"status": "Key purchased successfully"})
+			c.JSON(200, gin.H{"message": "Key purchased successfully"})
 			return
 		}
 	}
