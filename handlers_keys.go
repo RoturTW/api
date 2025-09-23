@@ -581,22 +581,14 @@ func cancelKey(c *gin.Context) {
 		return
 	}
 
+	// remove the user from the key
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
 	for i := range keys {
 		if keys[i].Key == id {
-			if !strings.EqualFold(keys[i].Creator, user.GetUsername()) {
-				c.JSON(403, gin.H{"error": "You can only cancel sales for keys you created"})
-				return
-			}
-
-			keys[i].Price = 0
-
-			go saveKeys()
-
-			c.JSON(200, gin.H{"status": "Key sale cancelled successfully"})
-			return
+			delete(keys[i].Users, user.GetUsername())
+			c.JSON(200, gin.H{"status": "Successfully cancelled"})
 		}
 	}
 
