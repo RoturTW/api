@@ -296,17 +296,8 @@ func divorceMarriage(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
-
 	// Find user
-	userIndex := -1
-	for i, u := range users {
-		if u.GetUsername() == user.GetUsername() {
-			userIndex = i
-			break
-		}
-	}
+	userIndex := getIdxOfAccountBy("username", user.GetUsername())
 
 	if userIndex == -1 {
 		c.JSON(404, gin.H{"error": "User not found"})
