@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,29 +26,14 @@ func proposeMarriage(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
-
-	proposerIndex := -1
-	for i, u := range users {
-		if u.GetUsername() == user.GetUsername() {
-			proposerIndex = i
-			break
-		}
-	}
+	proposerIndex := getIdxOfAccountBy("username", user.GetUsername())
 
 	if proposerIndex == -1 {
 		c.JSON(404, gin.H{"error": "Proposer not found"})
 		return
 	}
 
-	targetIndex := -1
-	for i, u := range users {
-		if u.GetUsername() == targetUsername {
-			targetIndex = i
-			break
-		}
-	}
+	targetIndex := getIdxOfAccountBy("username", targetUsername)
 
 	if targetIndex == -1 {
 		c.JSON(404, gin.H{"error": "Target user not found"})
@@ -113,16 +99,7 @@ func acceptMarriage(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
-
-	userIndex := -1
-	for i, u := range users {
-		if u.GetUsername() == user.GetUsername() {
-			userIndex = i
-			break
-		}
-	}
+	userIndex := getIdxOfAccountBy("username", user.GetUsername())
 
 	if userIndex == -1 {
 		c.JSON(404, gin.H{"error": "User not found"})
@@ -160,13 +137,7 @@ func acceptMarriage(c *gin.Context) {
 		return
 	}
 
-	partnerIndex := -1
-	for i, u := range users {
-		if u.GetUsername() == partnerUsername {
-			partnerIndex = i
-			break
-		}
-	}
+	partnerIndex := getIdxOfAccountBy("username", partnerUsername)
 
 	if partnerIndex == -1 {
 		c.JSON(404, gin.H{"error": "Partner not found"})
@@ -210,17 +181,8 @@ func rejectMarriage(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
-
 	// Find user
-	userIndex := -1
-	for i, u := range users {
-		if u.GetUsername() == user.GetUsername() {
-			userIndex = i
-			break
-		}
-	}
+	userIndex := getIdxOfAccountBy("username", user.GetUsername())
 
 	if userIndex == -1 {
 		c.JSON(404, gin.H{"error": "User not found"})
@@ -261,13 +223,7 @@ func rejectMarriage(c *gin.Context) {
 	}
 
 	// Find partner
-	partnerIndex := -1
-	for i, u := range users {
-		if u.GetUsername() == partnerUsername {
-			partnerIndex = i
-			break
-		}
-	}
+	partnerIndex := getIdxOfAccountBy("username", partnerUsername)
 
 	if partnerIndex == -1 {
 		c.JSON(404, gin.H{"error": "Partner not found"})
@@ -330,13 +286,7 @@ func divorceMarriage(c *gin.Context) {
 	}
 
 	// Find partner
-	partnerIndex := -1
-	for i, u := range users {
-		if u.GetUsername() == partnerUsername {
-			partnerIndex = i
-			break
-		}
-	}
+	partnerIndex := getIdxOfAccountBy("username", partnerUsername)
 
 	if partnerIndex == -1 {
 		c.JSON(404, gin.H{"error": "Partner not found"})
@@ -367,17 +317,8 @@ func cancelMarriage(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
-
 	// Find user
-	userIndex := -1
-	for i, u := range users {
-		if u.GetUsername() == user.GetUsername() {
-			userIndex = i
-			break
-		}
-	}
+	userIndex := getIdxOfAccountBy("username", user.GetUsername())
 
 	if userIndex == -1 {
 		c.JSON(404, gin.H{"error": "User not found"})
@@ -412,19 +353,13 @@ func cancelMarriage(c *gin.Context) {
 	}
 
 	// Can only cancel if you're the proposer
-	if user.GetUsername() != proposerUsername {
+	if !strings.EqualFold(user.GetUsername(), proposerUsername) {
 		c.JSON(400, gin.H{"error": "Can only cancel your own proposal"})
 		return
 	}
 
 	// Find partner
-	partnerIndex := -1
-	for i, u := range users {
-		if u.GetUsername() == partnerUsername {
-			partnerIndex = i
-			break
-		}
-	}
+	partnerIndex := getIdxOfAccountBy("username", partnerUsername)
 
 	if partnerIndex == -1 {
 		c.JSON(404, gin.H{"error": "Partner not found"})
@@ -453,36 +388,33 @@ func getMarriageStatus(c *gin.Context) {
 		return
 	}
 
-	usersMutex.RLock()
-	defer usersMutex.RUnlock()
-
 	// Find user
-	for _, u := range users {
-		if u.GetUsername() == user.GetUsername() {
-			marriageData := u.Get("sys.marriage")
-			if marriageData == nil {
-				c.JSON(200, gin.H{
-					"status":    "single",
-					"partner":   "",
-					"timestamp": 0,
-					"proposer":  "",
-				})
-				return
-			}
+	userIdx := getIdxOfAccountBy("username", user.GetUsername())
+	if userIdx == -1 {
+		c.JSON(404, gin.H{"error": "User not found"})
+		return
+	}
+	u := users[userIdx]
 
-			if marriageMap, ok := marriageData.(map[string]any); ok {
-				c.JSON(200, marriageMap)
-			} else {
-				c.JSON(200, gin.H{
-					"status":    "single",
-					"partner":   "",
-					"timestamp": 0,
-					"proposer":  "",
-				})
-			}
-			return
-		}
+	marriageData := u.Get("sys.marriage")
+	if marriageData == nil {
+		c.JSON(200, gin.H{
+			"status":    "single",
+			"partner":   "",
+			"timestamp": 0,
+			"proposer":  "",
+		})
+		return
 	}
 
-	c.JSON(404, gin.H{"error": "User not found"})
+	if marriageMap, ok := marriageData.(map[string]any); ok {
+		c.JSON(200, marriageMap)
+	} else {
+		c.JSON(200, gin.H{
+			"status":    "single",
+			"partner":   "",
+			"timestamp": 0,
+			"proposer":  "",
+		})
+	}
 }
