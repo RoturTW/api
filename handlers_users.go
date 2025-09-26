@@ -136,6 +136,10 @@ func getUser(c *gin.Context) {
 		foundUsers, _ := getAccountsBy("key", authKey, 1)
 		if foundUsers != nil {
 			foundUser = foundUsers[0]
+			if foundUser.GetKey() != authKey {
+				c.JSON(403, gin.H{"error": "Invalid authentication credentials"})
+				return
+			}
 		}
 	}
 
@@ -146,6 +150,10 @@ func getUser(c *gin.Context) {
 		foundUsers, _ := getAccountsBy("username", username, 1)
 		if foundUsers != nil {
 			foundUser = foundUsers[0]
+			if foundUser.GetPassword() != password {
+				c.JSON(403, gin.H{"error": "Invalid authentication credentials"})
+				return
+			}
 		}
 	}
 
@@ -163,7 +171,7 @@ func getUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(403, gin.H{"error": "Invalid authentication credentials"})
+	c.JSON(403, gin.H{"error": "Missing authentication credentials"})
 }
 
 func generateAccountToken() string {
