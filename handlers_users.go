@@ -56,6 +56,22 @@ func getAccountsBy(key string, value string, max int) ([]User, error) {
 	return matches, nil
 }
 
+func findAccountByLogin(username string, password string) User {
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
+	username = strings.ToLower(username)
+	for _, user := range users {
+		if strings.ToLower(user.GetUsername()) == username && user.GetPassword() == password {
+			user = copyUser(user)
+			delete(user, "password")
+			return user
+		}
+	}
+
+	return nil
+}
+
 func getIdxOfAccountBy(key string, value string) int {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
@@ -147,14 +163,7 @@ func getUser(c *gin.Context) {
 	password := c.Query("password")
 
 	if username != "" && password != "" && foundUser == nil {
-		foundUsers, _ := getAccountsBy("username", username, 1)
-		if foundUsers != nil {
-			foundUser = foundUsers[0]
-			if foundUser.GetPassword() != password {
-				c.JSON(403, gin.H{"error": "Invalid authentication credentials"})
-				return
-			}
-		}
+		foundUser = findAccountByLogin(username, password)
 	}
 
 	if foundUser != nil {
