@@ -430,8 +430,6 @@ func updateUser(c *gin.Context) {
 	}
 	stringValue := fmt.Sprintf("%v", value)
 
-	fmt.Fprintln(os.Stderr, "Update request:", key, "=", stringValue) // Debug log
-
 	if authKey == "" {
 		c.JSON(403, gin.H{"error": "auth key is required"})
 		return
@@ -515,7 +513,6 @@ func updateUser(c *gin.Context) {
 	if key == "pfp" {
 		// Allow both data URIs and normal URLs
 		var imageData string
-		fmt.Println(stringValue)
 		if strings.HasPrefix(stringValue, "data:") {
 			// Use data URI as-is
 			imageData = stringValue
