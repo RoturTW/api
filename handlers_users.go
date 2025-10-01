@@ -174,6 +174,7 @@ func getUser(c *gin.Context) {
 		}
 		foundUser.Set("sys.last_login", time.Now().UnixMilli())
 		foundUser.Set("sys.total_logins", foundUser.GetInt("sys.total_logins")+1)
+		foundUser.Set("sys.badges", calculateUserBadges(foundUser))
 		userCopy := copyUser(foundUser)
 		delete(userCopy, "password")
 		c.JSON(200, userCopy)
