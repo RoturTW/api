@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -54,14 +55,14 @@ func createPost(c *gin.Context) {
 
 	osParam := c.Query("os")
 	if osParam != "" {
-		validOS := []string{"originOS", "Constellinux", "novaOS", "HuopaOS", "grip"}
-		isValid := false
-		for _, validOSName := range validOS {
-			if osParam == validOSName {
-				isValid = true
-				break
-			}
+		systems := getAllSystems()
+		keys := make([]string, len(systems))
+		i := 0
+		for k := range systems {
+			keys[i] = k
+			i++
 		}
+		isValid := slices.Contains(keys, osParam)
 		if !isValid {
 			c.JSON(400, gin.H{"error": "OS is invalid"})
 			return
