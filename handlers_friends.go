@@ -11,7 +11,7 @@ func sendFriendRequest(c *gin.Context) {
 	auth := c.Query("auth")
 	sender := authenticateWithKey(auth)
 	if sender == nil {
-		c.JSON(401, gin.H{"error": "Unauthorized"})
+		c.JSON(401, gin.H{"error": "Unauthorised"})
 		return
 	}
 
@@ -80,7 +80,7 @@ func acceptFriendRequest(c *gin.Context) {
 	auth := c.Query("auth")
 	current := authenticateWithKey(auth)
 	if current == nil {
-		c.JSON(401, gin.H{"error": "Unauthorized"})
+		c.JSON(401, gin.H{"error": "Unauthorised"})
 		return
 	}
 	requesterName := strings.ToLower(c.Param("username"))
@@ -159,7 +159,7 @@ func rejectFriendRequest(c *gin.Context) {
 	auth := c.Query("auth")
 	current := authenticateWithKey(auth)
 	if current == nil {
-		c.JSON(401, gin.H{"error": "Unauthorized"})
+		c.JSON(401, gin.H{"error": "Unauthorised"})
 		return
 	}
 	requesterName := strings.ToLower(c.Param("username"))
@@ -202,7 +202,7 @@ func removeFriend(c *gin.Context) {
 	auth := c.Query("auth")
 	current := authenticateWithKey(auth)
 	if current == nil {
-		c.JSON(401, gin.H{"error": "Unauthorized"})
+		c.JSON(401, gin.H{"error": "Unauthorised"})
 		return
 	}
 	otherName := strings.ToLower(c.Param("username"))
@@ -265,7 +265,7 @@ func getFriends(c *gin.Context) {
 	auth := c.Query("auth")
 	user := authenticateWithKey(auth)
 	if user == nil {
-		c.JSON(401, gin.H{"error": "Unauthorized"})
+		c.JSON(401, gin.H{"error": "Unauthorised"})
 		return
 	}
 

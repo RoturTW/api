@@ -164,6 +164,7 @@ func main() {
 	r.GET("/claim_daily", claimDaily)
 	r.GET("/supporters", getSupporters)
 	r.GET("/badges", getBadges)
+	r.GET("/ai", rateLimit("ai"), handleAI)
 
 	log.Println("Claw server starting on port 5602...")
 	if err := r.Run("0.0.0.0:5602"); err != nil {
