@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 )
 
@@ -37,11 +38,8 @@ func calculateUserBadges(user User) []string {
 
 	devTeam := []string{"mist", "rotur", "flufi"}
 	username := strings.ToLower(user.GetUsername())
-	for _, dev := range devTeam {
-		if username == dev {
-			badges = append(badges, "rotur")
-			break
-		}
+	if slices.Contains(devTeam, username) {
+		badges = append(badges, "rotur")
 	}
 
 	return badges
