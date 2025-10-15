@@ -206,7 +206,7 @@ func getProfile(c *gin.Context) {
 		"private":      strings.ToLower(getStringOrEmpty(foundUser.Get("private"))) == "true",
 		"status":       st,
 	}
-	if foundUser.Get("banner") != nil {
+	if foundUser.Get("sys.banner") != nil {
 		profileData["banner"] = "https://avatars.rotur.dev/.banners/" + foundUser.GetUsername()
 	}
 
