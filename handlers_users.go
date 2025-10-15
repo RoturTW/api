@@ -444,12 +444,6 @@ func updateUser(c *gin.Context) {
 
 	username := user.GetUsername()
 
-	totalSize := findUserSize(username)
-	if totalSize+len(fmt.Sprintf("%v", value)) > 25000 {
-		c.JSON(400, gin.H{"error": "Total account size exceeds 25000 bytes"})
-		return
-	}
-
 	if key == "banner" {
 		// Allow both data URIs and normal URLs
 		var imageData string
@@ -567,6 +561,12 @@ func updateUser(c *gin.Context) {
 		ADMIN_TOKEN := os.Getenv("ADMIN_TOKEN")
 		adminToken := c.Query("token")
 		admin = adminToken != "" && ADMIN_TOKEN != "" && adminToken == ADMIN_TOKEN
+	}
+
+	totalSize := findUserSize(username)
+	if totalSize+len(fmt.Sprintf("%v", value)) > 25000 {
+		c.JSON(400, gin.H{"error": "Total account size exceeds 25000 bytes"})
+		return
 	}
 
 	if len(stringValue) > 1000 {
