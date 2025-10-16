@@ -2,11 +2,9 @@ package main
 
 import (
 	"crypto/md5"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -448,33 +446,9 @@ func updateUser(c *gin.Context) {
 		// Allow both data URIs and normal URLs
 		var imageData string
 		if strings.HasPrefix(stringValue, "data:") {
-			// Use data URI as-is
 			imageData = stringValue
-		} else if strings.HasPrefix(stringValue, "http://") || strings.HasPrefix(stringValue, "https://") {
-			// Proxy normal URLs through proxy.mistium.com
-			client := &http.Client{Timeout: 10 * time.Second}
-			resp, err := client.Get(stringValue)
-			if err != nil {
-				c.JSON(400, gin.H{"error": "Failed to fetch profile picture URL", "detail": err.Error()})
-				return
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				c.JSON(resp.StatusCode, gin.H{"error": "Failed to fetch profile picture URL"})
-				return
-			}
-			data, err := io.ReadAll(resp.Body)
-			if err != nil {
-				c.JSON(500, gin.H{"error": "Failed to read profile picture data"})
-				return
-			}
-			ct := resp.Header.Get("Content-Type")
-			if ct == "" {
-				ct = http.DetectContentType(data)
-			}
-			imageData = "data:" + ct + ";base64," + base64.StdEncoding.EncodeToString(data)
 		} else {
-			c.JSON(400, gin.H{"error": "Banner must be a valid data URI or HTTP/HTTPS URL"})
+			c.JSON(400, gin.H{"error": "Banner must be a valid data URI"})
 			return
 		}
 		userIndex := getIdxOfAccountBy("username", username)
@@ -509,30 +483,7 @@ func updateUser(c *gin.Context) {
 		// Allow both data URIs and normal URLs
 		var imageData string
 		if strings.HasPrefix(stringValue, "data:") {
-			// Use data URI as-is
 			imageData = stringValue
-		} else if strings.HasPrefix(stringValue, "https://") {
-			client := &http.Client{Timeout: 10 * time.Second}
-			resp, err := client.Get(stringValue)
-			if err != nil {
-				c.JSON(400, gin.H{"error": "Failed to fetch profile picture URL", "detail": err.Error()})
-				return
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				c.JSON(resp.StatusCode, gin.H{"error": "Failed to fetch profile picture URL"})
-				return
-			}
-			data, err := io.ReadAll(resp.Body)
-			if err != nil {
-				c.JSON(500, gin.H{"error": "Failed to read profile picture data"})
-				return
-			}
-			ct := resp.Header.Get("Content-Type")
-			if ct == "" {
-				ct = http.DetectContentType(data)
-			}
-			imageData = "data:" + ct + ";base64," + base64.StdEncoding.EncodeToString(data)
 		} else {
 			c.JSON(400, gin.H{"error": "Profile picture must be a valid data URI or HTTP/HTTPS URL"})
 			return
