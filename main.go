@@ -68,7 +68,7 @@ func main() {
 	r.GET("/reload_systems", requiresAuth, reloadSystemsEndpoint)
 
 	// Validator endpoints
-	r.GET("/generate_validator", generateValidator)
+	r.GET("/generate_validator", requiresAuth, generateValidator)
 	r.GET("/validate", validateToken)
 
 	// Items endpoints
