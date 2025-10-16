@@ -217,12 +217,14 @@ func requiresAuth(c *gin.Context) {
 	authKey := c.Query("auth")
 	if authKey == "" {
 		c.JSON(403, gin.H{"error": "auth key is required"})
+		c.Abort()
 		return
 	}
 
 	user := authenticateWithKey(authKey)
 	if user == nil {
 		c.JSON(403, gin.H{"error": "Invalid authentication key"})
+		c.Abort()
 		return
 	}
 
