@@ -485,7 +485,7 @@ func updateUser(c *gin.Context) {
 		if strings.HasPrefix(stringValue, "data:") {
 			imageData = stringValue
 		} else {
-			c.JSON(400, gin.H{"error": "Profile picture must be a valid data URI or HTTP/HTTPS URL"})
+			c.JSON(400, gin.H{"error": "Profile picture must be a valid data URI"})
 			return
 		}
 		statusCode, err := uploadUserImage("pfp", imageData, user.GetKey())
