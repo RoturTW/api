@@ -35,15 +35,10 @@ func getLinkCode(c *gin.Context) {
 
 func linkCodeToAccount(c *gin.Context) {
 	code := c.Query("code")
-	token := c.Query("auth")
 
 	if _, exists := usedCodes[code]; exists {
-		accounts, err := getAccountsBy("key", token, 1)
-		if err != nil || accounts[0] == nil {
-			c.JSON(404, gin.H{"error": "User not found"})
-			return
-		}
-		usedCodes[code] = accounts[0].GetKey()
+		user := c.MustGet("user").(*User)
+		usedCodes[code] = user.GetKey()
 		c.JSON(200, "Linked Successfully")
 		return
 	}

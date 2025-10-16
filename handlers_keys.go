@@ -11,17 +11,7 @@ import (
 )
 
 func createKey(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	name := c.Query("name")
 	if name == "" {
@@ -122,17 +112,7 @@ func createKey(c *gin.Context) {
 }
 
 func getMyKeys(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	username := strings.ToLower(user.GetUsername())
 
@@ -173,17 +153,7 @@ func checkKey(c *gin.Context) {
 
 func revokeKey(c *gin.Context) {
 	id := c.Param("id")
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	targetUser := c.Query("user")
 	if targetUser == "" {
@@ -219,17 +189,7 @@ func revokeKey(c *gin.Context) {
 
 func deleteKey(c *gin.Context) {
 	id := c.Param("id")
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
@@ -256,22 +216,16 @@ func deleteKey(c *gin.Context) {
 
 func updateKey(c *gin.Context) {
 	id := c.Param("id")
-	authKey := c.Query("auth")
 	key := c.Query("key")
 	data := c.Query("data")
-	if authKey == "" || data == "" || key == "" {
-		c.JSON(403, gin.H{"error": "auth key, update key and data are required"})
+	user := c.MustGet("user").(*User)
+	if data == "" || key == "" {
+		c.JSON(403, gin.H{"error": "update key and data are required"})
 		return
 	}
 	// data is {key: value}
 	if !isValidJSON(data) {
 		c.JSON(400, gin.H{"error": "Invalid JSON data"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
 		return
 	}
 
@@ -305,17 +259,7 @@ func updateKey(c *gin.Context) {
 
 func setKeyName(c *gin.Context) {
 	id := c.Param("id")
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	name := c.Query("name")
 	if name == "" {
@@ -363,17 +307,7 @@ func getKey(c *gin.Context) {
 
 func adminAddUserToKey(c *gin.Context) {
 	id := c.Param("id")
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	targetUser := c.Query("user")
 	if targetUser == "" {
@@ -389,6 +323,10 @@ func adminAddUserToKey(c *gin.Context) {
 
 	for i := range keys {
 		if keys[i].Key == id {
+			if keys[i].Creator != user.GetUsername() {
+				c.JSON(403, gin.H{"error": "You can only add users to your own keys"})
+				return
+			}
 			keys[i].Users[strings.ToLower(targetUser)] = KeyUserData{
 				Time: float64(time.Now().Unix()),
 			}
@@ -405,17 +343,7 @@ func adminAddUserToKey(c *gin.Context) {
 
 func adminRemoveUserFromKey(c *gin.Context) {
 	id := c.Param("id")
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	targetUser := c.Query("user")
 	if targetUser == "" {
@@ -431,6 +359,10 @@ func adminRemoveUserFromKey(c *gin.Context) {
 
 	for i := range keys {
 		if keys[i].Key == id {
+			if keys[i].Creator != user.GetUsername() {
+				c.JSON(403, gin.H{"error": "You can only remove users from your own keys"})
+				return
+			}
 			delete(keys[i].Users, strings.ToLower(targetUser))
 
 			go saveKeys()
@@ -445,17 +377,7 @@ func adminRemoveUserFromKey(c *gin.Context) {
 
 func buyKey(c *gin.Context) {
 	id := c.Param("id")
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
@@ -569,17 +491,7 @@ func buyKey(c *gin.Context) {
 
 func cancelKey(c *gin.Context) {
 	id := c.Param("id")
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	// remove the user from the key
 	keysMutex.Lock()
@@ -596,17 +508,7 @@ func cancelKey(c *gin.Context) {
 }
 
 func debugSubscriptionsEndpoint(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	// Only allow admin users to access debug info
 	if strings.ToLower(user.GetUsername()) != "mist" {

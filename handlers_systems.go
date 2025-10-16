@@ -55,17 +55,7 @@ func getSystems(c *gin.Context) {
 }
 
 func reloadSystemsEndpoint(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	// Only allow mist user to reload systems (admin privilege)
 	if strings.ToLower(user.GetUsername()) != "mist" {

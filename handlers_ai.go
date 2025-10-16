@@ -12,13 +12,6 @@ import (
 )
 
 func handleAI(c *gin.Context) {
-	auth := c.Query("auth")
-	current := authenticateWithKey(auth)
-	if current == nil {
-		c.JSON(401, gin.H{"error": "Unauthorised"})
-		return
-	}
-
 	apiURL := "https://api.cerebras.ai/v1/chat/completions"
 	apiKey := os.Getenv("CEREBRAS_API_KEY")
 	if apiKey == "" {

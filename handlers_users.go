@@ -208,17 +208,7 @@ func generateAccountToken() string {
 }
 
 func refreshToken(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	newToken := generateAccountToken()
 
@@ -660,17 +650,7 @@ func updateUserAdmin(c *gin.Context) {
 }
 
 func gambleCredits(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	var req struct {
 		Amount float64 `json:"amount"`
@@ -754,16 +734,8 @@ func deleteUserKey(c *gin.Context) {
 }
 
 func transferCredits(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
+
 	var req struct {
 		To     string  `json:"to"`
 		Amount float64 `json:"amount"`
@@ -903,17 +875,7 @@ func transferCredits(c *gin.Context) {
 }
 
 func deleteUser(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	username := c.Param("username")
 	if username == "" {
@@ -1059,17 +1021,7 @@ func performUserDeletion(username string, isAdmin bool) error {
 }
 
 func claimDaily(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	username := strings.ToLower(user.GetUsername())
 
@@ -1144,22 +1096,12 @@ func saveDailyClaims(claimsData map[string]float64) {
 }
 
 func acceptTos(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
 	if c.GetHeader("Origin") != "https://rotur.dev" {
 		c.JSON(403, gin.H{"error": "This endpoint is only available on rotur.dev"})
 		return
 	}
 
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	// Accept the TOS by setting a flag in the user data
 	go patchUserUpdate(user.GetUsername(), "sys.tos_accepted", true)
@@ -1188,17 +1130,7 @@ func tosUpdate(c *gin.Context) {
 // Badge API handlers
 
 func getBadges(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()

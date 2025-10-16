@@ -8,12 +8,7 @@ import (
 
 // POST /friends/request/:username
 func sendFriendRequest(c *gin.Context) {
-	auth := c.Query("auth")
-	sender := authenticateWithKey(auth)
-	if sender == nil {
-		c.JSON(401, gin.H{"error": "Unauthorised"})
-		return
-	}
+	sender := c.MustGet("user").(*User)
 
 	targetUsername := c.Param("username")
 	if targetUsername == "" {
@@ -77,12 +72,7 @@ func sendFriendRequest(c *gin.Context) {
 
 // POST /friends/accept/:username  (username = original requester)
 func acceptFriendRequest(c *gin.Context) {
-	auth := c.Query("auth")
-	current := authenticateWithKey(auth)
-	if current == nil {
-		c.JSON(401, gin.H{"error": "Unauthorised"})
-		return
-	}
+	current := c.MustGet("user").(*User)
 	requesterName := strings.ToLower(c.Param("username"))
 	if requesterName == "" {
 		c.JSON(400, gin.H{"error": "Username cannot be empty"})
@@ -156,12 +146,7 @@ func acceptFriendRequest(c *gin.Context) {
 
 // POST /friends/reject/:username
 func rejectFriendRequest(c *gin.Context) {
-	auth := c.Query("auth")
-	current := authenticateWithKey(auth)
-	if current == nil {
-		c.JSON(401, gin.H{"error": "Unauthorised"})
-		return
-	}
+	current := c.MustGet("user").(*User)
 	requesterName := strings.ToLower(c.Param("username"))
 	if requesterName == "" {
 		c.JSON(400, gin.H{"error": "Username cannot be empty"})
@@ -199,12 +184,7 @@ func rejectFriendRequest(c *gin.Context) {
 
 // POST /friends/remove/:username
 func removeFriend(c *gin.Context) {
-	auth := c.Query("auth")
-	current := authenticateWithKey(auth)
-	if current == nil {
-		c.JSON(401, gin.H{"error": "Unauthorised"})
-		return
-	}
+	current := c.MustGet("user").(*User)
 	otherName := strings.ToLower(c.Param("username"))
 	if otherName == "" {
 		c.JSON(400, gin.H{"error": "Username cannot be empty"})
@@ -262,12 +242,7 @@ func removeFriend(c *gin.Context) {
 
 // GET /friends
 func getFriends(c *gin.Context) {
-	auth := c.Query("auth")
-	user := authenticateWithKey(auth)
-	if user == nil {
-		c.JSON(401, gin.H{"error": "Unauthorised"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()

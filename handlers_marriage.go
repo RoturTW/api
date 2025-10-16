@@ -8,17 +8,7 @@ import (
 )
 
 func proposeMarriage(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	targetUsername := c.Param("username")
 	if targetUsername == "" {
@@ -87,17 +77,7 @@ func proposeMarriage(c *gin.Context) {
 }
 
 func acceptMarriage(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	userIndex := getIdxOfAccountBy("username", user.GetUsername())
 
@@ -169,17 +149,7 @@ func acceptMarriage(c *gin.Context) {
 }
 
 func rejectMarriage(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	// Find user
 	userIndex := getIdxOfAccountBy("username", user.GetUsername())
@@ -240,17 +210,7 @@ func rejectMarriage(c *gin.Context) {
 }
 
 func divorceMarriage(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	// Find user
 	userIndex := getIdxOfAccountBy("username", user.GetUsername())
@@ -305,17 +265,7 @@ func divorceMarriage(c *gin.Context) {
 }
 
 func cancelMarriage(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	// Find user
 	userIndex := getIdxOfAccountBy("username", user.GetUsername())
@@ -376,17 +326,7 @@ func cancelMarriage(c *gin.Context) {
 }
 
 func getMarriageStatus(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	// Find user
 	userIdx := getIdxOfAccountBy("username", user.GetUsername())

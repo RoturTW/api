@@ -18,17 +18,7 @@ func normalizeEscrowAmount(raw float64) (float64, bool) {
 
 // escrowTransfer - Transfer credits to escrow (no tax for internal transfers)
 func escrowTransfer(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	var req struct {
 		Amount     float64 `json:"amount"`
@@ -152,17 +142,7 @@ func escrowTransfer(c *gin.Context) {
 
 // escrowRelease - Release escrow credits to developer (admin only)
 func escrowRelease(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	// Only allow mist (admin) to release escrow
 	if strings.ToLower(user.GetUsername()) != "mist" {

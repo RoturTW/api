@@ -12,20 +12,10 @@ import (
 
 func generateValidator(c *gin.Context) {
 	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
+	user := c.MustGet("user").(*User)
 	key := c.Query("key")
 	if key == "" {
 		c.JSON(400, gin.H{"error": "key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
 		return
 	}
 

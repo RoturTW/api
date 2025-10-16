@@ -213,6 +213,23 @@ func rateLimit(limitType string) gin.HandlerFunc {
 	}
 }
 
+func requiresAuth(c *gin.Context) {
+	authKey := c.Query("auth")
+	if authKey == "" {
+		c.JSON(403, gin.H{"error": "auth key is required"})
+		return
+	}
+
+	user := authenticateWithKey(authKey)
+	if user == nil {
+		c.JSON(403, gin.H{"error": "Invalid authentication key"})
+		return
+	}
+
+	c.Set("user", user)
+	c.Next()
+}
+
 func corsMiddleware() gin.HandlerFunc {
 	config := cors.DefaultConfig()
 	config.AllowAllOrigins = true

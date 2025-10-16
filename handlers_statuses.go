@@ -79,17 +79,7 @@ func deleteUserStatus(username string) {
 
 // GET /status/clear?auth=KEY
 func statusClear(c *gin.Context) {
-	auth := c.Query("auth")
-	if auth == "" {
-		c.JSON(400, gin.H{"error": "auth parameter missing"})
-		return
-	}
-
-	user := authenticateWithKey(auth)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "invalid auth"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	deleteUserStatus(user.GetUsername())
 	go broadcastUserUpdate(user.GetUsername(), "status", nil)
@@ -128,16 +118,7 @@ func statusGet(c *gin.Context) {
 // GET /status/update?auth=KEY&content=... OR activity params
 // activity_name= & activity_desc= & activity_image=
 func statusUpdate(c *gin.Context) {
-	auth := c.Query("auth")
-	if auth == "" {
-		c.JSON(400, gin.H{"error": "auth parameter missing"})
-		return
-	}
-	user := authenticateWithKey(auth)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "invalid auth"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	content := strings.TrimSpace(c.Query("content"))
 	actName := strings.TrimSpace(c.Query("activity_name"))

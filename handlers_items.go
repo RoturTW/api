@@ -13,17 +13,7 @@ import (
 func transferItem(c *gin.Context) {
 	name := strings.ToLower(c.Param("name"))
 
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	targetUsername := c.Query("username")
 	if targetUsername == "" {
@@ -97,17 +87,7 @@ func transferItem(c *gin.Context) {
 func buyItem(c *gin.Context) {
 	name := strings.ToLower(c.Param("name"))
 
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	itemsMutex.Lock()
 	defer itemsMutex.Unlock()
@@ -204,17 +184,7 @@ func buyItem(c *gin.Context) {
 func stopSellingItem(c *gin.Context) {
 	name := strings.ToLower(c.Param("name"))
 
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	itemsMutex.Lock()
 	defer itemsMutex.Unlock()
@@ -246,17 +216,7 @@ func stopSellingItem(c *gin.Context) {
 func setItemPrice(c *gin.Context) {
 	name := strings.ToLower(c.Param("name"))
 
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	priceStr := c.Query("price")
 	if priceStr == "" {
@@ -305,17 +265,7 @@ func setItemPrice(c *gin.Context) {
 }
 
 func createItem(c *gin.Context) {
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	itemStr := c.Query("item")
 	if itemStr == "" {
@@ -440,17 +390,7 @@ func getItem(c *gin.Context) {
 func deleteItem(c *gin.Context) {
 	name := strings.ToLower(c.Param("name"))
 
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	itemsMutex.Lock()
 	defer itemsMutex.Unlock()
@@ -503,17 +443,7 @@ func listItems(c *gin.Context) {
 func updateItem(c *gin.Context) {
 	name := strings.ToLower(c.Param("name"))
 
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	newDataStr := c.Query("data")
 	if newDataStr == "" {
@@ -564,17 +494,7 @@ func updateItem(c *gin.Context) {
 func sellItem(c *gin.Context) {
 	name := strings.ToLower(c.Param("name"))
 
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	itemsMutex.Lock()
 	defer itemsMutex.Unlock()
@@ -645,17 +565,7 @@ func getSellingItems(c *gin.Context) {
 func adminAddUserToItem(c *gin.Context) {
 	itemID := c.Param("id")
 
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	if strings.ToLower(user.GetUsername()) != "mist" {
 		c.JSON(403, gin.H{"error": "Invalid authentication key"})

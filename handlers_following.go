@@ -21,17 +21,7 @@ func followUser(c *gin.Context) {
 		return
 	}
 
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	targetUsername := c.Query("username")
 	if targetUsername == "" {
@@ -103,17 +93,7 @@ func unfollowUser(c *gin.Context) {
 		return
 	}
 
-	authKey := c.Query("auth")
-	if authKey == "" {
-		c.JSON(403, gin.H{"error": "auth key is required"})
-		return
-	}
-
-	user := authenticateWithKey(authKey)
-	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
-	}
+	user := c.MustGet("user").(*User)
 
 	targetUsername := c.Query("username")
 	if targetUsername == "" {
