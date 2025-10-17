@@ -150,6 +150,3 @@ All endpoints are served on port 5602 (example: `http://localhost:5602`). Unless
 
 ### Terms of Service
 - `POST /accept_tos` Accept terms of service
-
----
-NOTE: This list is generated from `main.go`; keep it in sync when new routes are added.
