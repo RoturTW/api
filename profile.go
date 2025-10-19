@@ -15,18 +15,6 @@ func getProfile(c *gin.Context) {
 		name = c.Query("name")
 	}
 
-	// Rate limiting check
-	rateLimitKey := getRateLimitKey(c)
-	isAllowed, remaining, resetTime := applyRateLimit(rateLimitKey, "profile")
-
-	if !isAllowed {
-		c.Header("X-RateLimit-Limit", strconv.Itoa(rateLimits["profile"].Count))
-		c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
-		c.Header("X-RateLimit-Reset", strconv.FormatFloat(resetTime, 'f', 0, 64))
-		c.JSON(429, gin.H{"error": "Rate limit exceeded. Rate limit extended by 5 seconds due to violation."})
-		return
-	}
-
 	discord_id := c.Query("discord_id")
 	if name == "" && discord_id == "" {
 		c.JSON(400, gin.H{"error": "Name or Discord ID is required"})

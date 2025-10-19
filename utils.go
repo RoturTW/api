@@ -204,7 +204,7 @@ func rateLimit(limitType string) gin.HandlerFunc {
 			c.Header("X-RateLimit-Limit", strconv.Itoa(rateLimits[limitType].Count))
 			c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
 			c.Header("X-RateLimit-Reset", strconv.FormatFloat(resetTime, 'f', 0, 64))
-			c.JSON(429, gin.H{"error": "Rate limit exceeded. Rate limit extended by 5 seconds due to violation."})
+			c.JSON(429, gin.H{"error": "Rate limit exceeded. Rate limit extended by 10 seconds due to violation.", "reset_time": resetTime, "remaining": remaining})
 			c.Abort()
 			return
 		}

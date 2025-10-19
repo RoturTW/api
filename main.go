@@ -44,7 +44,7 @@ func main() {
 	r.GET("/followers", rateLimit("profile"), getFollowers)
 	r.GET("/following", rateLimit("profile"), getFollowing)
 	r.GET("/notifications", rateLimit("default"), requiresAuth, getNotifications)
-	r.GET("/profile", getProfile)
+	r.GET("/profile", rateLimit("profile"), getProfile)
 	r.GET("/feed", rateLimit("default"), getFeed)
 	r.GET("/following_feed", rateLimit("default"), requiresAuth, getFollowingFeed)
 	r.GET("/delete", requiresAuth, deletePost)
