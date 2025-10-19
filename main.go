@@ -56,12 +56,14 @@ func main() {
 	r.GET("/search_posts", rateLimit("search"), searchPosts)
 
 	// Stats endpoints
-	r.GET("/stats/economy", rateLimit("default"), getEconomyStats)
-	r.GET("/stats/users", rateLimit("default"), getUserStats)
-	r.GET("/stats/rich", rateLimit("default"), getRichList)
-	r.GET("/stats/systems", rateLimit("default"), getSystemStats)
-	r.GET("/stats/followers", rateLimit("default"), getFollowersStats)
-	r.GET("/status", getStatus)
+	stats := r.Group("/stats")
+	{
+		stats.GET("/economy", rateLimit("default"), getEconomyStats)
+		stats.GET("/users", rateLimit("default"), getUserStats)
+		stats.GET("/rich", rateLimit("default"), getRichList)
+		stats.GET("/systems", rateLimit("default"), getSystemStats)
+		stats.GET("/followers", rateLimit("default"), getFollowersStats)
+	}
 
 	// Systems endpoints
 	r.GET("/systems", getSystems)
@@ -72,42 +74,50 @@ func main() {
 	r.GET("/validate", validateToken)
 
 	// Items endpoints
-	r.GET("/items/create", requiresAuth, createItem)
-	r.GET("/items/get/:name", getItem)
-	r.GET("/items/list/:username", listItems)
-	r.GET("/items/selling", getSellingItems)
+	items := r.Group("/items")
+	{
+		items.GET("/create", requiresAuth, createItem)
+		items.GET("/get/:name", getItem)
+		items.GET("/list/:username", listItems)
+		items.GET("/selling", getSellingItems)
 
-	r.GET("/items/buy/:name", requiresAuth, buyItem)
-	r.GET("/items/transfer/:name", requiresAuth, transferItem)
-	r.GET("/items/sell/:name", requiresAuth, sellItem)
-	r.GET("/items/stop_selling/:name", requiresAuth, stopSellingItem)
-	r.GET("/items/set_price/:name", requiresAuth, setItemPrice)
+		items.GET("/buy/:name", requiresAuth, buyItem)
+		items.GET("/transfer/:name", requiresAuth, transferItem)
+		items.GET("/sell/:name", requiresAuth, sellItem)
+		items.GET("/stop_selling/:name", requiresAuth, stopSellingItem)
+		items.GET("/set_price/:name", requiresAuth, setItemPrice)
 
-	r.GET("/items/update/:name", requiresAuth, updateItem)
-	r.GET("/items/delete/:name", requiresAuth, deleteItem)
-	r.GET("/items/admin_add/:id", requiresAuth, adminAddUserToItem)
+		items.GET("/update/:name", requiresAuth, updateItem)
+		items.GET("/delete/:name", requiresAuth, deleteItem)
+		items.GET("/admin_add/:id", requiresAuth, adminAddUserToItem)
+	}
 
 	// Keys endpoints
-	r.GET("/keys/create", requiresAuth, createKey)
-	r.GET("/keys/mine", requiresAuth, getMyKeys)
-	r.GET("/keys/get/:id", getKey)
-	r.GET("/keys/check/:username", checkKey)
-	r.GET("/keys/name/:id", requiresAuth, setKeyName)
-	r.GET("/keys/update/:id", requiresAuth, updateKey)
-	r.GET("/keys/revoke/:id", requiresAuth, revokeKey)
-	r.GET("/keys/delete/:id", requiresAuth, deleteKey)
-	r.GET("/keys/admin_add/:id", requiresAuth, adminAddUserToKey)
-	r.GET("/keys/admin_remove/:id", requiresAuth, adminRemoveUserFromKey)
-	r.GET("/keys/buy/:id", requiresAuth, buyKey)
-	r.GET("/keys/cancel/:id", requiresAuth, cancelKey)
-	r.GET("/keys/debug_subscriptions", requiresAuth, debugSubscriptionsEndpoint)
+	keys := r.Group("/keys")
+	{
+		keys.GET("/create", requiresAuth, createKey)
+		keys.GET("/mine", requiresAuth, getMyKeys)
+		keys.GET("/get/:id", getKey)
+		keys.GET("/check/:username", checkKey)
+		keys.GET("/name/:id", requiresAuth, setKeyName)
+		keys.GET("/update/:id", requiresAuth, updateKey)
+		keys.GET("/revoke/:id", requiresAuth, revokeKey)
+		keys.GET("/delete/:id", requiresAuth, deleteKey)
+		keys.GET("/admin_add/:id", requiresAuth, adminAddUserToKey)
+		keys.GET("/admin_remove/:id", requiresAuth, adminRemoveUserFromKey)
+		keys.GET("/buy/:id", requiresAuth, buyKey)
+		keys.GET("/cancel/:id", requiresAuth, cancelKey)
+		keys.GET("/debug_subscriptions", requiresAuth, debugSubscriptionsEndpoint)
+	}
 
 	// Admin endpoints
-	r.GET("/admin/tos_update", tosUpdate)
-	r.GET("/admin/get_user_by", getUserBy)
-
-	r.POST("/admin/update_user", updateUserAdmin)
-	r.POST("/admin/delete_user", deleteUserAdmin)
+	admin := r.Group("/admin")
+	{
+		admin.GET("/tos_update", tosUpdate)
+		admin.GET("/get_user_by", getUserBy)
+		admin.POST("/update_user", updateUserAdmin)
+		admin.POST("/delete_user", deleteUserAdmin)
+	}
 
 	// Users endpoints
 	r.GET("/me", rateLimit("profile"), getUser)
@@ -115,56 +125,74 @@ func main() {
 	r.GET("/get_user_new", rateLimit("profile"), getUser)
 
 	r.POST("/create_user", registerUser)
-	r.POST("/me/update", updateUser)
-	r.POST("/me/refresh_token", requiresAuth, refreshToken)
-	r.POST("/me/transfer", requiresAuth, transferCredits)
-	r.POST("/me/gamble", requiresAuth, gambleCredits)
+
+	me := r.Group("/me")
+	{
+		me.POST("/update", updateUser)
+		me.POST("/refresh_token", requiresAuth, refreshToken)
+		me.POST("/transfer", requiresAuth, transferCredits)
+		me.POST("/gamble", requiresAuth, gambleCredits)
+		me.DELETE("/me/delete", deleteUserKey)
+	}
 	r.POST("/accept_tos", requiresAuth, acceptTos)
 
 	r.PATCH("/users", updateUser)
 
 	r.DELETE("/users", deleteUserKey)
-	r.DELETE("/me/delete", deleteUserKey)
 	r.DELETE("/users/:username", requiresAuth, deleteUser)
 
 	// Friends endpoints
-	r.GET("/friends", requiresAuth, getFriends)
-
-	r.POST("/friends/request/:username", requiresAuth, sendFriendRequest)
-	r.POST("/friends/accept/:username", requiresAuth, acceptFriendRequest)
-	r.POST("/friends/reject/:username", requiresAuth, rejectFriendRequest)
-	r.POST("/friends/remove/:username", requiresAuth, removeFriend)
+	friends := r.Group("/friends")
+	{
+		friends.GET("", requiresAuth, getFriends)
+		friends.POST("/request/:username", requiresAuth, sendFriendRequest)
+		friends.POST("/accept/:username", requiresAuth, acceptFriendRequest)
+		friends.POST("/reject/:username", requiresAuth, rejectFriendRequest)
+		friends.POST("/remove/:username", requiresAuth, removeFriend)
+	}
 
 	// Marriage endpoints
-	r.GET("/marriage/status", requiresAuth, getMarriageStatus)
-
-	r.POST("/marriage/propose/:username", requiresAuth, proposeMarriage)
-	r.POST("/marriage/accept", requiresAuth, acceptMarriage)
-	r.POST("/marriage/reject", requiresAuth, rejectMarriage)
-	r.POST("/marriage/cancel", requiresAuth, cancelMarriage)
-	r.POST("/marriage/divorce", requiresAuth, divorceMarriage)
+	marriage := r.Group("/marriage")
+	{
+		marriage.GET("/status", requiresAuth, getMarriageStatus)
+		marriage.POST("/propose/:username", requiresAuth, proposeMarriage)
+		marriage.POST("/accept", requiresAuth, acceptMarriage)
+		marriage.POST("/reject", requiresAuth, rejectMarriage)
+		marriage.POST("/cancel", requiresAuth, cancelMarriage)
+		marriage.POST("/divorce", requiresAuth, divorceMarriage)
+	}
 
 	// Linking endpoints
-	r.GET("/link/code", getLinkCode)
-	r.GET("/link/status", getLinkStatus)
-	r.GET("/link/user", getLinkedUser)
+	link := r.Group("/link")
+	{
+		link.GET("/code", getLinkCode)
+		link.GET("/status", getLinkStatus)
+		link.GET("/user", getLinkedUser)
 
-	r.POST("/link/code", requiresAuth, linkCodeToAccount)
+		link.POST("/code", requiresAuth, linkCodeToAccount)
+	}
 
 	// Status endpoints
-	r.GET("/status/update", requiresAuth, statusUpdate)
-	r.GET("/status/clear", requiresAuth, statusClear)
-	r.GET("/status/get", statusGet)
+	status := r.Group("/status")
+	{
+		status.GET("/update", requiresAuth, statusUpdate)
+		status.GET("/clear", requiresAuth, statusClear)
+		status.GET("/get", statusGet)
+	}
 
 	// DevFund endpoints
-	r.POST("/devfund/escrow_transfer", requiresAuth, escrowTransfer)
-	r.POST("/devfund/escrow_release", requiresAuth, escrowRelease)
+	devfund := r.Group("/devfund")
+	{
+		devfund.POST("/escrow_transfer", requiresAuth, escrowTransfer)
+		devfund.POST("/escrow_release", requiresAuth, escrowRelease)
+	}
 
 	// Other endpoints
 	r.GET("/claim_daily", requiresAuth, claimDaily)
 	r.GET("/supporters", getSupporters)
 	r.GET("/badges", requiresAuth, getBadges)
 	r.GET("/ai", rateLimit("ai"), requiresAuth, handleAI)
+	r.GET("/status", getStatus)
 
 	log.Println("Claw server starting on port 5602...")
 	if err := r.Run("0.0.0.0:5602"); err != nil {
