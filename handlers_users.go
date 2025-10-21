@@ -273,16 +273,16 @@ func registerUser(c *gin.Context) {
 	if err := json.NewDecoder(file).Decode(&bannedWords); err == nil {
 		for _, banned := range bannedWords {
 			// check leetspeek
-			banned = strings.ReplaceAll(banned, "1", "l")
-			banned = strings.ReplaceAll(banned, "3", "e")
-			banned = strings.ReplaceAll(banned, "5", "s")
-			banned = strings.ReplaceAll(banned, "7", "t")
-			banned = strings.ReplaceAll(banned, "9", "i")
-			banned = strings.ReplaceAll(banned, "0", "o")
-			banned = strings.ReplaceAll(banned, "8", "b")
-			banned = strings.ReplaceAll(banned, "@", "a")
+			u := strings.ReplaceAll(username, "1", "l")
+			u = strings.ReplaceAll(u, "3", "e")
+			u = strings.ReplaceAll(u, "5", "s")
+			u = strings.ReplaceAll(u, "7", "t")
+			u = strings.ReplaceAll(u, "9", "i")
+			u = strings.ReplaceAll(u, "0", "o")
+			u = strings.ReplaceAll(u, "8", "b")
+			u = strings.ReplaceAll(u, "@", "a")
 
-			if strings.Contains(strings.ToLower(username), strings.ToLower(banned)) {
+			if strings.Contains(strings.ToLower(u), strings.ToLower(banned)) {
 				c.JSON(400, gin.H{"error": "Username contains a banned word"})
 				return
 			}
