@@ -262,6 +262,23 @@ func registerUser(c *gin.Context) {
 		return
 	}
 
+	file, err := os.Open("./banned_words.json")
+	if err != nil {
+		fmt.Println("Error opening banned_words.json:", err)
+		return
+	}
+	defer file.Close()
+
+	var bannedWords []string
+	if err := json.NewDecoder(file).Decode(&bannedWords); err == nil {
+		for _, banned := range bannedWords {
+			if strings.Contains(strings.ToLower(username), strings.ToLower(banned)) {
+				c.JSON(400, gin.H{"error": "Username contains a banned word"})
+				return
+			}
+		}
+	}
+
 	usersMutex.Lock()
 	defer usersMutex.Unlock()
 
