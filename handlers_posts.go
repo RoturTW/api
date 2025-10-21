@@ -142,16 +142,6 @@ func createPost(c *gin.Context) {
 
 func replyToPost(c *gin.Context) {
 	// Rate limiting check
-	rateLimitKey := getRateLimitKey(c)
-	isAllowed, remaining, resetTime := applyRateLimit(rateLimitKey, "reply")
-
-	if !isAllowed {
-		c.Header("X-RateLimit-Limit", strconv.Itoa(rateLimits["reply"].Count))
-		c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
-		c.Header("X-RateLimit-Reset", strconv.FormatFloat(resetTime, 'f', 0, 64))
-		c.JSON(429, gin.H{"error": "Rate limit exceeded. Try again later."})
-		return
-	}
 
 	user := c.MustGet("user").(*User)
 
@@ -191,6 +181,14 @@ func replyToPost(c *gin.Context) {
 	if targetPost == nil {
 		postsMutex.Unlock()
 		c.JSON(404, gin.H{"error": "Post not found"})
+		return
+	}
+
+	idx := getIdxOfAccountBy("username", targetPost.User)
+	targetUser := users[idx]
+	if isUserBlockedBy(targetUser, user.GetUsername()) {
+		postsMutex.Unlock()
+		c.JSON(400, gin.H{"error": "You cant reply to this post"})
 		return
 	}
 
@@ -311,6 +309,14 @@ func ratePost(c *gin.Context) {
 		return
 	}
 
+	idx := getIdxOfAccountBy("username", targetPost.User)
+	targetUser := users[idx]
+	if isUserBlockedBy(targetUser, user.GetUsername()) {
+		postsMutex.Unlock()
+		c.JSON(400, gin.H{"error": "You cant like this post"})
+		return
+	}
+
 	// Ensure the 'likes' array exists
 	if targetPost.Likes == nil {
 		targetPost.Likes = make([]string, 0)
@@ -321,13 +327,7 @@ func ratePost(c *gin.Context) {
 	// Like or unlike based on the rating
 	if rating == 1 {
 		// Check if user already liked
-		alreadyLiked := false
-		for _, liker := range targetPost.Likes {
-			if liker == username {
-				alreadyLiked = true
-				break
-			}
-		}
+		alreadyLiked := slices.Contains(targetPost.Likes, username)
 		if !alreadyLiked {
 			targetPost.Likes = append(targetPost.Likes, username)
 		}
@@ -383,6 +383,14 @@ func repost(c *gin.Context) {
 	if originalPost == nil {
 		postsMutex.Unlock()
 		c.JSON(404, gin.H{"error": "Original post not found"})
+		return
+	}
+
+	idx := getIdxOfAccountBy("username", originalPost.User)
+	originalUser := users[idx]
+	if isUserBlockedBy(originalUser, user.GetUsername()) {
+		postsMutex.Unlock()
+		c.JSON(400, gin.H{"error": "You cant repost this post"})
 		return
 	}
 

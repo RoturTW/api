@@ -93,6 +93,32 @@ func containsDerogatory(text string) bool {
 	return false
 }
 
+func accountExists(username string) bool {
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
+	for _, user := range users {
+		if strings.EqualFold(user.GetUsername(), username) {
+			return true
+		}
+	}
+	return false
+}
+
+func isUserBlockedBy(user User, username string) bool {
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
+	blocked := user.GetBlocked()
+	for _, blockedUser := range blocked {
+		if strings.EqualFold(blockedUser, username) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func isFromBannedDomain(url string) bool {
 	if url == "" {
 		return false

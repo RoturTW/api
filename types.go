@@ -39,6 +39,14 @@ func (u User) GetPassword() string {
 	return ""
 }
 
+func (u User) SetBlocked(blocked []string) {
+	u.Set("sys.blocked", blocked)
+}
+
+func (u User) GetBlocked() []string {
+	return getStringSlice(u, "sys.blocked")
+}
+
 func (u User) SetFriends(friends []string) {
 	u.Set("sys.friends", friends)
 }

@@ -40,9 +40,9 @@ func main() {
 
 	// Posts endpoints
 	r.GET("/post", requiresAuth, createPost)
-	r.GET("/reply", requiresAuth, replyToPost)
-	r.GET("/follow", requiresAuth, followUser)
-	r.GET("/unfollow", unfollowUser)
+	r.GET("/reply", rateLimit("default"), requiresAuth, replyToPost)
+	r.GET("/follow", rateLimit("follow"), requiresAuth, followUser)
+	r.GET("/unfollow", rateLimit("follow"), requiresAuth, unfollowUser)
 	r.GET("/followers", rateLimit("profile"), getFollowers)
 	r.GET("/following", rateLimit("profile"), getFollowing)
 	r.GET("/notifications", rateLimit("default"), requiresAuth, getNotifications)
@@ -142,7 +142,6 @@ func main() {
 	r.POST("/accept_tos", requiresAuth, acceptTos)
 
 	r.PATCH("/users", updateUser)
-
 	r.DELETE("/users", deleteUserKey)
 	r.DELETE("/users/:username", requiresAuth, deleteUser)
 

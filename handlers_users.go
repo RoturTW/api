@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/md5"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -333,13 +334,15 @@ func registerUser(c *gin.Context) {
 
 	webhook := os.Getenv("ACCOUNT_CREATION_WEBHOOK")
 
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(c.ClientIP())))
+
 	if webhook != "" {
 		data := map[string]any{
 			"embeds": []map[string]any{
 				{
 					"title": "New Account Registered",
 					"description": fmt.Sprintf("**Username:** %s\n**Email:** %s\n**System:** %s\n**IP:** %s\n**Host:** %s",
-						usernameLower, email, matchedSystem.Name, c.ClientIP(), c.Request.Host),
+						usernameLower, email, matchedSystem.Name, hash, c.Request.Host),
 					"color":     0x57cdac,
 					"timestamp": time.Now().Format(time.RFC3339),
 				},
@@ -893,6 +896,10 @@ func transferCredits(c *gin.Context) {
 		return
 	}
 	var toUser User = users[idx]
+	if isUserBlockedBy(toUser, fromUser.GetUsername()) {
+		c.JSON(400, gin.H{"error": "You cant send money to this user"})
+		return
+	}
 	toCurrency := roundVal(toUser.GetCredits())
 
 	now := time.Now().UnixMilli()
@@ -1023,8 +1030,10 @@ func performUserDeletion(username string, isAdmin bool) error {
 	}
 	users = append(users[:idx], users[idx+1:]...)
 
+	go broadcastUserUpdate(usernameLower, "sys._deleted", true)
+
 	for i := range users {
-		var friendsUpdated, requestsUpdated bool
+		var friendsUpdated, requestsUpdated, blocksUpdated bool
 		if friends, ok := users[i]["sys.friends"].([]string); ok {
 			filtered := friends[:0]
 			for _, f := range friends {
@@ -1049,6 +1058,29 @@ func performUserDeletion(username string, isAdmin bool) error {
 				requestsUpdated = true
 			}
 		}
+		if marriage := users[i]["sys.marriage"]; marriage != nil {
+			marriageMap, ok := marriage.(map[string]any)
+			if ok {
+				if partner, ok := marriageMap["partner"].(string); ok {
+					if !strings.EqualFold(partner, usernameLower) {
+						users[i].DelKey("sys.marriage")
+						go broadcastUserRemove(users[i].GetUsername(), "sys.marriage")
+					}
+				}
+			}
+		}
+		if blocked, ok := users[i]["sys.blocked"].([]string); ok {
+			filtered := blocked[:0]
+			for _, b := range blocked {
+				if !strings.EqualFold(b, usernameLower) {
+					filtered = append(filtered, b)
+				}
+			}
+			if len(filtered) != len(blocked) {
+				users[i]["sys.blocked"] = filtered
+				blocksUpdated = true
+			}
+		}
 
 		if friendsUpdated || requestsUpdated {
 			username := users[i].GetUsername()
@@ -1057,6 +1089,9 @@ func performUserDeletion(username string, isAdmin bool) error {
 			}
 			if requestsUpdated {
 				go broadcastUserUpdate(username, "sys.requests", users[i]["sys.requests"])
+			}
+			if blocksUpdated {
+				go broadcastUserUpdate(username, "sys.blocked", users[i]["sys.blocked"])
 			}
 		}
 	}

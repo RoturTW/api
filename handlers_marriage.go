@@ -55,6 +55,11 @@ func proposeMarriage(c *gin.Context) {
 		return
 	}
 
+	if isUserBlockedBy(users[proposerIndex], user.GetUsername()) {
+		c.JSON(400, gin.H{"error": "You cant propose to this user"})
+		return
+	}
+
 	timestamp := time.Now().UnixMilli()
 
 	users[proposerIndex]["sys.marriage"] = map[string]any{

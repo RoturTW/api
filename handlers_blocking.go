@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -9,42 +10,36 @@ import (
 func getBlocking(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	usersMutex.RLock()
-	defer usersMutex.RUnlock()
-
-	if user.Has("sys.blocked") {
-		c.JSON(200, user.Get("sys.blocked"))
-		return
-	}
-
-	c.JSON(200, []string{})
+	c.JSON(200, user.GetBlocked())
 }
 
 func blockUser(c *gin.Context) {
 	user := c.MustGet("user").(*User)
+	username := strings.ToLower(c.Param("username"))
 
-	username := c.Param("username")
 	if username == "" {
 		c.JSON(400, gin.H{"error": "Username is required"})
 		return
 	}
 
-	usernameLower := strings.ToLower(username)
-
-	if !user.Has("sys.blocked") {
-		user.Set("sys.blocked", []string{})
+	if !accountExists(username) {
+		c.JSON(404, gin.H{"error": "User not found"})
+		return
 	}
 
-	blocked := user.Get("sys.blocked").([]string)
-	for i, blockedUser := range blocked {
-		if blockedUser == usernameLower {
-			blocked = append(blocked[:i], blocked[i+1:]...)
-			break
-		}
-	}
-	blocked = append(blocked, usernameLower)
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
 
-	go broadcastUserUpdate(username, "sys.blocked", blocked)
+	blocked := user.GetBlocked()
+	if slices.Contains(blocked, username) {
+		c.JSON(400, gin.H{"error": "User already blocked"})
+		return
+	}
+
+	blocked = append(blocked, username)
+	user.SetBlocked(blocked)
+
+	go broadcastUserUpdate(user.GetUsername(), "sys.blocked", blocked)
 	go saveUsers()
 
 	c.JSON(200, gin.H{"message": "User blocked"})
@@ -52,28 +47,34 @@ func blockUser(c *gin.Context) {
 
 func unblockUser(c *gin.Context) {
 	user := c.MustGet("user").(*User)
+	username := strings.ToLower(c.Param("username"))
 
-	username := c.Param("username")
 	if username == "" {
 		c.JSON(400, gin.H{"error": "Username is required"})
 		return
 	}
 
-	usernameLower := strings.ToLower(username)
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
 
-	if !user.Has("sys.blocked") {
-		user.Set("sys.blocked", []string{})
-	}
-
-	blocked := user.Get("sys.blocked").([]string)
-	for i, blockedUser := range blocked {
-		if blockedUser == usernameLower {
-			blocked = append(blocked[:i], blocked[i+1:]...)
+	blocked := user.GetBlocked()
+	index := -1
+	for i, b := range blocked {
+		if b == username {
+			index = i
 			break
 		}
 	}
 
-	go broadcastUserUpdate(username, "sys.blocked", blocked)
+	if index == -1 {
+		c.JSON(404, gin.H{"error": "User not blocked"})
+		return
+	}
+
+	blocked = append(blocked[:index], blocked[index+1:]...)
+	user.SetBlocked(blocked)
+
+	go broadcastUserUpdate(user.GetUsername(), "sys.blocked", blocked)
 	go saveUsers()
 
 	c.JSON(200, gin.H{"message": "User unblocked"})

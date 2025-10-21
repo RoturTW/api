@@ -20,7 +20,7 @@ func sendFriendRequest(c *gin.Context) {
 	targetLower := strings.ToLower(targetUsername)
 
 	if senderName == targetLower {
-		c.JSON(400, gin.H{"error": "You Need Other Friends"})
+		c.JSON(400, gin.H{"error": "You need other friends"})
 		return
 	}
 
@@ -29,7 +29,11 @@ func sendFriendRequest(c *gin.Context) {
 	idx := getIdxOfAccountBy("username", targetLower)
 	if idx == -1 {
 		usersMutex.Unlock()
-		c.JSON(404, gin.H{"error": "Account Does Not Exist"})
+		c.JSON(404, gin.H{"error": "Account does not exist"})
+		return
+	}
+	if isUserBlockedBy(users[idx], senderName) {
+		c.JSON(400, gin.H{"error": "You cant send friend requests to this user"})
 		return
 	}
 	var target User = users[idx]

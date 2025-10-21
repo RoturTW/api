@@ -2,25 +2,12 @@ package main
 
 import (
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
 func followUser(c *gin.Context) {
-	// Rate limiting check
-	rateLimitKey := getRateLimitKey(c)
-	isAllowed, remaining, resetTime := applyRateLimit(rateLimitKey, "follow")
-
-	if !isAllowed {
-		c.Header("X-RateLimit-Limit", strconv.Itoa(rateLimits["follow"].Count))
-		c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
-		c.Header("X-RateLimit-Reset", strconv.FormatFloat(resetTime, 'f', 0, 64))
-		c.JSON(429, gin.H{"error": "Rate limit exceeded. Try again later."})
-		return
-	}
-
 	user := c.MustGet("user").(*User)
 
 	targetUsername := c.Query("username")
@@ -39,6 +26,10 @@ func followUser(c *gin.Context) {
 	idx := getIdxOfAccountBy("username", targetUsername)
 	if idx == -1 {
 		c.JSON(404, gin.H{"error": "User not found"})
+		return
+	}
+	if isUserBlockedBy(users[idx], currentUsername) {
+		c.JSON(400, gin.H{"error": "You cant follow this user"})
 		return
 	}
 
@@ -81,18 +72,6 @@ func followUser(c *gin.Context) {
 }
 
 func unfollowUser(c *gin.Context) {
-	// Rate limiting check
-	rateLimitKey := getRateLimitKey(c)
-	isAllowed, remaining, resetTime := applyRateLimit(rateLimitKey, "follow")
-
-	if !isAllowed {
-		c.Header("X-RateLimit-Limit", strconv.Itoa(rateLimits["follow"].Count))
-		c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
-		c.Header("X-RateLimit-Reset", strconv.FormatFloat(resetTime, 'f', 0, 64))
-		c.JSON(429, gin.H{"error": "Rate limit exceeded. Try again later."})
-		return
-	}
-
 	user := c.MustGet("user").(*User)
 
 	targetUsername := c.Query("username")
