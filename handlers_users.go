@@ -1010,97 +1010,71 @@ func removeUserDirectory(path string) error {
 func performUserDeletion(username string, isAdmin bool) error {
 	usernameLower := strings.ToLower(username)
 
-	usersMutex.Lock()
-	idx := -1
-	for i, u := range users {
-		if strings.EqualFold(u.GetUsername(), usernameLower) {
-			idx = i
-			break
-		}
-	}
+	idx := getIdxOfAccountBy("username", usernameLower)
 	if idx == -1 {
-		usersMutex.Unlock()
 		return fmt.Errorf("user not found")
 	}
 
+	logPrefix := "Deleting user"
 	if isAdmin {
-		log.Printf("Admin deleting user %s (total before=%d)", usernameLower, len(users))
-	} else {
-		log.Printf("Deleting user %s (total before=%d)", usernameLower, len(users))
+		logPrefix = "Admin deleting user"
 	}
+	log.Printf("%s %s (total before=%d)", logPrefix, usernameLower, len(users))
+
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
+
 	users = append(users[:idx], users[idx+1:]...)
 
 	go broadcastUserUpdate(usernameLower, "sys._deleted", true)
 
 	for i := range users {
-		var friendsUpdated, requestsUpdated, blocksUpdated bool
-		if friends, ok := users[i]["sys.friends"].([]string); ok {
-			filtered := friends[:0]
+		target := &users[i]
+
+		friends := target.GetFriends()
+		if len(friends) > 0 {
+			filtered := make([]string, 0, len(friends))
 			for _, f := range friends {
 				if !strings.EqualFold(f, usernameLower) {
 					filtered = append(filtered, f)
 				}
-			}
-			if len(filtered) != len(friends) {
-				users[i]["sys.friends"] = filtered
-				friendsUpdated = true
+				if len(filtered) != len(friends) {
+					target.SetFriends(filtered)
+				}
 			}
 		}
-		if requests, ok := users[i]["sys.requests"].([]string); ok {
-			filtered := requests[:0]
+
+		requests := target.GetRequests()
+		if len(requests) > 0 {
+			filtered := make([]string, 0, len(requests))
 			for _, r := range requests {
 				if !strings.EqualFold(r, usernameLower) {
 					filtered = append(filtered, r)
 				}
 			}
 			if len(filtered) != len(requests) {
-				users[i]["sys.requests"] = filtered
-				requestsUpdated = true
+				target.SetRequests(filtered)
 			}
 		}
-		if marriage := users[i]["sys.marriage"]; marriage != nil {
-			marriageMap, ok := marriage.(map[string]any)
-			if ok {
-				if partner, ok := marriageMap["partner"].(string); ok {
-					if !strings.EqualFold(partner, usernameLower) {
-						users[i].DelKey("sys.marriage")
-						go broadcastUserRemove(users[i].GetUsername(), "sys.marriage")
-					}
-				}
-			}
-		}
-		if blocked, ok := users[i]["sys.blocked"].([]string); ok {
-			filtered := blocked[:0]
+
+		blocked := target.GetBlocked()
+		if len(blocked) > 0 {
+			filtered := make([]string, 0, len(blocked))
 			for _, b := range blocked {
 				if !strings.EqualFold(b, usernameLower) {
 					filtered = append(filtered, b)
 				}
 			}
 			if len(filtered) != len(blocked) {
-				users[i]["sys.blocked"] = filtered
-				blocksUpdated = true
-			}
-		}
-
-		if friendsUpdated || requestsUpdated {
-			username := users[i].GetUsername()
-			if friendsUpdated {
-				go broadcastUserUpdate(username, "sys.friends", users[i]["sys.friends"])
-			}
-			if requestsUpdated {
-				go broadcastUserUpdate(username, "sys.requests", users[i]["sys.requests"])
-			}
-			if blocksUpdated {
-				go broadcastUserUpdate(username, "sys.blocked", users[i]["sys.blocked"])
+				target.SetBlocked(filtered)
 			}
 		}
 	}
-	usersAfter := len(users)
-	usersMutex.Unlock()
 
-	saveUsers()
+	go saveUsers()
 
 	go func(target string) {
+		// Update posts
 		postsMutex.Lock()
 		for i := range posts {
 			if strings.EqualFold(posts[i].User, target) {
@@ -1109,20 +1083,20 @@ func performUserDeletion(username string, isAdmin bool) error {
 		}
 		postsMutex.Unlock()
 		go savePosts()
+
+		// Remove user storage
+		userDir := "rotur/user_storage/" + target
+		if err := removeUserDirectory(userDir); err != nil {
+			log.Printf("Error removing user directory %s: %v", userDir, err)
+		}
+
+		userFile := "/Users/admin/Documents/rotur/files/" + target + ".ofsf"
+		if err := removeUserDirectory(userFile); err != nil {
+			log.Printf("Error removing user file %s: %v", userFile, err)
+		}
 	}(usernameLower)
 
-	go func() {
-		userDir := "rotur/user_storage/" + usernameLower
-		_ = removeUserDirectory(userDir)
-		userFile := "/Users/admin/Documents/rotur/files/" + usernameLower + ".ofsf"
-		_ = removeUserDirectory(userFile)
-	}()
-
-	if isAdmin {
-		log.Printf("Admin deleted user %s (total after=%d)", usernameLower, usersAfter)
-	} else {
-		log.Printf("Deleted user %s (total after=%d)", usernameLower, usersAfter)
-	}
+	log.Printf("%s %s (total after=%d)", logPrefix, usernameLower, len(users))
 	return nil
 }
 
