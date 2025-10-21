@@ -134,7 +134,10 @@ func main() {
 		me.POST("/refresh_token", requiresAuth, refreshToken)
 		me.POST("/transfer", requiresAuth, transferCredits)
 		me.POST("/gamble", requiresAuth, gambleCredits)
-		me.DELETE("/me/delete", deleteUserKey)
+		me.DELETE("/delete", deleteUserKey)
+		me.GET("/blocked", requiresAuth, getBlocking)
+		me.POST("/block/:username", requiresAuth, blockUser)
+		me.POST("/unblock/:username", requiresAuth, unblockUser)
 	}
 	r.POST("/accept_tos", requiresAuth, acceptTos)
 
@@ -151,14 +154,6 @@ func main() {
 		friends.POST("/accept/:username", requiresAuth, acceptFriendRequest)
 		friends.POST("/reject/:username", requiresAuth, rejectFriendRequest)
 		friends.POST("/remove/:username", requiresAuth, removeFriend)
-	}
-
-	// Blocking endpoints
-	blocking := r.Group("/blocking")
-	{
-		blocking.GET("", requiresAuth, getBlocking)
-		blocking.POST("/block/:username", requiresAuth, blockUser)
-		blocking.POST("/unblock/:username", requiresAuth, unblockUser)
 	}
 
 	// Marriage endpoints
