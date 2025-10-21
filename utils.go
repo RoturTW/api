@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -268,4 +269,23 @@ func JSONStringify(v any) string {
 		return fmt.Sprintf(`%v`, v)
 	}
 	return string(data)
+}
+
+func sendWebhook(url string, data map[string]any) error {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 204 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected status code: %d (%s)", resp.StatusCode, string(body))
+	}
+	return nil
 }

@@ -331,6 +331,28 @@ func registerUser(c *gin.Context) {
 		return
 	}
 
+	webhook := os.Getenv("ACCOUNT_CREATION_WEBHOOK")
+
+	if webhook != "" {
+		data := map[string]any{
+			"embeds": []map[string]any{
+				{
+					"title": "New Account Registered",
+					"description": fmt.Sprintf("**Username:** %s\n**Email:** %s\n**System:** %s\n**IP:** %s\n**Host:** %s",
+						usernameLower, email, matchedSystem.Name, c.ClientIP(), c.Request.Host),
+					"color":     0x57cdac,
+					"timestamp": time.Now().Format(time.RFC3339),
+				},
+			},
+		}
+
+		go func() {
+			if err := sendWebhook(webhook, data); err != nil {
+				log.Println("Failed to send account creation webhook:", err)
+			}
+		}()
+	}
+
 	newUser := User{
 		"username":         usernameLower,
 		"pfp":              "https://avatars.rotur.dev/" + usernameLower,

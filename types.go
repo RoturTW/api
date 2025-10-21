@@ -114,6 +114,11 @@ func (u User) SetBalance(balance any) {
 	u.Set("sys.currency", roundVal(fval))
 }
 
+func (u User) Has(key string) bool {
+	_, ok := u[key]
+	return ok
+}
+
 func (u User) Get(key string) any {
 	value, ok := u[key]
 	if ok {

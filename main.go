@@ -153,6 +153,14 @@ func main() {
 		friends.POST("/remove/:username", requiresAuth, removeFriend)
 	}
 
+	// Blocking endpoints
+	blocking := r.Group("/blocking")
+	{
+		blocking.GET("", requiresAuth, getBlocking)
+		blocking.POST("/block/:username", requiresAuth, blockUser)
+		blocking.POST("/unblock/:username", requiresAuth, unblockUser)
+	}
+
 	// Marriage endpoints
 	marriage := r.Group("/marriage")
 	{
