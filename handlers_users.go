@@ -227,7 +227,9 @@ func registerUser(c *gin.Context) {
 		Password string `json:"password"`
 		Email    string `json:"email"`
 		System   string `json:"system"`
+		Captcha  string `json:"captcha"`
 	}
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": "Invalid request body"})
 		return
@@ -237,6 +239,11 @@ func registerUser(c *gin.Context) {
 
 	if isBannedIp(ip) {
 		c.JSON(403, gin.H{"error": "so sad, stay mad"})
+		return
+	}
+
+	if !verifyHCaptcha(req.Captcha) {
+		c.JSON(400, gin.H{"error": "hCaptcha verification failed"})
 		return
 	}
 
@@ -286,6 +293,14 @@ func registerUser(c *gin.Context) {
 				c.JSON(400, gin.H{"error": "Username contains a banned word"})
 				return
 			}
+		}
+	}
+
+	ips := strings.SplitSeq(os.Getenv("BANNED_IPS"), ",")
+	for ipAddr := range ips {
+		if strings.EqualFold(ipAddr, ip) {
+			c.JSON(400, gin.H{"error": "IP address is banned"})
+			return
 		}
 	}
 

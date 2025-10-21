@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	url        = "https://check.torproject.org/torbulkexitlist"
+	torurl     = "https://check.torproject.org/torbulkexitlist"
 	outputPath = "./torips.json"
 	maxAge     = 30 * time.Minute
 )
@@ -54,7 +54,7 @@ func UpdateIfNeeded() {
 	}
 
 	log.Println("[torips] Fetching Tor exit node list...")
-	resp, err := http.Get(url)
+	resp, err := http.Get(torurl)
 	if err != nil {
 		log.Printf("[torips] Fetch error: %v", err)
 		return
