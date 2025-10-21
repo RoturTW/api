@@ -233,6 +233,13 @@ func registerUser(c *gin.Context) {
 		return
 	}
 
+	ip := c.ClientIP()
+
+	if isBannedIp(ip) {
+		c.JSON(403, gin.H{"error": "so sad, stay mad"})
+		return
+	}
+
 	username := req.Username
 	password := req.Password
 	email := req.Email

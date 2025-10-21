@@ -26,6 +26,8 @@ func main() {
 	loadSystems()
 	loadEventsHistory()
 
+	StartAutoUpdater(5 * time.Minute)
+
 	go cleanRateLimitStorage()
 	go checkSubscriptions()
 	go watchUsersFile()

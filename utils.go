@@ -9,7 +9,9 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -230,6 +232,26 @@ func requiresAuth(c *gin.Context) {
 
 	c.Set("user", user)
 	c.Next()
+}
+
+func getBannedIPs() []string {
+	bannedIPs := os.Getenv("BANNED_IPS")
+	if bannedIPs == "" {
+		return []string{}
+	}
+	return strings.Split(bannedIPs, ",")
+}
+
+func isBannedIp(ip string) bool {
+	bannedIPs := getBannedIPs()
+	if slices.Contains(bannedIPs, ip) {
+		return true
+	}
+
+	if slices.Contains(torips, ip) {
+		return true
+	}
+	return false
 }
 
 func corsMiddleware() gin.HandlerFunc {
