@@ -357,7 +357,7 @@ func registerUser(c *gin.Context) {
 				{
 					"title": "New Account Registered",
 					"description": fmt.Sprintf("**Username:** %s\n**Email:** %s\n**System:** %s\n**IP:** %s\n**Host:** %s",
-						usernameLower, email, matchedSystem.Name, hash, c.Request.Host),
+						username, email, matchedSystem.Name, hash, c.Request.Host),
 					"color":     0x57cdac,
 					"timestamp": time.Now().Format(time.RFC3339),
 				},
@@ -372,7 +372,7 @@ func registerUser(c *gin.Context) {
 	}
 
 	newUser := User{
-		"username":         usernameLower,
+		"username":         username,
 		"pfp":              "https://avatars.rotur.dev/" + usernameLower,
 		"password":         password,
 		"email":            email,
