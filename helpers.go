@@ -63,6 +63,24 @@ func getStringSlice(u User, key string) []string {
 	return []string{}
 }
 
+func getObjectSlice(u User, key string) []map[string]any {
+	if v, ok := u[key]; ok {
+		switch s := v.(type) {
+		case []map[string]any:
+			return s
+		case []any:
+			out := make([]map[string]any, 0, len(s))
+			for _, val := range s {
+				if m, ok := val.(map[string]any); ok {
+					out = append(out, m)
+				}
+			}
+			return out
+		}
+	}
+	return []map[string]any{}
+}
+
 func setStringSlice(u User, key string, vals []string) { u[key] = vals }
 
 func isValidJSON(s string) bool {

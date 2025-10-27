@@ -122,6 +122,39 @@ func (u User) SetBalance(balance any) {
 	u.Set("sys.currency", roundVal(fval))
 }
 
+func (u User) GetLogins() []Login {
+	raw := u.Get("sys.logins")
+	if raw == nil {
+		return nil
+	}
+
+	switch v := raw.(type) {
+	case []Login:
+		return v
+	case []any:
+		out := make([]Login, 0, len(v))
+		for _, item := range v {
+			switch l := item.(type) {
+			case Login:
+				out = append(out, l)
+			case map[string]any:
+				var login Login
+				if b, err := json.Marshal(l); err == nil {
+					_ = json.Unmarshal(b, &login)
+					out = append(out, login)
+				}
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func (u User) SetLogins(logins []Login) {
+	u.Set("sys.logins", logins)
+}
+
 func (u User) Has(key string) bool {
 	_, ok := u[key]
 	return ok
@@ -282,6 +315,14 @@ type Item struct {
 	Created         float64           `json:"created"`
 	TransferHistory []TransferHistory `json:"transfer_history"`
 	TotalIncome     int               `json:"total_income"`
+}
+
+type Login struct {
+	Origin    string `json:"origin"`
+	UserAgent string `json:"userAgent"`
+	IP_hmac   string `json:"ip_hmac"`
+	Country   string `json:"country"`
+	Timestamp int64  `json:"timestamp"`
 }
 
 // TransferHistory represents item transfer history

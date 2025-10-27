@@ -28,8 +28,6 @@ func getAccountsBy(key string, value string, max int) ([]User, error) {
 		valueLower := strings.ToLower(value)
 		for _, user := range users {
 			if strings.ToLower(user.GetUsername()) == valueLower {
-				user = copyUser(user)
-				delete(user, "password")
 				matches = append(matches, user)
 				if max != -1 && len(matches) >= max {
 					return matches, nil
@@ -39,8 +37,6 @@ func getAccountsBy(key string, value string, max int) ([]User, error) {
 	} else {
 		for _, user := range users {
 			if fmt.Sprintf("%v", user.Get(key)) == value {
-				user = copyUser(user)
-				delete(user, "password")
 				matches = append(matches, user)
 				if max != -1 && len(matches) >= max {
 					return matches, nil
@@ -62,8 +58,6 @@ func findAccountByLogin(username string, password string) User {
 	username = strings.ToLower(username)
 	for _, user := range users {
 		if strings.ToLower(user.GetUsername()) == username && user.GetPassword() == password {
-			user = copyUser(user)
-			delete(user, "password")
 			return user
 		}
 	}
@@ -137,7 +131,10 @@ func getUserBy(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, users[0])
+	copy := copyUser(users[0])
+	delete(copy, "password")
+
+	c.JSON(200, copy)
 }
 
 func getUser(c *gin.Context) {
@@ -171,9 +168,27 @@ func getUser(c *gin.Context) {
 			c.JSON(403, gin.H{"error": "Terms-Of-Service are not accepted or outdated", "username": foundUser.GetUsername(), "token": foundUser.GetKey(), "sys.tos_accepted": false})
 			return
 		}
-		foundUser.Set("sys.last_login", time.Now().UnixMilli())
+		now := time.Now().UnixMilli()
+		foundUser.Set("sys.last_login", now)
 		foundUser.Set("sys.total_logins", foundUser.GetInt("sys.total_logins")+1)
 		foundUser.Set("sys.badges", calculateUserBadges(foundUser))
+
+		logins := foundUser.GetLogins()
+		ip := c.ClientIP()
+		hostname := c.GetHeader("Origin")
+		userAgent := c.Request.UserAgent()
+		logins = append(logins, Login{
+			Origin:    hostname,
+			UserAgent: userAgent,
+			IP_hmac:   hmacIp(ip),
+			Country:   c.GetHeader("CF-IPCountry"),
+			Timestamp: now,
+		})
+		if n := len(logins); n > 10 {
+			logins = logins[n-10:]
+		}
+		foundUser.Set("sys.logins", logins)
+		go saveUsers()
 		userCopy := copyUser(foundUser)
 		delete(userCopy, "password")
 		c.JSON(200, userCopy)

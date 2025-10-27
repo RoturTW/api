@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -314,4 +316,10 @@ func sendWebhook(url string, data map[string]any) error {
 		return fmt.Errorf("unexpected status code: %d (%s)", resp.StatusCode, string(body))
 	}
 	return nil
+}
+
+func hmacIp(ip string) string {
+	mac := hmac.New(sha256.New, []byte(os.Getenv("HMAC_KEY")))
+	mac.Write([]byte(ip))
+	return hex.EncodeToString(mac.Sum(nil))
 }
