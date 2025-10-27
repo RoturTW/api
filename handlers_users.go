@@ -919,7 +919,19 @@ func transferCredits(c *gin.Context) {
 
 	now := time.Now().UnixMilli()
 
-	idx = getIdxOfAccountBy("username", "mist")
+	fromSystem := fromUser.Get("system")
+
+	taxRecipient := "mist"
+
+	if fromSystem != nil {
+		systemsMutex.RLock()
+		system := systems[fromSystem.(string)]
+		systemsMutex.RUnlock()
+
+		taxRecipient = system.Owner.Name
+	}
+
+	idx = getIdxOfAccountBy("username", taxRecipient)
 	if idx != -1 {
 		var taxUser User = users[idx]
 		curr := taxUser.GetCredits()
