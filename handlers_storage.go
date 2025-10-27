@@ -335,6 +335,20 @@ func loadSystems() {
 	}
 }
 
+func saveSystems() {
+	systemsMutex.Lock()
+	defer systemsMutex.Unlock()
+	data, err := json.MarshalIndent(systems, "", "  ")
+	if err != nil {
+		log.Printf("Error marshaling systems: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(SYSTEMS_FILE_PATH, data, 0644); err != nil {
+		log.Printf("Error saving systems: %v", err)
+	}
+}
+
 func loadEventsHistory() {
 	eventsHistoryMutex.Lock()
 	defer eventsHistoryMutex.Unlock()

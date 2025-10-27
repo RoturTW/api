@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -33,14 +35,113 @@ func validateSystem(system string) (bool, string, System) {
 	return false, "System must match a valid system", System{}
 }
 
+func renameSystem(systemName string, newName string) error {
+	system, ok := systems[systemName]
+	if !ok {
+		return fmt.Errorf("system not found")
+	}
+	delete(systems, systemName)
+	system.Name = newName
+	systems[newName] = system
+
+	users, err := getAccountsBy("system", systemName, -1)
+	if err != nil {
+		return nil
+	}
+	usersMutex.Lock()
+	for _, user := range users {
+		user.Set("system", newName)
+	}
+	usersMutex.Unlock()
+	go saveUsers()
+	return nil
+}
+
+func updateSystem(c *gin.Context) {
+	var req struct {
+		System string `json:"system"`
+		Key    string `json:"key"`
+		Value  any    `json:"value"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	isValid, errorMessage, system := validateSystem(req.System)
+	if !isValid {
+		c.JSON(400, gin.H{"error": errorMessage})
+		return
+	}
+
+	user := c.MustGet("user").(*User)
+
+	// only allow the owner of the system or mist to update it
+	if !strings.EqualFold(system.Owner.Name, user.GetUsername()) && strings.ToLower(user.GetUsername()) != "mist" {
+		c.JSON(403, gin.H{"error": "Insufficient permissions"})
+		return
+	}
+
+	err := setSystem(system.Name, req.Key, req.Value)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "System updated successfully"})
+}
+
+func setSystem(systemName string, key string, value any) error {
+	defer saveSystems()
+	systemsMutex.Lock()
+	defer systemsMutex.Unlock()
+
+	system, ok := systems[systemName]
+	if !ok {
+		return fmt.Errorf("system not found")
+	}
+
+	switch key {
+	case "name":
+		if v, ok := value.(string); ok {
+			renameSystem(system.Name, v)
+			return nil
+		}
+	case "owner_name":
+		if v, ok := value.(string); ok {
+			system.Owner.Name = v
+			systems[systemName] = system
+			return nil
+		}
+	case "owner_discord_id":
+		if v, ok := value.(int64); ok {
+			system.Owner.DiscordID = v
+			systems[systemName] = system
+			return nil
+		}
+	case "wallpaper":
+		if v, ok := value.(string); ok {
+			system.Wallpaper = v
+			systems[systemName] = system
+			return nil
+		}
+	case "designation":
+		if v, ok := value.(string); ok {
+			system.Designation = v
+			systems[systemName] = system
+			return nil
+		}
+	}
+
+	return fmt.Errorf("invalid system key: %s", key)
+}
+
 func getAllSystems() map[string]System {
 	systemsMutex.RLock()
 	defer systemsMutex.RUnlock()
 
 	result := make(map[string]System, len(systems))
-	for k, v := range systems {
-		result[k] = v
-	}
+	maps.Copy(result, systems)
 	return result
 }
 

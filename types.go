@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
@@ -240,6 +241,40 @@ type System struct {
 	Owner       SystemOwner `json:"owner"`
 	Wallpaper   string      `json:"wallpaper"`
 	Designation string      `json:"designation"`
+}
+
+func (s *System) Set(key string, value any) (string, error) {
+	switch key {
+	case "name":
+		if v, ok := value.(string); ok {
+			renameSystem(s.Name, v)
+			return v, nil
+		} else {
+			return "", fmt.Errorf("invalid name value: %v", value)
+		}
+	case "owner":
+		if v, ok := value.(SystemOwner); ok {
+			s.Owner = v
+			return v.Name, nil
+		} else {
+			return "", fmt.Errorf("invalid owner value: %v", value)
+		}
+	case "wallpaper":
+		if v, ok := value.(string); ok {
+			s.Wallpaper = v
+			return v, nil
+		} else {
+			return "", fmt.Errorf("invalid wallpaper value: %v", value)
+		}
+	case "designation":
+		if v, ok := value.(string); ok {
+			s.Designation = v
+			return v, nil
+		} else {
+			return "", fmt.Errorf("invalid designation value: %v", value)
+		}
+	}
+	return "", fmt.Errorf("invalid system key: %s", key)
 }
 
 // SystemOwner represents the owner of a system

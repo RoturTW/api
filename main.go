@@ -70,6 +70,7 @@ func main() {
 	// Systems endpoints
 	r.GET("/systems", getSystems)
 	r.GET("/reload_systems", requiresAuth, reloadSystemsEndpoint)
+	r.POST("/update_system", requiresAuth, updateSystem)
 
 	// Validator endpoints
 	r.GET("/generate_validator", requiresAuth, generateValidator)
