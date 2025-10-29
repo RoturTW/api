@@ -120,6 +120,7 @@ func main() {
 		admin.GET("/get_user_by", getUserBy)
 		admin.POST("/update_user", updateUserAdmin)
 		admin.POST("/delete_user", deleteUserAdmin)
+		admin.POST("/transfer_credits", transferCreditsAdmin)
 	}
 
 	// Users endpoints

@@ -822,6 +822,140 @@ func deleteUserKey(c *gin.Context) {
 	c.JSON(204, gin.H{"message": "User key deleted successfully", "username": username, "key": key})
 }
 
+// PerformCreditTransfer performs a credit transfer between two users.
+// Handles tax, transaction logging, and safety rules.
+// Returns an error if the transfer cannot be completed.
+func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note string) error {
+	const totalTax = 1.0
+	const taxRecipientShare = 0.5
+
+	// normalize + validate amount
+	nAmount, ok := normalizeEscrowAmount(amount)
+	if !ok {
+		return fmt.Errorf("minimum amount is 0.01")
+	}
+
+	fromUsers, err := getAccountsBy("username", fromUsername, 1)
+	if err != nil {
+		return fmt.Errorf("sender user not found")
+	}
+	fromUser := fromUsers[0]
+
+	toUsers, err := getAccountsBy("username", toUsername, 1)
+	if err != nil {
+		return fmt.Errorf("recipient user not found")
+	}
+	toUser := toUsers[0]
+
+	if strings.ToLower(fromUser.GetUsername()) == strings.ToLower(toUser.GetUsername()) {
+		return fmt.Errorf("cannot send credits to yourself")
+	}
+
+	fromCurrency := roundVal(fromUser.GetCredits())
+	if fromCurrency < (nAmount + totalTax) {
+		return fmt.Errorf("insufficient funds (required: %.2f, available: %.2f)", nAmount+totalTax, fromCurrency)
+	}
+
+	toCurrency := roundVal(toUser.GetCredits())
+
+	now := time.Now().UnixMilli()
+
+	// Helper: clean note
+	mkNote := func(base string) string {
+		n := strings.TrimSpace(base)
+		if n == "" {
+			n = "transfer"
+		}
+		if len(n) > 50 {
+			n = n[:50]
+		}
+		return n
+	}
+	note = mkNote(note)
+
+	// Helper: get or fix transaction slice
+	ensureTxSlice := func(u *User) []map[string]any {
+		raw := (*u)["sys.transactions"]
+		list := make([]map[string]any, 0)
+		switch v := raw.(type) {
+		case nil:
+		case []any:
+			for _, item := range v {
+				if m, ok := item.(map[string]any); ok {
+					list = append(list, m)
+				}
+			}
+		case []map[string]any:
+			list = v
+		}
+		return list
+	}
+	appendTx := func(u *User, tx map[string]any) {
+		txs := ensureTxSlice(u)
+		txs = append([]map[string]any{tx}, txs...)
+		if len(txs) > 20 {
+			txs = txs[:20]
+		}
+		(*u)["sys.transactions"] = txs
+	}
+
+	// Tax handling
+	taxRecipient := "mist"
+	fromSystem := fromUser.Get("system")
+	if fromSystem != nil {
+		systemsMutex.RLock()
+		if sys, ok := systems[fromSystem.(string)]; ok {
+			taxRecipient = sys.Owner.Name
+		}
+		systemsMutex.RUnlock()
+	}
+
+	// Apply tax to taxRecipient if exists
+	if idx := getIdxOfAccountBy("username", taxRecipient); idx != -1 {
+		taxUser := users[idx]
+		curr := taxUser.GetCredits()
+		taxUser.SetBalance(roundVal(curr + taxRecipientShare))
+		appendTx(&taxUser, map[string]any{
+			"note":   "transfer tax",
+			"user":   fromUser.GetUsername(),
+			"time":   now,
+			"amount": taxRecipientShare,
+			"type":   "tax",
+		})
+		go broadcastUserUpdate(taxUser.GetUsername(), "sys.transactions", taxUser.Get("sys.transactions"))
+	}
+
+	// Update balances
+	if fromUser.GetUsername() != "rotur" {
+		fromUser.SetBalance(roundVal(fromCurrency - (nAmount + totalTax)))
+	}
+	if toUser.GetUsername() != "rotur" {
+		toUser.SetBalance(roundVal(toCurrency + nAmount))
+	}
+
+	// Log transactions
+	appendTx(&fromUser, map[string]any{
+		"note":   note,
+		"user":   toUser.GetUsername(),
+		"time":   now,
+		"amount": nAmount + totalTax,
+		"type":   "out",
+	})
+	appendTx(&toUser, map[string]any{
+		"note":   note,
+		"user":   fromUser.GetUsername(),
+		"time":   now,
+		"amount": nAmount,
+		"type":   "in",
+	})
+
+	go broadcastUserUpdate(fromUser.GetUsername(), "sys.transactions", fromUser.Get("sys.transactions"))
+	go broadcastUserUpdate(toUser.GetUsername(), "sys.transactions", toUser.Get("sys.transactions"))
+	go saveUsers()
+
+	return nil
+}
+
 func transferCredits(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
@@ -840,6 +974,7 @@ func transferCredits(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "Minimum amount is 0.01"})
 		return
 	}
+
 	toUsername := strings.ToLower(req.To)
 	if toUsername == "" {
 		c.JSON(400, gin.H{"error": "Recipient username and amount must be provided"})
@@ -849,134 +984,14 @@ func transferCredits(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "Cannot send credits to yourself"})
 		return
 	}
-	// Flat tax of 1.0 taken from sender; 0.5 goes to 'mist', 0.5 is burned
-	const totalTax = 1.0
-	const taxRecipientShare = 0.5
 
-	// Helper to normalize / validate transactions slice
-	ensureTxSlice := func(u *User) []map[string]any {
-		raw := (*u)["sys.transactions"]
-		list := make([]map[string]any, 0)
-		switch v := raw.(type) {
-		case nil:
-			// leave empty
-		case []any:
-			for _, item := range v {
-				if m, ok := item.(map[string]any); ok {
-					list = append(list, m)
-				}
-			}
-		case []map[string]any:
-			list = v
-		default:
-			// invalid type, reset
-		}
-		return list
-	}
-	appendTx := func(u *User, tx map[string]any) {
-		txs := ensureTxSlice(u)
-		txs = append([]map[string]any{tx}, txs...)
-		if len(txs) > 20 { // keep most recent 20
-			txs = txs[:20]
-		}
-		(*u)["sys.transactions"] = txs
-	}
-	mkNote := func(base string) string {
-		n := strings.TrimSpace(base)
-		if n == "" {
-			n = "transfer"
-		}
-		if len(n) > 50 {
-			n = n[:50]
-		}
-		return n
-	}
-
-	idx := getIdxOfAccountBy("username", user.GetUsername())
-	if idx == -1 {
-		c.JSON(404, gin.H{"error": "Sender user not found"})
-		return
-	}
-	var fromUser User = users[idx]
-	fromCurrency := roundVal(fromUser.GetCredits())
-
-	if fromCurrency < (nAmount + totalTax) {
-		c.JSON(400, gin.H{"error": "Insufficient funds including tax", "required": nAmount + totalTax, "available": fromCurrency})
+	err := PerformCreditTransfer(user.GetUsername(), toUsername, nAmount, req.Note)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	idx = getIdxOfAccountBy("username", toUsername)
-	if idx == -1 {
-		c.JSON(404, gin.H{"error": "Recipient user not found"})
-		return
-	}
-	var toUser User = users[idx]
-	if isUserBlockedBy(toUser, fromUser.GetUsername()) {
-		c.JSON(400, gin.H{"error": "You cant send money to this user"})
-		return
-	}
-	toCurrency := roundVal(toUser.GetCredits())
-
-	now := time.Now().UnixMilli()
-
-	fromSystem := fromUser.Get("system")
-
-	taxRecipient := "mist"
-
-	if fromSystem != nil {
-		systemsMutex.RLock()
-		system := systems[fromSystem.(string)]
-		systemsMutex.RUnlock()
-
-		taxRecipient = system.Owner.Name
-	}
-
-	idx = getIdxOfAccountBy("username", taxRecipient)
-	if idx != -1 {
-		var taxUser User = users[idx]
-		curr := taxUser.GetCredits()
-		taxUser.SetBalance(roundVal(curr + taxRecipientShare))
-		usersMutex.Lock()
-		appendTx(&taxUser, map[string]any{
-			"note":   "transfer tax",
-			"user":   fromUser.GetUsername(),
-			"time":   now,
-			"amount": taxRecipientShare,
-			"type":   "tax",
-		})
-		usersMutex.Unlock()
-		go broadcastUserUpdate(taxUser.GetUsername(), "sys.transactions", taxUser.Get("sys.transactions"))
-	}
-	if fromUser.GetUsername() != "rotur" { // prevent the rotur account from having currency deducted
-		fromUser.SetBalance(roundVal(fromCurrency - (nAmount + totalTax)))
-	}
-	if toUser.GetUsername() != "rotur" { // prevent the rotur account from accumulating currency
-		toUser.SetBalance(roundVal(toCurrency + nAmount))
-	}
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
-	note := mkNote(req.Note)
-	appendTx(&fromUser, map[string]any{
-		"note":   note,
-		"user":   toUser.GetUsername(),
-		"time":   now,
-		"amount": nAmount + totalTax,
-		"type":   "out",
-	})
-	appendTx(&toUser, map[string]any{
-		"note":   note,
-		"user":   fromUser.GetUsername(),
-		"time":   now,
-		"amount": nAmount,
-		"type":   "in",
-	})
-
-	go saveUsers()
-
-	go broadcastUserUpdate(fromUser.GetUsername(), "sys.transactions", fromUser.Get("sys.transactions"))
-	go broadcastUserUpdate(toUser.GetUsername(), "sys.transactions", toUser.Get("sys.transactions"))
-
-	c.JSON(200, gin.H{"message": "Transfer successful", "from": fromUser.GetUsername(), "to": toUsername, "amount": nAmount, "debited": nAmount + totalTax})
+	c.JSON(200, gin.H{"message": "Transfer successful", "from": user.GetUsername(), "to": toUsername, "amount": nAmount, "debited": nAmount + 1.0})
 }
 
 func deleteUser(c *gin.Context) {
@@ -1028,6 +1043,28 @@ func deleteUserAdmin(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{"message": "User deleted successfully"})
+}
+
+func transferCreditsAdmin(c *gin.Context) {
+	if !authenticateAdmin(c) {
+		return
+	}
+
+	toUsername := c.Query("to")
+	amountStr := c.Query("amount")
+	fromUsername := c.Query("from")
+
+	amountNum, err := strconv.ParseFloat(amountStr, 64)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	err = PerformCreditTransfer(fromUsername, toUsername, amountNum, "")
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"message": "Transfer successful", "from": fromUsername, "to": toUsername, "amount": amountNum, "debited": amountNum + 1.0})
 }
 
 func removeUserDirectory(path string) error {
