@@ -847,7 +847,7 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 	}
 	toUser := toUsers[0]
 
-	if strings.ToLower(fromUser.GetUsername()) == strings.ToLower(toUser.GetUsername()) {
+	if strings.EqualFold(fromUser.GetUsername(), toUser.GetUsername()) {
 		return fmt.Errorf("cannot send credits to yourself")
 	}
 
