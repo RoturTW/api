@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -8,6 +10,37 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+func renderBioRegex(bio string, profile *User) string {
+	safeProfile := map[string]string{}
+	for k, v := range *profile {
+		if k == "key" || k == "password" {
+			continue
+		}
+		switch val := v.(type) {
+		case string:
+			safeProfile[k] = val
+		case int:
+			safeProfile[k] = strconv.Itoa(val)
+		case float64:
+			safeProfile[k] = fmt.Sprintf("%g", val)
+		case bool:
+			safeProfile[k] = strconv.FormatBool(val)
+		}
+	}
+
+	re := regexp.MustCompile(`{{\s*user ([a-zA-Z0-9_.]+)\s*}}`)
+
+	result := re.ReplaceAllStringFunc(bio, func(match string) string {
+		key := strings.TrimSpace(re.FindStringSubmatch(match)[1])
+		if val, ok := safeProfile[key]; ok {
+			return val
+		}
+		return ""
+	})
+
+	return result
+}
 
 func getProfile(c *gin.Context) {
 	name := c.Query("username")
@@ -175,12 +208,17 @@ func getProfile(c *gin.Context) {
 		}
 	}
 
+	bio := getStringOrEmpty(foundUser.Get("bio"))
+	if bio != "" && sub != "Free" {
+		bio = renderBioRegex(bio, foundUser)
+	}
+
 	profileData := gin.H{
 		"username":     foundUser.GetUsername(),
 		"pfp":          "https://avatars.rotur.dev/" + foundUser.GetUsername(),
 		"followers":    followerCount,
 		"following":    followingCount,
-		"bio":          getStringOrEmpty(foundUser.Get("bio")),
+		"bio":          bio,
 		"pronouns":     getStringOrEmpty(foundUser.Get("pronouns")),
 		"system":       getStringOrEmpty(foundUser.Get("system")),
 		"created":      foundUser.GetCreated(),
