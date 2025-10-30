@@ -151,7 +151,7 @@ func getProfile(c *gin.Context) {
 		sub = "Supporter"
 	case "50000000":
 		sub = "originDrive"
-	case "100000000":
+	case "500000000":
 		sub = "originPro"
 	case "1000000000":
 		sub = "originMax"
