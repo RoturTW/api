@@ -24,8 +24,6 @@ func sendFriendRequest(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-
 	idx := getIdxOfAccountBy("username", targetLower)
 	if idx == -1 {
 		usersMutex.Unlock()
@@ -37,6 +35,8 @@ func sendFriendRequest(c *gin.Context) {
 		return
 	}
 	var target User = users[idx]
+
+	usersMutex.Lock()
 
 	senderFriends := sender.GetFriends()
 	targetFriends := target.GetFriends()
