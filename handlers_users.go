@@ -941,7 +941,7 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 		"time":      now,
 		"amount":    nAmount + totalTax,
 		"type":      "out",
-		"new_total": toCurrency + nAmount + totalTax,
+		"new_total": fromCurrency - nAmount - totalTax,
 	})
 	appendTx(&toUser, map[string]any{
 		"note":      note,
@@ -949,7 +949,7 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 		"time":      now,
 		"amount":    nAmount,
 		"type":      "in",
-		"new_total": fromCurrency - nAmount,
+		"new_total": toCurrency + nAmount,
 	})
 
 	go broadcastUserUpdate(fromUser.GetUsername(), "sys.transactions", fromUser.Get("sys.transactions"))
