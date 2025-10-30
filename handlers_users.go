@@ -916,11 +916,12 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 		curr := taxUser.GetCredits()
 		taxUser.SetBalance(roundVal(curr + taxRecipientShare))
 		appendTx(&taxUser, map[string]any{
-			"note":   "transfer tax",
-			"user":   fromUser.GetUsername(),
-			"time":   now,
-			"amount": taxRecipientShare,
-			"type":   "tax",
+			"note":      "transfer tax",
+			"user":      fromUser.GetUsername(),
+			"time":      now,
+			"amount":    taxRecipientShare,
+			"type":      "tax",
+			"new_total": curr + taxRecipientShare,
 		})
 		go broadcastUserUpdate(taxUser.GetUsername(), "sys.transactions", taxUser.Get("sys.transactions"))
 	}
@@ -935,18 +936,20 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 
 	// Log transactions
 	appendTx(&fromUser, map[string]any{
-		"note":   note,
-		"user":   toUser.GetUsername(),
-		"time":   now,
-		"amount": nAmount + totalTax,
-		"type":   "out",
+		"note":      note,
+		"user":      toUser.GetUsername(),
+		"time":      now,
+		"amount":    nAmount + totalTax,
+		"type":      "out",
+		"new_total": toCurrency + nAmount + totalTax,
 	})
 	appendTx(&toUser, map[string]any{
-		"note":   note,
-		"user":   fromUser.GetUsername(),
-		"time":   now,
-		"amount": nAmount,
-		"type":   "in",
+		"note":      note,
+		"user":      fromUser.GetUsername(),
+		"time":      now,
+		"amount":    nAmount,
+		"type":      "in",
+		"new_total": fromCurrency - nAmount,
 	})
 
 	go broadcastUserUpdate(fromUser.GetUsername(), "sys.transactions", fromUser.Get("sys.transactions"))
