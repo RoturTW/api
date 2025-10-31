@@ -166,31 +166,8 @@ func getProfile(c *gin.Context) {
 		}
 	}
 
-	// Get subscription info
-	maxSizeStr := "5000000"
-	if maxSize := foundUser.Get("max_size"); maxSize != nil {
-		if maxSizeFloat, ok := maxSize.(float64); ok {
-			maxSizeStr = strconv.FormatFloat(maxSizeFloat, 'f', 0, 64)
-		} else if maxSizeString, ok := maxSize.(string); ok {
-			maxSizeStr = maxSizeString
-		}
-	}
-
-	var sub string
-	switch maxSizeStr {
-	case "5000000":
-		sub = "Free"
-	case "10000000":
-		sub = "Supporter"
-	case "50000000":
-		sub = "originDrive"
-	case "500000000":
-		sub = "originPro"
-	case "1000000000":
-		sub = "originMax"
-	default:
-		sub = "Free"
-	}
+	maxSizeStr := getUserMaxSize(foundUser)
+	sub := getSubscription(foundUser)
 
 	// Calculate dynamic badges
 	calculatedBadges := calculateUserBadges(*foundUser)
@@ -265,6 +242,41 @@ func getProfile(c *gin.Context) {
 	}
 
 	c.JSON(200, profileData)
+}
+
+func getUserMaxSize(user *User) string {
+	maxSizeStr := "5000000"
+	if maxSize := user.Get("max_size"); maxSize != nil {
+		if maxSizeFloat, ok := maxSize.(float64); ok {
+			maxSizeStr = strconv.FormatFloat(maxSizeFloat, 'f', 0, 64)
+		} else if maxSizeString, ok := maxSize.(string); ok {
+			maxSizeStr = maxSizeString
+		}
+	}
+	return maxSizeStr
+}
+
+func getSubscription(user *User) string {
+	// Get subscription info
+	maxSizeStr := getUserMaxSize(user)
+
+	var sub string
+	switch maxSizeStr {
+	case "5000000":
+		sub = "Free"
+	case "10000000":
+		sub = "Supporter"
+	case "50000000":
+		sub = "originDrive"
+	case "500000000":
+		sub = "originPro"
+	case "1000000000":
+		sub = "originMax"
+	default:
+		sub = "Free"
+	}
+
+	return sub
 }
 
 func getSupporters(c *gin.Context) {
