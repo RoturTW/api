@@ -1157,6 +1157,11 @@ func performUserDeletion(username string, isAdmin bool) error {
 		postsMutex.Unlock()
 		go savePosts()
 
+		// remove avatar and banner
+		if err := deleteUserAvatar(target); err != nil {
+			log.Printf("Error deleting user avatar: %v", err)
+		}
+
 		// Remove user storage
 		userDir := "rotur/user_storage/" + target
 		if err := removeUserDirectory(userDir); err != nil {
@@ -1170,6 +1175,35 @@ func performUserDeletion(username string, isAdmin bool) error {
 	}(usernameLower)
 
 	log.Printf("%s %s (total after=%d)", logPrefix, usernameLower, len(users))
+	return nil
+}
+
+func deleteUserAvatar(username string) error {
+	usernameLower := strings.ToLower(username)
+
+	// Remove user storage
+	pfpPath := "rotur/avatars/" + usernameLower + ".jpg"
+	exists := false
+	if _, err := os.Stat(pfpPath); err == nil {
+		exists = true
+	}
+	if exists {
+		if err := os.Remove(pfpPath); err != nil {
+			return fmt.Errorf("error removing user avatar %s: %v", pfpPath, err)
+		}
+	}
+
+	bannerPath := "rotur/banners/" + usernameLower + ".jpg"
+	exists = false
+	if _, err := os.Stat(bannerPath); err == nil {
+		exists = true
+	}
+	if exists {
+		if err := os.Remove(bannerPath); err != nil {
+			return fmt.Errorf("error removing user banner %s: %v", bannerPath, err)
+		}
+	}
+
 	return nil
 }
 
