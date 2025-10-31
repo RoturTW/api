@@ -600,7 +600,7 @@ func updateUser(c *gin.Context) {
 	}
 
 	sub := getSubscription(user)
-	if key == "bio" && len(stringValue) > 200 && sub != "Free" {
+	if key == "bio" && len(stringValue) > 200 && sub != "Free" && sub != "Supporter" {
 		c.JSON(400, gin.H{"error": "Bio length exceeds 200 characters, only for supporters"})
 		return
 	}
