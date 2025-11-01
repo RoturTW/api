@@ -122,6 +122,7 @@ func main() {
 		admin.POST("/update_user", updateUserAdmin)
 		admin.POST("/delete_user", deleteUserAdmin)
 		admin.POST("/transfer_credits", transferCreditsAdmin)
+		admin.POST("/kofi", handleKofiTransaction)
 	}
 
 	// Users endpoints

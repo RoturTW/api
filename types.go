@@ -8,6 +8,12 @@ import (
 	"time"
 )
 
+type subscription struct {
+	Active       bool   `json:"active"`
+	Tier         string `json:"tier"`
+	Next_billing int64  `json:"next_billing"`
+}
+
 // User represents a user with dynamic fields
 type User map[string]any
 
@@ -150,6 +156,37 @@ func (u User) GetLogins() []Login {
 	default:
 		return nil
 	}
+}
+
+func (u User) GetSubscription() subscription {
+	sub := u.Get("sys.subscription")
+	if sub == nil {
+		return subscription{
+			Active:       false,
+			Tier:         "Free",
+			Next_billing: 0,
+		}
+	}
+	val, ok := sub.(subscription)
+	if !ok {
+		return subscription{
+			Active:       false,
+			Tier:         "Free",
+			Next_billing: 0,
+		}
+	}
+	if val.Next_billing < time.Now().UnixMilli() {
+		val.Active = false
+		val.Next_billing = 0
+		val.Tier = "Free"
+	}
+	u.Set("max_size", getUserMaxSize(&u))
+	return val
+}
+
+func (u User) SetSubscription(sub subscription) {
+	u.Set("sys.subscription", sub)
+	u.Set("max_size", getUserMaxSize(&u))
 }
 
 func (u User) SetLogins(logins []Login) {

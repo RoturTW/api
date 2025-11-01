@@ -240,38 +240,26 @@ func getProfile(c *gin.Context) {
 }
 
 func getUserMaxSize(user *User) string {
-	maxSizeStr := "5000000"
-	if maxSize := user.Get("max_size"); maxSize != nil {
-		if maxSizeFloat, ok := maxSize.(float64); ok {
-			maxSizeStr = strconv.FormatFloat(maxSizeFloat, 'f', 0, 64)
-		} else if maxSizeString, ok := maxSize.(string); ok {
-			maxSizeStr = maxSizeString
-		}
+	tier := user.GetSubscription().Tier
+	switch tier {
+	case "Free":
+		return "5000000"
+	case "Supporter":
+		return "15000000"
+	case "originDrive":
+		return "50000000"
+	case "originPro":
+		return "500000000"
+	case "originMax":
+		return "1000000000"
+	default:
+		return "5000000"
 	}
-	return maxSizeStr
 }
 
 func getSubscription(user *User) string {
 	// Get subscription info
-	maxSizeStr := getUserMaxSize(user)
-
-	var sub string
-	switch maxSizeStr {
-	case "5000000":
-		sub = "Free"
-	case "15000000":
-		sub = "Supporter"
-	case "50000000":
-		sub = "originDrive"
-	case "500000000":
-		sub = "originPro"
-	case "1000000000":
-		sub = "originMax"
-	default:
-		sub = "Free"
-	}
-
-	return sub
+	return user.GetSubscription().Tier
 }
 
 func getSupporters(c *gin.Context) {

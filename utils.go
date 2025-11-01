@@ -262,6 +262,8 @@ func requiresAuth(c *gin.Context) {
 		return
 	}
 
+	user.GetSubscription()
+
 	c.Set("user", user)
 	c.Next()
 }

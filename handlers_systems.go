@@ -183,7 +183,11 @@ func getSystemUsers(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, users)
+	usernames := make([]string, 0, len(users))
+	for _, user := range users {
+		usernames = append(usernames, user.GetUsername())
+	}
+	c.JSON(200, usernames)
 }
 
 func reloadSystemsEndpoint(c *gin.Context) {
