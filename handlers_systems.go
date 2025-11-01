@@ -155,6 +155,37 @@ func getSystems(c *gin.Context) {
 	c.JSON(200, systems)
 }
 
+func getSystemUsers(c *gin.Context) {
+	user := c.MustGet("user").(*User)
+
+	// Only allow mist or the owner of the system to view users
+
+	system_data := getAllSystems()
+	system_name := c.Query("system")
+	if system_name == "" {
+		c.JSON(400, gin.H{"error": "System is required"})
+		return
+	}
+	system, ok := system_data[system_name]
+	if !ok {
+		c.JSON(404, gin.H{"error": "System not found"})
+		return
+	}
+
+	if !strings.EqualFold(system.Owner.Name, user.GetUsername()) && strings.ToLower(user.GetUsername()) != "mist" {
+		c.JSON(403, gin.H{"error": "Insufficient permissions"})
+		return
+	}
+
+	users, err := getAccountsBy("system", system.Name, -1)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, users)
+}
+
 func reloadSystemsEndpoint(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 

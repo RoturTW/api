@@ -69,6 +69,7 @@ func main() {
 
 	// Systems endpoints
 	r.GET("/systems", getSystems)
+	r.GET("/system/users", requiresAuth, getSystemUsers)
 	r.GET("/reload_systems", requiresAuth, reloadSystemsEndpoint)
 	r.POST("/update_system", requiresAuth, updateSystem)
 
