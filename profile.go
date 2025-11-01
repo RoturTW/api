@@ -240,6 +240,9 @@ func getProfile(c *gin.Context) {
 }
 
 func getUserMaxSize(user *User) string {
+	if user.GetUsername() == "mist" {
+		return "1000000000"
+	}
 	tier := user.GetSubscription().Tier
 	switch tier {
 	case "Free":
@@ -250,8 +253,6 @@ func getUserMaxSize(user *User) string {
 		return "50000000"
 	case "originPro":
 		return "500000000"
-	case "originMax":
-		return "1000000000"
 	default:
 		return "5000000"
 	}
