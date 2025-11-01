@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func renderBioRegex(bio string, profile *User) string {
+func renderBioRegex(bio string, profile *User, otherKeys map[string]any) string {
 	safeProfile := map[string]string{}
 	for k, v := range *profile {
 		if k == "key" || k == "password" {
@@ -27,6 +27,9 @@ func renderBioRegex(bio string, profile *User) string {
 		case bool:
 			safeProfile[k] = strconv.FormatBool(val)
 		}
+	}
+	for k, v := range otherKeys {
+		safeProfile[k] = fmt.Sprintf("%v", v)
 	}
 
 	re := regexp.MustCompile(`{{\s*user ([a-zA-Z0-9_.]+)\s*}}`)
@@ -177,30 +180,15 @@ func getProfile(c *gin.Context) {
 		st = nil
 	}
 
-	// Get marriage status if applicable
-	var marriageStatus map[string]any
-	if marriage := foundUser.Get("sys.marriage"); marriage != nil {
-		if marriageMap, ok := marriage.(map[string]any); ok {
-			marriageStatus = marriageMap
-		}
-	}
-
-	bio := getStringOrEmpty(foundUser.Get("bio"))
-	if bio != "" && sub != "Free" {
-		bio = renderBioRegex(bio, foundUser)
-	}
-
-	profileData := gin.H{
+	profileData := map[string]any{
 		"username":     foundUser.GetUsername(),
 		"pfp":          "https://avatars.rotur.dev/" + foundUser.GetUsername(),
 		"followers":    followerCount,
 		"following":    followingCount,
-		"bio":          bio,
 		"pronouns":     getStringOrEmpty(foundUser.Get("pronouns")),
 		"system":       getStringOrEmpty(foundUser.Get("system")),
 		"created":      foundUser.GetCreated(),
 		"badges":       calculatedBadges,
-		"marriage":     marriageStatus,
 		"subscription": sub,
 		"theme":        foundUser.Get("theme"),
 		"max_size":     maxSizeStr,
@@ -209,6 +197,13 @@ func getProfile(c *gin.Context) {
 		"private":      strings.ToLower(getStringOrEmpty(foundUser.Get("private"))) == "true",
 		"status":       st,
 	}
+
+	bio := getStringOrEmpty(foundUser.Get("bio"))
+	if bio != "" && sub != "Free" {
+		bio = renderBioRegex(bio, foundUser, profileData)
+	}
+	profileData["bio"] = bio
+
 	if foundUser.Get("sys.banner") != nil {
 		profileData["banner"] = "https://avatars.rotur.dev/.banners/" + foundUser.GetUsername()
 	}
@@ -264,7 +259,7 @@ func getSubscription(user *User) string {
 	switch maxSizeStr {
 	case "5000000":
 		sub = "Free"
-	case "10000000":
+	case "15000000":
 		sub = "Supporter"
 	case "50000000":
 		sub = "originDrive"
@@ -285,27 +280,7 @@ func getSupporters(c *gin.Context) {
 	supporters := make([]gin.H, 0)
 	usersMutex.RLock()
 	for _, user := range users {
-		maxSizeStr := "5000000"
-		if maxSize := user.Get("max_size"); maxSize != nil {
-			if maxSizeFloat, ok := maxSize.(float64); ok {
-				maxSizeStr = strconv.FormatFloat(maxSizeFloat, 'f', 0, 64)
-			} else if maxSizeString, ok := maxSize.(string); ok {
-				maxSizeStr = maxSizeString
-			}
-		}
-
-		subscriptionName := "Free"
-		switch maxSizeStr {
-		case "10000000":
-			subscriptionName = "Supporter"
-		case "50000000":
-			subscriptionName = "originDrive"
-		case "100000000":
-			subscriptionName = "originPro"
-		case "1000000000":
-			subscriptionName = "Admin"
-		}
-
+		subscriptionName := getSubscription(&user)
 		if subscriptionName == "Free" {
 			continue
 		}
