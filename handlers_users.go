@@ -328,6 +328,10 @@ func registerUser(c *gin.Context) {
 			c.JSON(400, gin.H{"error": "Username already in use"})
 			return
 		}
+		if strings.EqualFold(getStringOrEmpty(user.Get("email")), email) {
+			c.JSON(400, gin.H{"error": "Email already in use"})
+			return
+		}
 	}
 
 	if len(password) != 32 {

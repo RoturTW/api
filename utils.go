@@ -41,6 +41,9 @@ func roundVal(val float64) float64 {
 }
 
 func getStringOrEmpty(val any) string {
+	if val == nil {
+		return ""
+	}
 	if s, ok := val.(string); ok {
 		return s
 	}
