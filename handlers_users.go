@@ -592,6 +592,14 @@ func updateUser(c *gin.Context) {
 		return
 	}
 
+	if key == "email" {
+		users, _ := getAccountsBy("email", stringValue, 1)
+		if len(users) > 0 {
+			c.JSON(400, gin.H{"error": "Email already in use"})
+			return
+		}
+	}
+
 	sub := user.GetSubscription().Tier
 	if key == "bio" && len(stringValue) > 200 && sub != "Free" && sub != "Supporter" {
 		c.JSON(400, gin.H{"error": "Bio length exceeds 200 characters, only for supporters"})
