@@ -593,10 +593,11 @@ func updateUser(c *gin.Context) {
 	}
 
 	if key == "email" {
-		users, _ := getAccountsBy("email", stringValue, 1)
-		if len(users) > 0 {
-			c.JSON(400, gin.H{"error": "Email already in use"})
-			return
+		for _, user := range users {
+			if strings.EqualFold(getStringOrEmpty(user.Get("email")), stringValue) {
+				c.JSON(400, gin.H{"error": "Email already in use"})
+				return
+			}
 		}
 	}
 
