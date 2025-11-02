@@ -170,7 +170,7 @@ func getProfile(c *gin.Context) {
 	}
 
 	maxSizeStr := getUserMaxSize(foundUser)
-	sub := getSubscription(foundUser)
+	sub := foundUser.GetSubscription().Tier
 
 	// Calculate dynamic badges
 	calculatedBadges := calculateUserBadges(*foundUser)
@@ -240,40 +240,37 @@ func getProfile(c *gin.Context) {
 }
 
 func getUserMaxSize(user *User) string {
-	if user.GetUsername() == "mist" {
-		return "1000000000"
-	}
+	amt := "5000000"
 	tier := user.GetSubscription().Tier
 	switch tier {
 	case "Free":
-		return "5000000"
+		amt = "5000000"
 	case "Supporter":
-		return "15000000"
+		amt = "15000000"
 	case "originDrive":
-		return "50000000"
+		amt = "50000000"
 	case "originPro":
-		return "500000000"
+		amt = "500000000"
+	case "originMax":
+		amt = "1000000000"
 	default:
-		return "5000000"
+		amt = "5000000"
 	}
-}
-
-func getSubscription(user *User) string {
-	// Get subscription info
-	return user.GetSubscription().Tier
+	user.Set("max_size", amt)
+	return amt
 }
 
 func getSupporters(c *gin.Context) {
 	// anyone who isnt a free user is considered a supporter
 
-	supporters := make([]gin.H, 0)
+	supporters := make([]map[string]string, 0)
 	usersMutex.RLock()
 	for _, user := range users {
-		subscriptionName := getSubscription(&user)
+		subscriptionName := user.GetSubscription().Tier
 		if subscriptionName == "Free" {
 			continue
 		}
-		supporters = append(supporters, gin.H{
+		supporters = append(supporters, map[string]string{
 			"username":     user.GetUsername(),
 			"subscription": subscriptionName,
 		})

@@ -351,29 +351,17 @@ func registerUser(c *gin.Context) {
 		return
 	}
 
-	webhook := os.Getenv("ACCOUNT_CREATION_WEBHOOK")
-
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(c.ClientIP())))
 
-	if webhook != "" {
-		data := map[string]any{
-			"embeds": []map[string]any{
-				{
-					"title": "New Account Registered",
-					"description": fmt.Sprintf("**Username:** %s\n**Email:** %s\n**System:** %s\n**IP:** %s\n**Host:** %s",
-						username, email, matchedSystem.Name, hash, c.Request.Host),
-					"color":     0x57cdac,
-					"timestamp": time.Now().Format(time.RFC3339),
-				},
-			},
-		}
-
-		go func() {
-			if err := sendWebhook(webhook, data); err != nil {
-				log.Println("Failed to send account creation webhook:", err)
-			}
-		}()
-	}
+	sendDiscordWebhook([]map[string]any{
+		{
+			"title": "New Account Registered",
+			"description": fmt.Sprintf("**Username:** %s\n**Email:** %s\n**System:** %s\n**IP:** %s\n**Host:** %s",
+				username, email, matchedSystem.Name, hash, c.Request.Host),
+			"color":     0x57cdac,
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	})
 
 	newUser := User{
 		"username":         username,
@@ -603,7 +591,7 @@ func updateUser(c *gin.Context) {
 		return
 	}
 
-	sub := getSubscription(user)
+	sub := user.GetSubscription().Tier
 	if key == "bio" && len(stringValue) > 200 && sub != "Free" && sub != "Supporter" {
 		c.JSON(400, gin.H{"error": "Bio length exceeds 200 characters, only for supporters"})
 		return

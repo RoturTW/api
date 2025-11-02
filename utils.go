@@ -41,13 +41,34 @@ func roundVal(val float64) float64 {
 }
 
 func getStringOrEmpty(val any) string {
+	return getStringOrDefault(val, "")
+}
+
+func getStringOrDefault(val any, defaultVal string) string {
 	if val == nil {
 		return ""
 	}
 	if s, ok := val.(string); ok {
 		return s
 	}
-	return ""
+	return defaultVal
+}
+
+func getIntOrDefault(val any, defaultVal int) int {
+	if val == nil {
+		return defaultVal
+	}
+
+	switch v := val.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	}
+
+	return defaultVal
 }
 
 func loadBannedWords() {
@@ -327,4 +348,22 @@ func hmacIp(ip string) string {
 	mac := hmac.New(sha256.New, []byte(os.Getenv("HMAC_KEY")))
 	mac.Write([]byte(ip))
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func sendDiscordWebhook(data []map[string]any) {
+	webhook := os.Getenv("ACCOUNT_CREATION_WEBHOOK")
+
+	if webhook == "" {
+		log.Println("No webhook configured, not sending Discord webhook")
+		return
+	}
+	body := map[string]any{
+		"embeds": data,
+	}
+
+	go func() {
+		if err := sendWebhook(webhook, body); err != nil {
+			log.Println("Failed to send account creation webhook:", err)
+		}
+	}()
 }

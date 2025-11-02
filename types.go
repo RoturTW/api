@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -159,15 +160,23 @@ func (u User) GetLogins() []Login {
 }
 
 func (u User) GetSubscription() subscription {
-	sub := u.Get("sys.subscription")
-	if sub == nil {
+	if strings.EqualFold(u.GetUsername(), "mist") {
+		// keep me as the sigma
+		return subscription{
+			Active:       true,
+			Tier:         "originMax",
+			Next_billing: time.Now().UnixMilli() + (24 * 60 * 60 * 1000),
+		}
+	}
+	usub := u.Get("sys.subscription")
+	if usub == nil {
 		return subscription{
 			Active:       false,
 			Tier:         "Free",
 			Next_billing: 0,
 		}
 	}
-	val, ok := sub.(subscription)
+	sub, ok := usub.(map[string]any)
 	if !ok {
 		return subscription{
 			Active:       false,
@@ -175,12 +184,16 @@ func (u User) GetSubscription() subscription {
 			Next_billing: 0,
 		}
 	}
+	val := subscription{
+		Active:       sub["active"] == true,
+		Tier:         getStringOrDefault(sub["tier"], "Free"),
+		Next_billing: int64(getIntOrDefault(sub["next_billing"], 0)),
+	}
 	if val.Next_billing < time.Now().UnixMilli() {
 		val.Active = false
 		val.Next_billing = 0
 		val.Tier = "Free"
 	}
-	u.Set("max_size", getUserMaxSize(&u))
 	return val
 }
 
