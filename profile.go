@@ -204,7 +204,7 @@ func getProfile(c *gin.Context) {
 	}
 	profileData["bio"] = bio
 
-	if foundUser.Get("sys.banner") != nil {
+	if foundUser.Get("sys.banner") != nil || foundUser.Get("banner") != nil {
 		profileData["banner"] = "https://avatars.rotur.dev/.banners/" + foundUser.GetUsername()
 	}
 
