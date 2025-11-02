@@ -46,17 +46,17 @@ func handleKofiTransaction(c *gin.Context) {
 		foundBy := "None"
 		accounts := []User{}
 
-		if email != "" {
-			accounts, err = getAccountsBy("email", email, -1)
-			if err == nil {
-				foundBy = "Email"
-			}
-		}
 		discord_id := getStringOrEmpty(parsedData["discord_id"])
-		if discord_id != "" && len(accounts) == 0 {
+		if discord_id != "" {
 			accounts, err = getAccountsBy("discord_id", discord_id, -1)
 			if err == nil {
 				foundBy = "Discord"
+			}
+		}
+		if email != "" && len(accounts) == 0 {
+			accounts, err = getAccountsBy("email", email, -1)
+			if err == nil {
+				foundBy = "Email"
 			}
 		}
 		accountInfo := "No linked account found"
