@@ -190,6 +190,7 @@ func getUser(c *gin.Context) {
 		foundUser.Set("sys.logins", logins)
 		go saveUsers()
 		userCopy := copyUser(foundUser)
+		userCopy["sys.subscription"] = foundUser.GetSubscription()
 		delete(userCopy, "password")
 		c.JSON(200, userCopy)
 		return
