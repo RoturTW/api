@@ -27,7 +27,7 @@ func blockUser(c *gin.Context) {
 		return
 	}
 
-	if username == user.GetUsername() {
+	if strings.EqualFold(user.GetUsername(), username) {
 		c.JSON(400, gin.H{"error": "Cannot block yourself"})
 		return
 	}
