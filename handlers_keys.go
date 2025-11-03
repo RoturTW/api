@@ -582,6 +582,13 @@ func checkSubscriptions() {
 						if currencyFloat < float64(userData.Price) {
 							log.Printf("User %s does not have enough currency for key %s (needed: %.2f, available: %.2f)",
 								username, key.Key, float64(userData.Price), currencyFloat)
+
+							// send an event
+							go notify("sys.key_lost", map[string]any{
+								"username": username,
+								"key":      key.Key,
+								"key_name": key.Name,
+							})
 							usersToRemove = append(usersToRemove, username)
 							continue
 						}
