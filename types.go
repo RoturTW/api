@@ -174,19 +174,25 @@ func (u User) GetSubscription() subscription {
 		Tier:         "Free",
 		Next_billing: 0,
 	}
-	var next_billing int64 = getKeyNextBilling(u.GetUsername(), "4f229157f0c40f5a98cbf28efd39cfe8")
 
-	if next_billing != 0 {
-		val.Tier = "originPlus"
+	checkExternalBilling := func() (ok bool) {
+		next := getKeyNextBilling(u.GetUsername(), "4f229157f0c40f5a98cbf28efd39cfe8")
+		if next == 0 {
+			return false
+		}
 		val.Active = true
-		val.Next_billing = next_billing
-		return val
+		val.Tier = "originPlus"
+		val.Next_billing = next
+		return true
 	}
+
 	if usub == nil {
+		_ = checkExternalBilling()
 		return val
 	}
 	sub, ok := usub.(map[string]any)
 	if !ok {
+		_ = checkExternalBilling()
 		return val
 	}
 	val.Active = sub["active"] == true
@@ -194,6 +200,9 @@ func (u User) GetSubscription() subscription {
 	val.Next_billing = int64(getIntOrDefault(sub["next_billing"], 0))
 
 	if val.Next_billing < time.Now().UnixMilli() {
+		if checkExternalBilling() {
+			return val
+		}
 		val.Active = false
 		val.Next_billing = 0
 		val.Tier = "Free"
