@@ -27,6 +27,11 @@ func blockUser(c *gin.Context) {
 		return
 	}
 
+	if username == user.GetUsername() {
+		c.JSON(400, gin.H{"error": "Cannot block yourself"})
+		return
+	}
+
 	usersMutex.Lock()
 	defer usersMutex.Unlock()
 
