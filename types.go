@@ -169,26 +169,30 @@ func (u User) GetSubscription() subscription {
 		}
 	}
 	usub := u.Get("sys.subscription")
+	val := subscription{
+		Active:       false,
+		Tier:         "Free",
+		Next_billing: 0,
+	}
+	var next_billing int64 = getKeyNextBilling(u.GetUsername(), "4f229157f0c40f5a98cbf28efd39cfe8")
+
+	if next_billing != 0 {
+		val.Tier = "originPlus"
+		val.Active = true
+		val.Next_billing = next_billing
+		return val
+	}
 	if usub == nil {
-		return subscription{
-			Active:       false,
-			Tier:         "Free",
-			Next_billing: 0,
-		}
+		return val
 	}
 	sub, ok := usub.(map[string]any)
 	if !ok {
-		return subscription{
-			Active:       false,
-			Tier:         "Free",
-			Next_billing: 0,
-		}
+		return val
 	}
-	val := subscription{
-		Active:       sub["active"] == true,
-		Tier:         getStringOrDefault(sub["tier"], "Free"),
-		Next_billing: int64(getIntOrDefault(sub["next_billing"], 0)),
-	}
+	val.Active = sub["active"] == true
+	val.Tier = getStringOrDefault(sub["tier"], "Free")
+	val.Next_billing = int64(getIntOrDefault(sub["next_billing"], 0))
+
 	if val.Next_billing < time.Now().UnixMilli() {
 		val.Active = false
 		val.Next_billing = 0
