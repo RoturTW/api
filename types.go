@@ -164,7 +164,7 @@ func (u User) GetSubscription() subscription {
 		// keep me as the sigma
 		return subscription{
 			Active:       true,
-			Tier:         "originMax",
+			Tier:         "Max",
 			Next_billing: time.Now().UnixMilli() + (24 * 60 * 60 * 1000),
 		}
 	}
@@ -181,7 +181,7 @@ func (u User) GetSubscription() subscription {
 			return false
 		}
 		val.Active = true
-		val.Tier = "originPlus"
+		val.Tier = "Lite"
 		val.Next_billing = next
 		return true
 	}

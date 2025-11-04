@@ -245,15 +245,15 @@ func getUserMaxSize(user *User) string {
 	switch tier {
 	case "Free":
 		amt = "5000000"
-	case "originPlus":
+	case "Lite":
 		amt = "10000000"
-	case "Supporter":
+	case "Plus":
 		amt = "15000000"
-	case "originDrive":
+	case "Drive":
 		amt = "50000000"
-	case "originPro":
+	case "Pro":
 		amt = "500000000"
-	case "originMax":
+	case "Max":
 		amt = "1000000000"
 	default:
 		amt = "5000000"
