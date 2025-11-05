@@ -298,12 +298,19 @@ type Reply struct {
 	Timestamp int64  `json:"timestamp"`
 }
 
+type Badge struct {
+	Name        string `json:"name"`
+	Icon        string `json:"icon"`
+	Description string `json:"description"`
+}
+
 // System represents a system definition
 type System struct {
 	Name        string      `json:"name"`
 	Owner       SystemOwner `json:"owner"`
 	Wallpaper   string      `json:"wallpaper"`
 	Designation string      `json:"designation"`
+	Icon        string      `json:"icon"`
 }
 
 func (s *System) Set(key string, value any) (string, error) {

@@ -458,9 +458,9 @@ func uploadUserImage(imageType, imageData, token string) (int, error) {
 	var url string
 	switch imageType {
 	case "banner":
-		url = "https://avatars.rotur.dev/rotur-upload-banner"
+		url = "https://avatars.rotur.dev/rotur-upload-banner?ADMIN_TOKEN=" + os.Getenv("ADMIN_TOKEN")
 	case "pfp":
-		url = "https://avatars.rotur.dev/rotur-upload-pfp"
+		url = "https://avatars.rotur.dev/rotur-upload-pfp?ADMIN_TOKEN=" + os.Getenv("ADMIN_TOKEN")
 	default:
 		return 0, fmt.Errorf("invalid image type")
 	}
@@ -528,9 +528,17 @@ func updateUser(c *gin.Context) {
 			c.JSON(403, gin.H{"error": "User not found"})
 			return
 		}
-
+		sub := user.GetSubscription()
+		allowedTiers := []string{"Pro", "Max"}
+		freeAndGifUploads := slices.Contains(allowedTiers, sub.Tier)
+		if strings.Contains(imageData, "data:image/gif;base64,") {
+			if !freeAndGifUploads {
+				c.JSON(400, gin.H{"error": "GIFs are only available to Pro users"})
+				return
+			}
+		}
 		var currencyFloat float64 = users[userIndex].GetCredits()
-		if currencyFloat < 10 {
+		if currencyFloat < 10 && !freeAndGifUploads {
 			c.JSON(403, gin.H{"error": "Not enough credits to set banner (10 required)"})
 			return
 		}
@@ -543,7 +551,9 @@ func updateUser(c *gin.Context) {
 			c.JSON(statusCode, gin.H{"error": "Banner upload failed"})
 			return
 		}
-		users[userIndex].SetBalance(currencyFloat - 10)
+		if !freeAndGifUploads {
+			users[userIndex].SetBalance(currencyFloat - 10)
+		}
 		users[userIndex].Set("sys.banner", "https://avatars.rotur.dev/.banners/"+user.GetUsername())
 
 		go saveUsers()
@@ -560,6 +570,15 @@ func updateUser(c *gin.Context) {
 			c.JSON(400, gin.H{"error": "Profile picture must be a valid data URI"})
 			return
 		}
+		if strings.Contains(imageData, "data:image/gif;base64,") {
+			sub := user.GetSubscription()
+			allowedTiers := []string{"Drive", "Pro", "Max"}
+			if !slices.Contains(allowedTiers, sub.Tier) {
+				c.JSON(400, gin.H{"error": "GIFs are only available to Pro users"})
+				return
+			}
+		}
+
 		statusCode, err := uploadUserImage("pfp", imageData, user.GetKey())
 		if err != nil {
 			c.JSON(500, gin.H{"error": err})
@@ -602,9 +621,28 @@ func updateUser(c *gin.Context) {
 	}
 
 	sub := user.GetSubscription().Tier
-	if key == "bio" && len(stringValue) > 200 && sub != "Free" && sub != "Plus" {
-		c.JSON(400, gin.H{"error": "Bio length exceeds 200 characters"})
-		return
+	if key == "bio" {
+		length := len(stringValue)
+		switch strings.ToLower(sub) {
+		case "free", "lite", "plus":
+			if length > 200 {
+				c.JSON(400, gin.H{"error": "Bio length exceeds 200 characters"})
+				return
+			}
+		case "drive":
+			if length > 500 {
+				c.JSON(400, gin.H{"error": "Bio length exceeds 500 characters"})
+				return
+			}
+		case "pro":
+			if length > 1000 {
+				c.JSON(400, gin.H{"error": "Bio length exceeds 1000 characters"})
+				return
+			}
+		default:
+			c.JSON(400, gin.H{"error": "Invalid subscription"})
+			return
+		}
 	}
 
 	if len(stringValue) > 1000 {
