@@ -263,6 +263,10 @@ func (u User) DelKey(key string) error {
 }
 
 func (u User) Set(key string, value any) {
+	oldValue := u[key]
+	if oldValue == value {
+		return
+	}
 	u[key] = value
 	if key != "key" && key != "password" {
 		go broadcastUserUpdate(u.GetUsername(), key, value)
