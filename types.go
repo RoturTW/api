@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -264,7 +265,7 @@ func (u User) DelKey(key string) error {
 
 func (u User) Set(key string, value any) {
 	oldValue := u[key]
-	if oldValue == value {
+	if reflect.DeepEqual(oldValue, value) {
 		return
 	}
 	u[key] = value
