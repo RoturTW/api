@@ -1247,49 +1247,72 @@ func deleteUserAvatar(username string) error {
 	return nil
 }
 
+func canClaimDaily(user *User) float64 {
+	username := strings.ToLower(user.GetUsername())
+
+	claimsData := loadDailyClaims()
+
+	nextClaimTime, ok := claimsData[username]
+	if !ok {
+		return 0
+	}
+
+	currentTime := float64(time.Now().Unix())
+
+	timeDiff := currentTime - nextClaimTime
+	if timeDiff < 86400 {
+		return timeDiff
+	}
+
+	return 0
+}
+
+func timeUntilNextClaim(c *gin.Context) {
+	user := c.MustGet("user").(*User)
+
+	username := strings.ToLower(user.GetUsername())
+
+	claimsData := loadDailyClaims()
+
+	nextClaimTime, ok := claimsData[username]
+	if !ok {
+		c.JSON(400, gin.H{"error": "No daily claim found"})
+		return
+	}
+
+	currentTime := float64(time.Now().Unix())
+
+	timeDiff := currentTime - nextClaimTime
+	if timeDiff < 86400 {
+		waitTime := 86400 - timeDiff
+		c.JSON(200, gin.H{"wait_time": waitTime})
+		return
+	}
+
+	c.JSON(200, gin.H{"wait_time": 0})
+}
+
 func claimDaily(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
 	username := strings.ToLower(user.GetUsername())
 
-	// Load daily claims data
-	claimsData := loadDailyClaims()
-	currentTime := float64(time.Now().Unix())
-
-	// Check if user has already claimed today
-	if lastClaim, exists := claimsData[username]; exists {
-		timeDiff := currentTime - lastClaim
-		if timeDiff < 86400 { // 24 hours
-			waitTime := (86400 - timeDiff) / 3600
-			c.JSON(400, gin.H{"error": "Daily claim already made, please wait " +
-				strings.TrimSuffix(strings.TrimSuffix(
-					fmt.Sprintf("%.1f", waitTime), "0"), ".") + " hours"})
-			return
-		}
+	waitTime := canClaimDaily(user)
+	if waitTime > 0 {
+		c.JSON(400, gin.H{"error": "Daily claim already made, please wait " +
+			strings.TrimSuffix(strings.TrimSuffix(
+				fmt.Sprintf("%.1f", waitTime/3600), "0"), ".") + " hours"})
+		return
 	}
 
-	// Update claim time
+	claimsData := loadDailyClaims()
+	currentTime := float64(time.Now().Unix())
 	claimsData[username] = currentTime
 	saveDailyClaims(claimsData)
 
-	// Add daily credits (rounded)
-	usersMutex.Lock()
-	userIndex := -1
-	for i, u := range users {
-		if strings.EqualFold(u.GetUsername(), username) {
-			userIndex = i
-			break
-		}
-	}
-	if userIndex == -1 {
-		usersMutex.Unlock()
-		c.JSON(404, gin.H{"error": "User not found"})
-		return
-	}
 	curr := user.GetCredits()
 	newCurrency := roundVal(curr + 1.00)
-	usersMutex.Unlock()
-	users[userIndex].SetBalance(newCurrency)
+	user.SetBalance(newCurrency)
 	go saveUsers()
 
 	c.JSON(200, gin.H{"message": "Daily claim successful"})

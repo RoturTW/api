@@ -198,6 +198,7 @@ func main() {
 
 	// Other endpoints
 	r.GET("/claim_daily", requiresAuth, claimDaily)
+	r.GET("/claim_time", requiresAuth, timeUntilNextClaim)
 	r.GET("/supporters", getSupporters)
 	r.GET("/badges", requiresAuth, getBadges)
 	r.GET("/ai", rateLimit("ai"), requiresAuth, handleAI)
