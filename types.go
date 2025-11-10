@@ -64,6 +64,16 @@ func (u User) SetRequests(requests []string) {
 	u.Set("sys.requests", requests)
 }
 
+func (u User) IsFriend(username string) bool {
+	friends := u.GetFriends()
+	for _, f := range friends {
+		if strings.EqualFold(f, username) {
+			return true
+		}
+	}
+	return false
+}
+
 func (u User) GetFriends() []string {
 	return getStringSlice(u, "sys.friends")
 }

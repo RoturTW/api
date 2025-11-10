@@ -25,6 +25,7 @@ func main() {
 	loadKeys()
 	loadSystems()
 	loadEventsHistory()
+	reconnectFriends()
 
 	StartAutoUpdater(5 * time.Minute)
 

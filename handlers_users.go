@@ -1120,6 +1120,63 @@ func removeUserDirectory(path string) error {
 	return os.RemoveAll(path)
 }
 
+func reconnectFriends() {
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
+
+	findUser := func(name string) *User {
+		for i := range users {
+			if strings.EqualFold(users[i].GetUsername(), name) {
+				return &users[i]
+			}
+		}
+		return nil
+	}
+
+	getLowerName := func(u *User) string {
+		return strings.ToLower(u.GetUsername())
+	}
+
+	friendMap := make(map[*User][]string, len(users))
+	for i := range users {
+		u := &users[i]
+		friends := u.GetFriends()
+		valid := make([]string, 0, len(friends))
+		for _, f := range friends {
+			if friendUser := findUser(f); friendUser != nil {
+				valid = append(valid, strings.ToLower(f))
+			}
+		}
+		friendMap[u] = valid
+	}
+
+	for u, friends := range friendMap {
+		uName := getLowerName(u)
+		for _, f := range friends {
+			friendUser := findUser(f)
+			if friendUser == nil {
+				continue
+			}
+
+			friendList := friendMap[friendUser]
+			hasFriend := false
+			for _, ff := range friendList {
+				if ff == uName {
+					hasFriend = true
+					break
+				}
+			}
+			if !hasFriend {
+				friendMap[friendUser] = append(friendList, uName)
+			}
+		}
+	}
+
+	for u, finalList := range friendMap {
+		u.SetFriends(finalList)
+	}
+}
+
 func performUserDeletion(username string, isAdmin bool) error {
 	usernameLower := strings.ToLower(username)
 
@@ -1145,41 +1202,29 @@ func performUserDeletion(username string, isAdmin bool) error {
 		target := &users[i]
 
 		friends := target.GetFriends()
-		if len(friends) > 0 {
-			filtered := make([]string, 0, len(friends))
-			for _, f := range friends {
-				if !strings.EqualFold(f, usernameLower) {
-					filtered = append(filtered, f)
-				}
-				if len(filtered) != len(friends) {
-					target.SetFriends(filtered)
-				}
+		for i, f := range friends {
+			if strings.EqualFold(f, usernameLower) {
+				friends = append(friends[:i], friends[i+1:]...)
+				target.SetFriends(friends)
+				break
 			}
 		}
 
 		requests := target.GetRequests()
-		if len(requests) > 0 {
-			filtered := make([]string, 0, len(requests))
-			for _, r := range requests {
-				if !strings.EqualFold(r, usernameLower) {
-					filtered = append(filtered, r)
-				}
-			}
-			if len(filtered) != len(requests) {
-				target.SetRequests(filtered)
+		for i, r := range requests {
+			if strings.EqualFold(r, usernameLower) {
+				requests = append(requests[:i], requests[i+1:]...)
+				target.SetRequests(requests)
+				break
 			}
 		}
 
 		blocked := target.GetBlocked()
-		if len(blocked) > 0 {
-			filtered := make([]string, 0, len(blocked))
-			for _, b := range blocked {
-				if !strings.EqualFold(b, usernameLower) {
-					filtered = append(filtered, b)
-				}
-			}
-			if len(filtered) != len(blocked) {
-				target.SetBlocked(filtered)
+		for i, b := range blocked {
+			if strings.EqualFold(b, usernameLower) {
+				blocked = append(blocked[:i], blocked[i+1:]...)
+				target.SetBlocked(blocked)
+				break
 			}
 		}
 	}
@@ -1301,7 +1346,7 @@ func claimDaily(c *gin.Context) {
 	if waitTime > 0 {
 		c.JSON(400, gin.H{"error": "Daily claim already made, please wait " +
 			strings.TrimSuffix(strings.TrimSuffix(
-				fmt.Sprintf("%.1f", waitTime/3600), "0"), ".") + " hours"})
+				fmt.Sprintf("%.1f", 24-(waitTime/3600)), "0"), ".") + " hours"})
 		return
 	}
 
