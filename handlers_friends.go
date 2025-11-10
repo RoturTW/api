@@ -26,7 +26,6 @@ func sendFriendRequest(c *gin.Context) {
 
 	idx := getIdxOfAccountBy("username", targetLower)
 	if idx == -1 {
-		usersMutex.Unlock()
 		c.JSON(404, gin.H{"error": "Account does not exist"})
 		return
 	}
@@ -50,7 +49,11 @@ func sendFriendRequest(c *gin.Context) {
 		}
 	}
 	for _, f := range targetFriends {
+		// if we find the sender in the target's friends list,
+		// we add them automatically because they arent friends with each other
 		if strings.ToLower(f) == senderName {
+			targetFriends = append(targetFriends, senderName)
+			target.SetFriends(targetFriends)
 			usersMutex.Unlock()
 			c.JSON(400, gin.H{"error": "Already Friends"})
 			return
