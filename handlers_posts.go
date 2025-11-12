@@ -14,6 +14,12 @@ import (
 	"github.com/joho/godotenv"
 )
 
+var postLimits = map[string]int{
+	"content_length":         300,
+	"content_length_premium": 600,
+	"attachment_length":      300,
+}
+
 var lockedKeys = []string{"username", "last_login", "max_size", "key", "created", "system", "id"}
 
 type ValidatorInfo struct {
@@ -22,6 +28,10 @@ type ValidatorInfo struct {
 }
 
 var validatorInfos = make(map[string]ValidatorInfo)
+
+func getLimits(c *gin.Context) {
+	c.JSON(200, postLimits)
+}
 
 func createPost(c *gin.Context) {
 	rateLimitKey := getRateLimitKey(c)
@@ -60,9 +70,9 @@ func createPost(c *gin.Context) {
 	}
 
 	// claw key id, this is not a security issue
-	chars := 100
+	chars := postLimits["content_length"]
 	if doesUserOwnKey(user.GetUsername(), "bd6249d2b87796a25c30b1f1722f784f") {
-		chars = 300
+		chars = postLimits["content_length_premium"]
 	}
 
 	// Check content length
@@ -80,8 +90,8 @@ func createPost(c *gin.Context) {
 	// Get attachment if available
 	var attachment *string
 	if attachmentStr := c.Query("attachment"); attachmentStr != "" {
-		if len(attachmentStr) > 500 {
-			c.JSON(400, gin.H{"error": "Attachment URL exceeds 500 character limit"})
+		if len(attachmentStr) > postLimits["attachment_length"] {
+			c.JSON(400, gin.H{"error": "Attachment URL exceeds " + strconv.Itoa(postLimits["attachment_length"]) + " character limit"})
 			return
 		}
 
@@ -158,8 +168,13 @@ func replyToPost(c *gin.Context) {
 	}
 
 	// Check content length
-	if len(content) > 100 {
-		c.JSON(400, gin.H{"error": "Content exceeds 100 character limit"})
+	postLimit := postLimits["content_length"]
+	if doesUserOwnKey(user.GetUsername(), "bd6249d2b87796a25c30b1f1722f784f") {
+		postLimit = postLimits["content_length_premium"]
+	}
+
+	if len(content) > postLimit {
+		c.JSON(400, gin.H{"error": "Content exceeds " + strconv.Itoa(postLimit) + " character limit"})
 		return
 	}
 
@@ -309,12 +324,16 @@ func ratePost(c *gin.Context) {
 		return
 	}
 
-	idx := getIdxOfAccountBy("username", targetPost.User)
-	targetUser := users[idx]
-	if isUserBlockedBy(targetUser, user.GetUsername()) {
-		postsMutex.Unlock()
-		c.JSON(400, gin.H{"error": "You cant like this post"})
-		return
+	if rating == 1 {
+		idx := getIdxOfAccountBy("username", targetPost.User)
+		if idx == -1 {
+			targetUser := users[idx]
+			if isUserBlockedBy(targetUser, user.GetUsername()) {
+				postsMutex.Unlock()
+				c.JSON(400, gin.H{"error": "You cant like this post"})
+				return
+			}
+		}
 	}
 
 	// Ensure the 'likes' array exists
