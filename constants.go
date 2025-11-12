@@ -7,21 +7,22 @@ import (
 )
 
 var (
-	USERS_FILE_PATH             string
-	LOCAL_POSTS_PATH            string
-	FOLLOWERS_FILE_PATH         string
-	ITEMS_FILE_PATH             string
-	KEYS_FILE_PATH              string
-	EVENTS_HISTORY_PATH         string
-	DAILY_CLAIMS_FILE_PATH      string
-	SYSTEMS_FILE_PATH           string
-	WEBSOCKET_SERVER_URL        string
-	EVENT_SERVER_URL            string
-	SUBSCRIPTION_CHECK_INTERVAL int
-	BANNED_WORDS_URL            string
-	DISCORD_WEBHOOK_URL         string
-	KEY_OWNERSHIP_CACHE_TTL     int
-	ADMIN_TOKEN                 string
+	USERS_FILE_PATH               string
+	LOCAL_POSTS_PATH              string
+	FOLLOWERS_FILE_PATH           string
+	ITEMS_FILE_PATH               string
+	KEYS_FILE_PATH                string
+	EVENTS_HISTORY_PATH           string
+	DAILY_CLAIMS_FILE_PATH        string
+	SYSTEMS_FILE_PATH             string
+	WEBSOCKET_SERVER_URL          string
+	EVENT_SERVER_URL              string
+	SUBSCRIPTION_CHECK_INTERVAL   int
+	INACTIVITY_TAX_CHECK_INTERVAL int
+	BANNED_WORDS_URL              string
+	DISCORD_WEBHOOK_URL           string
+	KEY_OWNERSHIP_CACHE_TTL       int
+	ADMIN_TOKEN                   string
 
 	bannedDomains = []string{
 		"pornhub.com", "xvideos.com", "xnxx.com", "redtube.com", "youporn.com",
@@ -83,6 +84,7 @@ func loadConfigFromEnv() {
 
 	// Numeric settings
 	SUBSCRIPTION_CHECK_INTERVAL = intEnv("SUBSCRIPTION_CHECK_INTERVAL", 3600)
+	INACTIVITY_TAX_CHECK_INTERVAL = intEnv("INACTIVITY_TAX_CHECK_INTERVAL", 3600)
 	KEY_OWNERSHIP_CACHE_TTL = intEnv("KEY_OWNERSHIP_CACHE_TTL", 600)
 
 	// Auth / admin tokens

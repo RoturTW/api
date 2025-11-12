@@ -1444,3 +1444,50 @@ func getBadges(c *gin.Context) {
 
 	c.JSON(404, gin.H{"error": "User not found"})
 }
+
+func enactInactivityTax() {
+	// if the user has no transfers in the past 30 days, and has not logged in in the last 30 days, they are subject to inactivity tax
+	ticker := time.NewTicker(time.Duration(INACTIVITY_TAX_CHECK_INTERVAL) * time.Second)
+	defer ticker.Stop()
+
+	month := 30 * 24 * 60 * 60 * 1000
+
+	for range ticker.C {
+		fmt.Println("enactInactivityTax")
+		usersMutex.Lock()
+		for _, user := range users {
+			if user.GetSubscription().Tier != "Free" {
+				continue
+			}
+
+			lastLogin := user.Get("sys.last_login")
+			if lastLogin == nil {
+				user.Set("sys.last_login", time.Now().UnixMilli())
+				continue
+			}
+
+			transactions := user.Get("sys.transactions")
+			if transactions == nil {
+				user.Set("sys.transactions", []any{})
+			}
+
+			transfers := getObjectSlice(user, "sys.transactions")
+
+			if len(transfers) > 0 {
+				recent_transfer := transfers[0]
+				transfer_time, ok := recent_transfer["time"]
+				if !ok {
+					continue
+				}
+				transfer_int := getIntOrDefault(transfer_time, 0)
+				if int(time.Now().UnixMilli())-transfer_int < month {
+					continue
+				}
+			}
+
+			fmt.Println("enactInactivityTax: ", user.GetUsername())
+			user.SetBalance(user.GetCredits() * 95)
+		}
+		usersMutex.Unlock()
+	}
+}

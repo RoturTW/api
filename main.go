@@ -33,6 +33,7 @@ func main() {
 	go checkSubscriptions()
 	go watchUsersFile()
 	go cleanExpiredStatuses()
+	go enactInactivityTax()
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()

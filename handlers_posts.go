@@ -17,7 +17,7 @@ import (
 var postLimits = map[string]int{
 	"content_length":         300,
 	"content_length_premium": 600,
-	"attachment_length":      300,
+	"attachment_length":      200,
 }
 
 var lockedKeys = []string{"username", "last_login", "max_size", "key", "created", "system", "id"}
