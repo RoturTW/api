@@ -139,8 +139,6 @@ func getUserBy(c *gin.Context) {
 
 func getUser(c *gin.Context) {
 	authKey := c.Query("auth")
-	usersMutex.RLock()
-	defer usersMutex.RUnlock()
 
 	var foundUser User
 
@@ -163,6 +161,8 @@ func getUser(c *gin.Context) {
 	}
 
 	if foundUser != nil {
+		usersMutex.Lock()
+		defer usersMutex.Unlock()
 		if foundUser.Get("sys.tos_accepted") != true {
 			// early return - TOS not accepted
 			c.JSON(403, gin.H{"error": "Terms-Of-Service are not accepted or outdated", "username": foundUser.GetUsername(), "token": foundUser.GetKey(), "sys.tos_accepted": false})
