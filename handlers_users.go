@@ -1460,9 +1460,23 @@ func enactInactivityTax() {
 				continue
 			}
 
-			lastLogin := user.Get("sys.last_login")
-			if lastLogin == nil {
+			lastLogin := user.GetInt("sys.last_login")
+			if lastLogin == 0 {
 				user.Set("sys.last_login", time.Now().UnixMilli())
+				continue
+			}
+
+			if int(time.Now().UnixMilli())-int(lastLogin) < month {
+				continue
+			}
+
+			lastInactive := user.GetInt("sys.last_inactive")
+			if lastInactive == 0 {
+				user.Set("sys.last_inactive", time.Now().UnixMilli())
+				continue
+			}
+
+			if int(time.Now().UnixMilli())-int(lastInactive) < month {
 				continue
 			}
 
@@ -1485,6 +1499,7 @@ func enactInactivityTax() {
 				}
 			}
 
+			user.Set("sys.last_inactive", time.Now().UnixMilli())
 			fmt.Println("enactInactivityTax: ", user.GetUsername())
 			user.SetBalance(user.GetCredits() * 95)
 		}

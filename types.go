@@ -243,6 +243,21 @@ func (u User) Get(key string) any {
 	return nil
 }
 
+func (u User) GetString(key string) string {
+	value, ok := u[key]
+	if ok {
+		switch v := value.(type) {
+		case string:
+			return v
+		case int:
+			return strconv.Itoa(v)
+		case float64:
+			return strconv.FormatFloat(v, 'f', -1, 64)
+		}
+	}
+	return ""
+}
+
 func (u User) GetInt(key string) int {
 	value, ok := u[key]
 	if ok {
