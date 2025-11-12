@@ -1446,63 +1446,67 @@ func getBadges(c *gin.Context) {
 }
 
 func enactInactivityTax() {
-	// if the user has no transfers in the past 30 days, and has not logged in in the last 30 days, they are subject to inactivity tax
 	ticker := time.NewTicker(time.Duration(INACTIVITY_TAX_CHECK_INTERVAL) * time.Second)
 	defer ticker.Stop()
 
-	month := 30 * 24 * 60 * 60 * 1000
+	week := time.Hour.Milliseconds() * 24 * 7
 
 	for range ticker.C {
 		fmt.Println("enactInactivityTax")
+
+		now := time.Now().UnixMilli()
+		taxed := false
+
 		usersMutex.Lock()
-		for _, user := range users {
-			if user.GetSubscription().Tier != "Free" {
-				continue
-			}
 
-			lastLogin := user.GetInt("sys.last_login")
+		for i := range users {
+			lastInactive := users[i].GetInt("sys.last_inactive")
+			lastLogin := users[i].GetInt("sys.last_login")
+
 			if lastLogin == 0 {
-				user.Set("sys.last_login", time.Now().UnixMilli())
+				lastLogin = int(now)
+				users[i].Set("sys.last_login", lastLogin)
+			}
+			if lastInactive < lastLogin {
+				users[i].Set("sys.last_inactive", lastLogin)
+			}
+
+			if now-int64(lastInactive) < week {
 				continue
 			}
 
-			if int(time.Now().UnixMilli())-int(lastLogin) < month {
-				continue
-			}
+			transfers := getObjectSlice(users[i], "sys.transactions")
 
-			lastInactive := user.GetInt("sys.last_inactive")
-			if lastInactive == 0 {
-				user.Set("sys.last_inactive", time.Now().UnixMilli())
-				continue
-			}
-
-			if int(time.Now().UnixMilli())-int(lastInactive) < month {
-				continue
-			}
-
-			transactions := user.Get("sys.transactions")
-			if transactions == nil {
-				user.Set("sys.transactions", []any{})
-			}
-
-			transfers := getObjectSlice(user, "sys.transactions")
-
-			if len(transfers) > 0 {
-				recent_transfer := transfers[0]
-				transfer_time, ok := recent_transfer["time"]
-				if !ok {
-					continue
-				}
-				transfer_int := getIntOrDefault(transfer_time, 0)
-				if int(time.Now().UnixMilli())-transfer_int < month {
-					continue
+			var latest int64
+			for _, t := range transfers {
+				ts := int64(getIntOrDefault(t["time"], 0))
+				if ts > latest {
+					latest = ts
 				}
 			}
 
-			user.Set("sys.last_inactive", time.Now().UnixMilli())
-			fmt.Println("enactInactivityTax: ", user.GetUsername())
-			user.SetBalance(user.GetCredits() * 95)
+			if now-latest < week {
+				continue
+			}
+
+			oldBal := users[i].GetCredits()
+			if oldBal < 0.01 {
+				continue
+			}
+			newBal := oldBal * 95 / 100
+			users[i].SetBalance(newBal)
+			users[i].Set("sys.last_inactive", now)
+
+			fmt.Printf("enactInactivityTax: %s (%.2f%% balance decay, %f → %f)\n",
+				users[i].GetUsername(), 5.0, oldBal, newBal)
+
+			taxed = true
 		}
+
 		usersMutex.Unlock()
+
+		if taxed {
+			saveUsers()
+		}
 	}
 }

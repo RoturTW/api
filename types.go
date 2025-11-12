@@ -127,17 +127,11 @@ func (u User) SetBalance(balance any) {
 		if parsed, err := strconv.ParseFloat(v, 64); err == nil {
 			fval = parsed
 		} else {
-			usersMutex.Lock()
-			defer usersMutex.Unlock()
 			return
 		}
 	default:
-		usersMutex.Lock()
-		defer usersMutex.Unlock()
 		return
 	}
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
 	u.Set("sys.currency", roundVal(fval))
 }
 
