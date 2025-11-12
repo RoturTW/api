@@ -41,7 +41,7 @@ func main() {
 
 	// Posts endpoints
 	r.GET("/post", requiresAuth, createPost)
-	r.GET("/limits", requiresAuth, getLimits)
+	r.GET("/limits", getLimits)
 	r.GET("/reply", rateLimit("default"), requiresAuth, replyToPost)
 	r.GET("/follow", rateLimit("follow"), requiresAuth, followUser)
 	r.GET("/unfollow", rateLimit("follow"), requiresAuth, unfollowUser)
