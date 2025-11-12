@@ -279,8 +279,9 @@ func (u User) Set(key string, value any) {
 		return
 	}
 	u[key] = value
+	valueCopy := deepCopyValue(value)
 	if key != "key" && key != "password" {
-		go broadcastUserUpdate(u.GetUsername(), key, value)
+		broadcastUserUpdate(u.GetUsername(), key, valueCopy)
 	}
 }
 
