@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -50,8 +51,13 @@ func getEconomyStats(c *gin.Context) {
 	variance = variance / float64(count)
 
 	// Currency conversion rates
-	penceRate := roundVal(((7726*6)/total)*100) / 100   // pence per credit
-	centsRate := roundVal(((7726*7.6)/total)*100) / 100 // cents per credit
+	loadEnvFile()
+	pence_per_1000, err := strconv.Atoi(os.Getenv("PENCE_PER_1000"))
+	if err != nil {
+		pence_per_1000 = 2
+	}
+	penceRate := roundVal((float64(1000*pence_per_1000)/total)*100) / 100      // pence per credit
+	centsRate := roundVal((float64(1000*1.31*pence_per_1000)/total)*100) / 100 // cents per credit
 
 	c.JSON(200, gin.H{
 		"average":  average,
@@ -97,6 +103,7 @@ func getRichList(c *gin.Context) {
 	if max > 100 {
 		max = 100
 	}
+	isAdmin := authenticateAdmin(c)
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 
@@ -113,7 +120,7 @@ func getRichList(c *gin.Context) {
 				isPrivate = strings.ToLower(v) == "true"
 			}
 		}
-		if isBanned || isPrivate {
+		if (isBanned || isPrivate) && !isAdmin {
 			continue
 		}
 		currency := user.GetCredits()
