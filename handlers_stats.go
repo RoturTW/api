@@ -103,7 +103,7 @@ func getRichList(c *gin.Context) {
 	if max > 100 {
 		max = 100
 	}
-	isAdmin := authenticateAdmin(c)
+	isAdmin := os.Getenv("ADMIN_TOKEN") == c.Query("admin_token")
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 

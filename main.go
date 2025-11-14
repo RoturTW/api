@@ -127,7 +127,6 @@ func main() {
 		admin.POST("/transfer_credits", transferCreditsAdmin)
 		admin.POST("/kofi", handleKofiTransaction)
 		admin.POST("/set_sub", setSubscription)
-		admin.GET("/rich", getRichList)
 	}
 
 	// Users endpoints
