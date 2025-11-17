@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"net/http"
 	"os"
@@ -1009,17 +1010,40 @@ func transferCredits(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
 	var req struct {
-		To     string  `json:"to"`
-		Amount float64 `json:"amount"`
-		Note   string  `json:"note"`
+		To     string `json:"to"`
+		Amount any    `json:"amount"`
+		Note   string `json:"note"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": "Invalid request payload"})
 		return
 	}
-	// normalize + validate
-	nAmount, ok := normalizeEscrowAmount(req.Amount)
-	if !ok {
+	amt := fmt.Sprintf("%v", req.Amount)
+
+	if amt == "" {
+		c.JSON(400, gin.H{"error": "Amount must be provided"})
+		return
+	}
+	var nAmount float64
+	var err error
+	if after, ok := strings.CutPrefix(amt, "£"); ok {
+		// convert to GBP
+		nAmount, err = strconv.ParseFloat(after, 64)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid amount"})
+			return
+		}
+		creditsPerPound := creditsToPence(1) * 100
+		nAmount = nAmount / creditsPerPound
+	} else {
+		nAmount, err = strconv.ParseFloat(amt, 64)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid amount"})
+			return
+		}
+	}
+	nAmount = math.Round(nAmount*100) / 100 // round to 2 decimal places
+	if nAmount < 0.01 {
 		c.JSON(400, gin.H{"error": "Minimum amount is 0.01"})
 		return
 	}
@@ -1034,7 +1058,7 @@ func transferCredits(c *gin.Context) {
 		return
 	}
 
-	err := PerformCreditTransfer(user.GetUsername(), toUsername, nAmount, req.Note)
+	err = PerformCreditTransfer(user.GetUsername(), toUsername, nAmount, req.Note)
 	if err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
@@ -1449,7 +1473,7 @@ func enactInactivityTax() {
 	ticker := time.NewTicker(time.Duration(INACTIVITY_TAX_CHECK_INTERVAL) * time.Second)
 	defer ticker.Stop()
 
-	week := time.Hour.Milliseconds() * 24 * 7
+	month := time.Hour.Milliseconds() * 24 * 30
 
 	for range ticker.C {
 		fmt.Println("enactInactivityTax")
@@ -1471,21 +1495,22 @@ func enactInactivityTax() {
 				users[i].Set("sys.last_inactive", lastLogin)
 			}
 
-			if now-int64(lastInactive) < week {
+			if now-int64(lastInactive) < month {
 				continue
 			}
 
 			transfers := getObjectSlice(users[i], "sys.transactions")
 
 			var latest int64
+			default_ts := int(month + 1000)
 			for _, t := range transfers {
-				ts := int64(getIntOrDefault(t["time"], 0))
+				ts := int64(getIntOrDefault(t["time"], default_ts))
 				if ts > latest {
 					latest = ts
 				}
 			}
 
-			if now-latest < week {
+			if now-latest < month {
 				continue
 			}
 

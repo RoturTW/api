@@ -230,8 +230,12 @@ func getProfile(c *gin.Context) {
 
 	if marriage := foundUser.Get("sys.marriage"); marriage != nil {
 		if marriageMap, ok := marriage.(map[string]any); ok {
-			if partner, ok := marriageMap["partner"].(string); ok && partner != "" {
-				profileData["married_to"] = partner
+			status, statusExists := marriageMap["status"]
+			if statusExists && status == "married" {
+				partner, partnerExists := marriageMap["partner"]
+				if partnerExists && partner != "" {
+					profileData["married_to"] = partner
+				}
 			}
 		}
 	}

@@ -12,28 +12,7 @@ import (
 )
 
 func getEconomyStats(c *gin.Context) {
-	usersMutex.RLock()
-	defer usersMutex.RUnlock()
-
-	currencies := make([]float64, 0)
-	for _, user := range users {
-		userCredits := user.GetCredits()
-		if userCredits < 0 {
-			continue
-		}
-		if user.Get("sys.banned") != nil || user.Get("private") == true {
-			continue
-		}
-		currencies = append(currencies, userCredits)
-	}
-
-	// Skip calculation if no currency data is available
-	if len(currencies) == 0 {
-		c.JSON(404, gin.H{
-			"error": "No currency data available",
-		})
-		return
-	}
+	currencies := getUserCreditData()
 
 	// Calculate stats
 	count := len(currencies)
@@ -51,23 +30,66 @@ func getEconomyStats(c *gin.Context) {
 	variance = variance / float64(count)
 
 	// Currency conversion rates
-	loadEnvFile()
-	pence_per_1000, err := strconv.Atoi(os.Getenv("PENCE_PER_1000"))
-	if err != nil {
-		pence_per_1000 = 2
-	}
-	penceRate := roundVal((float64(1000*pence_per_1000)/total)*100) / 100      // pence per credit
-	centsRate := roundVal((float64(1000*1.31*pence_per_1000)/total)*100) / 100 // cents per credit
-
 	c.JSON(200, gin.H{
 		"average":  average,
 		"total":    total,
 		"variance": variance,
 		"currency_comparison": gin.H{
-			"pence": fmt.Sprintf("%.2fp / credit", penceRate),
-			"cents": fmt.Sprintf("%.2f¢ / credit", centsRate),
+			"pence": fmt.Sprintf("%.2fp / credit", creditsToPence(1)),
+			"cents": fmt.Sprintf("%.2f¢ / credit", creditsToCents(1)),
 		},
 	})
+}
+
+func getUserCreditData() []float64 {
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
+	currencies := make([]float64, 0)
+	for _, user := range users {
+		userCredits := user.GetCredits()
+		if userCredits < 0 {
+			continue
+		}
+		currencies = append(currencies, userCredits)
+	}
+
+	// Skip calculation if no currency data is available
+	if len(currencies) == 0 {
+		return []float64{}
+	}
+
+	return currencies
+}
+
+func getPencePerCredit() float64 {
+	pencePer1000, err := strconv.Atoi(os.Getenv("PENCE_PER_1000"))
+	if err != nil {
+		pencePer1000 = 6
+	}
+	return float64(pencePer1000)
+}
+
+func creditsToPence(credits float64) float64 {
+	pencePerCredit := getPencePerCredit()
+	currencies := getUserCreditData()
+	total := 0.0
+	for _, currency := range currencies {
+		total += currency
+	}
+	penceRate := roundVal((float64(1000*pencePerCredit)/total)*100) / 100 // pence per credit
+	return penceRate
+}
+
+func creditsToCents(credits float64) float64 {
+	pencePerCredit := getPencePerCredit()
+	currencies := getUserCreditData()
+	total := 0.0
+	for _, currency := range currencies {
+		total += currency
+	}
+	centsRate := roundVal((float64(1000*1.31*pencePerCredit)/total)*100) / 100 // cents per credit
+	return centsRate
 }
 
 func getUserStats(c *gin.Context) {
