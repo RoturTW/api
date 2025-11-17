@@ -395,6 +395,12 @@ func buyKey(c *gin.Context) {
 				return
 			}
 
+			var balance = user.GetCredits()
+			if balance < float64(keys[i].Price) {
+				c.JSON(400, gin.H{"error": "Insufficient balance to buy this key"})
+				return
+			}
+
 			// Add user to key
 			userData := KeyUserData{
 				Time:  float64(time.Now().Unix()),
@@ -431,12 +437,6 @@ func buyKey(c *gin.Context) {
 				userData.NextBilling = nextBillingTime.UnixMilli()
 			}
 
-			var balance = user.GetCredits()
-			if balance < float64(keys[i].Price) {
-				c.JSON(400, gin.H{"error": "Insufficient balance to buy this key"})
-				return
-			}
-
 			keys[i].Users[username] = userData
 
 			// Update total income for the key
@@ -471,7 +471,9 @@ func buyKey(c *gin.Context) {
 				// Pay the creator
 				if ownerIndex != -1 && ownerIndex != userIndex {
 					var ownerCurrency float64 = users[ownerIndex].GetCredits()
-					users[ownerIndex].SetBalance(ownerCurrency + float64(keys[i].Price))
+					// 10% tax on purchase
+					value := float64(keys[i].Price) * 0.9
+					users[ownerIndex].SetBalance(ownerCurrency + value)
 				}
 
 				go saveUsers()
