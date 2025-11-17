@@ -542,6 +542,11 @@ func checkSubscriptions() {
 			subscriptionsProcessed++
 			usersToRemove := make([]string, 0)
 
+			ownerIndex := getIdxOfAccountBy("username", key.Creator)
+			if ownerIndex == -1 {
+				continue
+			}
+
 			for username, userData := range key.Users {
 				if userData.NextBilling == nil {
 					continue
@@ -580,6 +585,10 @@ func checkSubscriptions() {
 							continue
 						}
 
+						if userIndex == ownerIndex {
+							continue
+						}
+
 						var currencyFloat float64 = users[userIndex].GetCredits()
 						if currencyFloat < float64(userData.Price) {
 							log.Printf("User %s does not have enough currency for key %s (needed: %.2f, available: %.2f)",
@@ -596,6 +605,10 @@ func checkSubscriptions() {
 						}
 						currencyFloat -= float64(userData.Price)
 						users[userIndex].SetBalance(currencyFloat)
+
+						// 10% tax on purchase
+						value := float64(userData.Price) * 0.9
+						users[ownerIndex].SetBalance(currencyFloat + value)
 						go saveUsers()
 
 						// Update total income for the key
