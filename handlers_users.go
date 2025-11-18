@@ -174,21 +174,14 @@ func getUser(c *gin.Context) {
 		foundUser.Set("sys.total_logins", foundUser.GetInt("sys.total_logins")+1)
 		foundUser.Set("sys.badges", calculateUserBadges(foundUser))
 
-		logins := foundUser.GetLogins()
-		ip := c.ClientIP()
-		hostname := c.GetHeader("Origin")
-		userAgent := c.Request.UserAgent()
-		logins = append(logins, Login{
-			Origin:    hostname,
-			UserAgent: userAgent,
-			IP_hmac:   hmacIp(ip),
-			Country:   c.GetHeader("CF-IPCountry"),
-			Timestamp: now,
-		})
-		if n := len(logins); n > 10 {
-			logins = logins[n-10:]
+		header := c.GetHeader("CF-IPCountry")
+		if header == "T1" {
+			// block tor
+			c.JSON(403, gin.H{"error": "Tor is not allowed"})
+			return
 		}
-		foundUser.Set("sys.logins", logins)
+
+		addLogin(c, &foundUser)
 		go saveUsers()
 		userCopy := copyUser(foundUser)
 		userCopy["sys.subscription"] = foundUser.GetSubscription()
@@ -198,6 +191,38 @@ func getUser(c *gin.Context) {
 	}
 
 	c.JSON(403, gin.H{"error": "Missing authentication credentials"})
+}
+
+func addLogin(c *gin.Context, user *User) {
+	tier := user.GetSubscription().Tier
+	logins := user.GetLogins()
+	ip := c.ClientIP()
+	hostname := c.GetHeader("Origin")
+	userAgent := c.Request.UserAgent()
+	device_type := "Unknown"
+	if c.GetHeader("Sec-CH-UA-Mobile") == "?1" {
+		device_type = "Mobile"
+	} else {
+		device_type = "Desktop"
+	}
+	hasDrive := hasTierOrHigher(tier, "Drive")
+
+	logins = append(logins, Login{
+		Origin:      hostname,
+		UserAgent:   userAgent,
+		IP_hmac:     hmacIp(ip),
+		Country:     c.GetHeader("CF-IPCountry"),
+		Timestamp:   time.Now().UnixMilli(),
+		Device_type: device_type,
+	})
+	maxLogins := 10
+	if hasDrive {
+		maxLogins = 100
+	}
+	if n := len(logins); n > maxLogins {
+		logins = logins[n-maxLogins:]
+	}
+	user.Set("sys.logins", logins)
 }
 
 func generateAccountToken() string {
