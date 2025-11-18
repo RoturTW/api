@@ -40,7 +40,7 @@ func noteUser(c *gin.Context) {
 	user.Set("sys.notes", notes)
 	usersMutex.Unlock()
 
-	saveUsers()
+	go saveUsers()
 
 	c.JSON(200, gin.H{"success": true})
 }
@@ -70,7 +70,7 @@ func deleteNote(c *gin.Context) {
 	user.Set("sys.notes", notes)
 	usersMutex.Unlock()
 
-	saveUsers()
+	go saveUsers()
 
 	c.JSON(200, gin.H{"success": true})
 }
