@@ -254,7 +254,7 @@ func getUserMaxSize(user *User) string {
 	case "Plus":
 		amt = "15000000"
 	case "Drive":
-		amt = "50000000"
+		amt = "300000000"
 	case "Pro":
 		amt = "1000000000"
 	case "Max":
