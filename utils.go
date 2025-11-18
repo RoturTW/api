@@ -75,31 +75,28 @@ func requireTier(tier string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user := c.MustGet("user").(*User)
 		user_tier := user.GetSubscription().Tier
-		switch user_tier {
-		case "Max":
-			if tier == "Max" {
-				c.Next()
-			}
-			return
-		case "Pro":
-			if tier == "Pro" || tier == "Max" {
-				c.Next()
-			}
-			return
-		case "Drive":
-			if tier == "Drive" || tier == "Pro" || tier == "Max" {
-				c.Next()
-			}
-			return
-		case "Lite":
-			if tier == "Lite" || tier == "Drive" || tier == "Pro" || tier == "Max" {
-				c.Next()
-			}
+		if hasTierOrHigher(user_tier, tier) {
+			c.Next()
 			return
 		}
 		c.JSON(403, gin.H{"error": "You need a higher subscription tier to access this endpoint"})
 		c.Abort()
 	}
+}
+
+func hasTierOrHigher(tier string, required string) bool {
+	required = strings.ToLower(required)
+	switch strings.ToLower(tier) {
+	case "max":
+		return true
+	case "pro":
+		return required == "pro" || required == "max"
+	case "drive":
+		return required == "drive" || required == "pro" || required == "max"
+	case "lite":
+		return required == "lite" || required == "drive" || required == "pro" || required == "max"
+	}
+	return false
 }
 
 func loadBannedWords() {
