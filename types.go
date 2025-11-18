@@ -308,7 +308,8 @@ func (u User) Set(key string, value any) {
 	u[key] = value
 	valueCopy := deepCopyValue(value)
 	if key != "key" && key != "password" {
-		broadcastUserUpdate(u.GetUsername(), key, valueCopy)
+		username := u.GetUsername()
+		go broadcastUserUpdate(username, key, valueCopy)
 	}
 }
 
@@ -466,11 +467,12 @@ type Item struct {
 }
 
 type Login struct {
-	Origin    string `json:"origin"`
-	UserAgent string `json:"userAgent"`
-	IP_hmac   string `json:"ip_hmac"`
-	Country   string `json:"country"`
-	Timestamp int64  `json:"timestamp"`
+	Origin      string `json:"origin"`
+	UserAgent   string `json:"userAgent"`
+	IP_hmac     string `json:"ip_hmac"`
+	Country     string `json:"country"`
+	Timestamp   int64  `json:"timestamp"`
+	Device_type string `json:"device_type"`
 }
 
 // TransferHistory represents item transfer history
