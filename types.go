@@ -94,6 +94,24 @@ func (u User) GetCreated() int64 {
 	return 0
 }
 
+func (u User) GetNotes() map[string]string {
+	notes := u.Get("sys.notes")
+	if notes == nil {
+		return map[string]string{}
+	}
+	m, ok := notes.(map[string]any)
+	if !ok {
+		return map[string]string{}
+	}
+	out := make(map[string]string)
+	for k, v := range m {
+		if s, ok := v.(string); ok {
+			out[k] = s
+		}
+	}
+	return out
+}
+
 func (u User) GetCredits() float64 {
 	if credits, ok := u["sys.currency"]; ok {
 		switch v := credits.(type) {

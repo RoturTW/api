@@ -132,6 +132,7 @@ func acceptMarriage(c *gin.Context) {
 	// Update marriage status for both users
 	timestamp := time.Now().UnixMilli()
 
+	usersMutex.Lock()
 	users[userIndex]["sys.marriage"] = map[string]any{
 		"status":    "married",
 		"partner":   partnerUsername,
@@ -145,6 +146,7 @@ func acceptMarriage(c *gin.Context) {
 		"timestamp": timestamp,
 		"proposer":  proposerUsername,
 	}
+	usersMutex.Unlock()
 
 	go saveUsers()
 

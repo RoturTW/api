@@ -143,9 +143,14 @@ func main() {
 		me.POST("/transfer", requiresAuth, transferCredits)
 		me.POST("/gamble", requiresAuth, gambleCredits)
 		me.DELETE("/delete", deleteUserKey)
+
 		me.GET("/blocked", requiresAuth, getBlocking)
 		me.POST("/block/:username", requiresAuth, blockUser)
 		me.POST("/unblock/:username", requiresAuth, unblockUser)
+
+		// notes endpoints, get not needed, stored in user["sys.notes"]
+		me.POST("/note/:username", requiresAuth, requireTier("Plus"), noteUser)
+		me.DELETE("/note/:username", requiresAuth, requireTier("Plus"), deleteNote)
 	}
 	r.POST("/accept_tos", requiresAuth, acceptTos)
 

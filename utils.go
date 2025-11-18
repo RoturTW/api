@@ -71,6 +71,37 @@ func getIntOrDefault(val any, defaultVal int) int {
 	return defaultVal
 }
 
+func requireTier(tier string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := c.MustGet("user").(*User)
+		user_tier := user.GetSubscription().Tier
+		switch user_tier {
+		case "Max":
+			if tier == "Max" {
+				c.Next()
+			}
+			return
+		case "Pro":
+			if tier == "Pro" || tier == "Max" {
+				c.Next()
+			}
+			return
+		case "Drive":
+			if tier == "Drive" || tier == "Pro" || tier == "Max" {
+				c.Next()
+			}
+			return
+		case "Lite":
+			if tier == "Lite" || tier == "Drive" || tier == "Pro" || tier == "Max" {
+				c.Next()
+			}
+			return
+		}
+		c.JSON(403, gin.H{"error": "You need a higher subscription tier to access this endpoint"})
+		c.Abort()
+	}
+}
+
 func loadBannedWords() {
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(BANNED_WORDS_URL)
