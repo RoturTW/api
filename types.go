@@ -233,6 +233,22 @@ func (u User) GetSubscription() subscription {
 	return val
 }
 
+func (u User) GetBlockedIps() []string {
+	blocked := u.Get("blocked_ips")
+	blocked_arr, ok := blocked.([]any)
+	if !ok {
+		return []string{}
+	}
+	blocked_str := make([]string, len(blocked_arr))
+	for i, v := range blocked_arr {
+		blocked_str[i], ok = v.(string)
+		if !ok {
+			blocked_str[i] = ""
+		}
+	}
+	return blocked_str
+}
+
 func (u User) SetSubscription(sub subscription) {
 	u.Set("sys.subscription", sub)
 	u.Set("max_size", getUserMaxSize(&u))

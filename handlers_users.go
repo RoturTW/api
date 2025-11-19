@@ -169,6 +169,13 @@ func getUser(c *gin.Context) {
 			c.JSON(403, gin.H{"error": "Terms-Of-Service are not accepted or outdated", "username": foundUser.GetUsername(), "token": foundUser.GetKey(), "sys.tos_accepted": false})
 			return
 		}
+
+		ip := c.ClientIP()
+		blocked_ips := foundUser.GetBlockedIps()
+		if slices.Contains(blocked_ips, ip) {
+			c.JSON(403, gin.H{"error": "Unable to login to this account"})
+		}
+
 		now := time.Now().UnixMilli()
 		foundUser.Set("sys.last_login", now)
 		foundUser.Set("sys.total_logins", foundUser.GetInt("sys.total_logins")+1)
