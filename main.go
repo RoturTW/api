@@ -205,12 +205,12 @@ func main() {
 	}
 
 	// Other endpoints
-	r.GET("/claim_daily", requiresAuth, claimDaily)
-	r.GET("/claim_time", requiresAuth, timeUntilNextClaim)
-	r.GET("/supporters", getSupporters)
-	r.GET("/badges", requiresAuth, getBadges)
+	r.GET("/claim_daily", rateLimit("default"), requiresAuth, claimDaily)
+	r.GET("/claim_time", rateLimit("default"), requiresAuth, timeUntilNextClaim)
+	r.GET("/supporters", rateLimit("default"), getSupporters)
+	r.GET("/badges", rateLimit("default"), requiresAuth, getBadges)
 	r.GET("/ai", rateLimit("ai"), requiresAuth, handleAI)
-	r.GET("/status", getStatus)
+	r.GET("/status", rateLimit("default"), getStatus)
 
 	log.Println("Claw server starting on port 5602...")
 	if err := r.Run("0.0.0.0:5602"); err != nil {

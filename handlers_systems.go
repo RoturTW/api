@@ -131,6 +131,12 @@ func setSystem(systemName string, key string, value any) error {
 			systems[systemName] = system
 			return nil
 		}
+	case "icon":
+		if v, ok := value.(string); ok {
+			system.Icon = v
+			systems[systemName] = system
+			return nil
+		}
 	}
 
 	return fmt.Errorf("invalid system key: %s", key)

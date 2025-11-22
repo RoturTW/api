@@ -84,6 +84,13 @@ func requireTier(tier string) gin.HandlerFunc {
 	}
 }
 
+func doAfter(fn func(any), data any, after time.Duration) {
+	time.Sleep(after)
+	go func() {
+		fn(data)
+	}()
+}
+
 func hasTierOrHigher(tier string, required string) bool {
 	required = strings.ToLower(required)
 	switch strings.ToLower(tier) {
