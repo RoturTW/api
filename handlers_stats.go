@@ -78,7 +78,7 @@ func creditsToPence(credits float64) float64 {
 		total += currency
 	}
 	penceRate := roundVal((float64(1000*pencePerCredit)/total)*100) / 100 // pence per credit
-	return penceRate
+	return penceRate * credits
 }
 
 func creditsToCents(credits float64) float64 {
@@ -89,7 +89,7 @@ func creditsToCents(credits float64) float64 {
 		total += currency
 	}
 	centsRate := roundVal((float64(1000*1.31*pencePerCredit)/total)*100) / 100 // cents per credit
-	return centsRate
+	return centsRate * credits
 }
 
 func getUserStats(c *gin.Context) {
@@ -164,33 +164,6 @@ func getRichList(c *gin.Context) {
 	}
 
 	c.JSON(200, richList)
-}
-
-func getAuraStats(c *gin.Context) {
-	usersMutex.RLock()
-	defer usersMutex.RUnlock()
-
-	auraStats := make(map[string]int)
-	for _, user := range users {
-		if user.Get("sys.banned") != nil || user.Get("private") == true {
-			continue
-		}
-		if aura := user.Get("sys.aura"); aura != nil {
-			switch v := aura.(type) {
-			case string:
-				auraStats[v]++
-			}
-		}
-	}
-
-	if len(auraStats) == 0 {
-		c.JSON(404, gin.H{
-			"error": "No aura data available",
-		})
-		return
-	}
-
-	c.JSON(200, auraStats)
 }
 
 func getSystemStats(c *gin.Context) {

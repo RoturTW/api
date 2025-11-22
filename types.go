@@ -16,6 +16,82 @@ type subscription struct {
 	Next_billing int64  `json:"next_billing"`
 }
 
+type sub_benefits struct {
+	Max_Keys                int  `json:"max_keys"`
+	Max_Login_History       int  `json:"max_login_history"`
+	Max_Rmails              int  `json:"max_rmails"`
+	FileSystem_Size         int  `json:"file_system_size"`
+	Bio_Length              int  `json:"bio_length"`
+	Has_Animated_Pfp        bool `json:"animated_pfp"`
+	Has_Animated_Banner     bool `json:"animated_banner"`
+	Has_Free_Banner_Uploads bool `json:"free_banner_uploads"`
+	Has_Bio_templating      bool `json:"bio_templating"`
+	Has_Profile_notes       bool `json:"profile_notes"`
+}
+
+var subs_benefits = map[string]sub_benefits{
+	"free":  tierFree(),
+	"lite":  tierLite(),
+	"plus":  tierPlus(),
+	"drive": tierDrive(),
+	"pro":   tierPro(),
+	"max":   tierMax(),
+}
+
+func tierFree() sub_benefits {
+	benefits := sub_benefits{
+		Max_Keys:          5,
+		Max_Login_History: 10,
+		Max_Rmails:        100,
+		FileSystem_Size:   5_000_000,
+		Bio_Length:        300,
+	}
+	return benefits
+}
+
+func tierLite() sub_benefits {
+	b := tierFree()
+	b.FileSystem_Size = 10_000_000
+	b.Has_Bio_templating = true
+	return b
+}
+
+func tierPlus() sub_benefits {
+	b := tierLite()
+	b.FileSystem_Size = 15_000_000
+	b.Has_Profile_notes = true
+	return b
+}
+
+func tierDrive() sub_benefits {
+	b := tierPlus()
+	b.Max_Keys = 20
+	b.Max_Login_History = 100
+	b.Max_Rmails = 1000
+	b.FileSystem_Size = 15_000_000
+	b.Bio_Length = 500
+	b.Has_Animated_Pfp = true
+	return b
+}
+
+func tierPro() sub_benefits {
+	b := tierDrive()
+	b.Max_Keys = 50
+	b.Max_Rmails = 100_000
+	b.FileSystem_Size = 1_000_000_000
+	b.Bio_Length = 1000
+	b.Has_Animated_Banner = true
+	b.Has_Free_Banner_Uploads = true
+	return b
+}
+
+func tierMax() sub_benefits {
+	b := tierPro()
+	b.Max_Keys = 500
+	b.FileSystem_Size = 10_000_000_000
+	return b
+}
+
 // User represents a user with dynamic fields
 type User map[string]any
 
@@ -222,6 +298,12 @@ func (u User) GetSubscription() subscription {
 	val.Tier = getStringOrDefault(sub["tier"], "Free")
 	val.Next_billing = int64(getIntOrDefault(sub["next_billing"], 0))
 
+	if val.Next_billing == 0 {
+		val.Active = false
+		val.Tier = "Free"
+		return val
+	}
+
 	if val.Next_billing < time.Now().UnixMilli() {
 		if checkExternalBilling() {
 			return val
@@ -233,20 +315,22 @@ func (u User) GetSubscription() subscription {
 	return val
 }
 
+func (u User) GetSubscriptionBenefits() sub_benefits {
+	tier := u.GetSubscription().Tier
+	return subs_benefits[strings.ToLower(tier)]
+}
+
 func (u User) GetBlockedIps() []string {
-	blocked := u.Get("blocked_ips")
-	blocked_arr, ok := blocked.([]any)
-	if !ok {
-		return []string{}
-	}
-	blocked_str := make([]string, len(blocked_arr))
-	for i, v := range blocked_arr {
-		blocked_str[i], ok = v.(string)
-		if !ok {
-			blocked_str[i] = ""
-		}
-	}
-	return blocked_str
+	return getStringSlice(u, "blocked_ips")
+}
+
+// social links to display on the user's profile (max 3)
+func (u User) GetSocialLinks() []string {
+	return getStringSlice(u, "sys.social_links")
+}
+
+func (u User) SetSocialLinks(links []string) {
+	u.Set("sys.social_links", links)
 }
 
 func (u User) SetSubscription(sub subscription) {
@@ -489,6 +573,7 @@ type Login struct {
 	Country     string `json:"country"`
 	Timestamp   int64  `json:"timestamp"`
 	Device_type string `json:"device_type"`
+	Message     string `json:"message"`
 }
 
 // TransferHistory represents item transfer history
@@ -511,6 +596,7 @@ type Key struct {
 	Subscription *Subscription          `json:"subscription,omitempty"`
 	Type         string                 `json:"type"`
 	TotalIncome  int                    `json:"total_income,omitempty"`
+	Webhook      *string                `json:"webhook,omitempty"`
 }
 
 func (k *Key) setKey(key string, value any) {
@@ -536,6 +622,10 @@ func (k *Key) setKey(key string, value any) {
 	case "type":
 		if v, ok := value.(string); ok {
 			k.Type = v
+		}
+	case "webhook":
+		if v, ok := value.(string); ok {
+			k.Webhook = &v
 		}
 	}
 }

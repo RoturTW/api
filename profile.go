@@ -198,8 +198,9 @@ func getProfile(c *gin.Context) {
 		"status":       st,
 	}
 
+	benefits := foundUser.GetSubscriptionBenefits()
 	bio := getStringOrEmpty(foundUser.Get("bio"))
-	if bio != "" && sub != "Free" {
+	if bio != "" && benefits.Has_Profile_notes {
 		bio = renderBioRegex(bio, foundUser, profileData)
 	}
 	profileData["bio"] = bio
@@ -244,24 +245,7 @@ func getProfile(c *gin.Context) {
 }
 
 func getUserMaxSize(user *User) string {
-	amt := "5000000"
-	tier := user.GetSubscription().Tier
-	switch tier {
-	case "Free":
-		amt = "5000000"
-	case "Lite":
-		amt = "10000000"
-	case "Plus":
-		amt = "15000000"
-	case "Drive":
-		amt = "150000000"
-	case "Pro":
-		amt = "1000000000"
-	case "Max":
-		amt = "10000000000"
-	default:
-		amt = "5000000"
-	}
+	amt := strconv.Itoa(user.GetSubscriptionBenefits().FileSystem_Size)
 	user.Set("max_size", amt)
 	return amt
 }

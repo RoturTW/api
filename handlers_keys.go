@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -46,11 +47,17 @@ func createKey(c *gin.Context) {
 	defer keysMutex.Unlock()
 
 	// Check if key name already exists
+	username := strings.ToLower(user.GetUsername())
+	total_keys := 0
 	for _, key := range keys {
-		if key.Name != nil && *key.Name == name {
-			c.JSON(400, gin.H{"error": "Key with this name already exists"})
-			return
+		if strings.EqualFold(key.Creator, username) {
+			total_keys++
 		}
+	}
+	max_keys := user.GetSubscriptionBenefits().Max_Keys
+	if total_keys > max_keys {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("You can only have up to %d free keys", max_keys)})
+		return
 	}
 
 	newKey := Key{
@@ -219,14 +226,16 @@ func updateKey(c *gin.Context) {
 	key := c.Query("key")
 	data := c.Query("data")
 	user := c.MustGet("user").(*User)
-	if data == "" || key == "" {
+	if key == "" {
 		c.JSON(403, gin.H{"error": "update key and data are required"})
 		return
 	}
-	// data is {key: value}
-	if !isValidJSON(data) {
-		c.JSON(400, gin.H{"error": "Invalid JSON data"})
-		return
+
+	var parsedData any
+	if isValidJSON(data) {
+		json.Unmarshal([]byte(data), &parsedData)
+	} else {
+		parsedData = data
 	}
 
 	keysMutex.Lock()
@@ -236,12 +245,6 @@ func updateKey(c *gin.Context) {
 		if keys[i].Key == id {
 			if !strings.EqualFold(keys[i].Creator, user.GetUsername()) {
 				c.JSON(403, gin.H{"error": "You can only update keys you created"})
-				return
-			}
-
-			var parsedData any
-			if err := json.Unmarshal([]byte(data), &parsedData); err != nil {
-				c.JSON(400, gin.H{"error": "Failed to parse JSON data"})
 				return
 			}
 
@@ -476,6 +479,16 @@ func buyKey(c *gin.Context) {
 					users[ownerIndex].SetBalance(ownerCurrency + value)
 				}
 
+				if len(*keys[i].Webhook) > 0 {
+					_ = sendWebhook(*keys[i].Webhook, map[string]any{
+						"username":  username,    // purchaser
+						"key":       keys[i].Key, // id
+						"price":     keys[i].Price,
+						"content":   username + " purchased key " + keys[i].Key + " for " + strconv.Itoa(keys[i].Price) + " credits",
+						"timestamp": time.Now().Unix(),
+					})
+				}
+
 				go saveUsers()
 			} else {
 				usersMutex.Unlock()
@@ -641,6 +654,16 @@ func checkSubscriptions() {
 						newNextBilling := nextBillingTime.UnixMilli()
 						userData.NextBilling = newNextBilling
 						key.Users[username] = userData
+
+						if len(*key.Webhook) > 0 {
+							_ = sendWebhook(*key.Webhook, map[string]any{
+								"username":  username, // purchaser
+								"key":       key.Key,  // id
+								"price":     key.Price,
+								"content":   username + " was charged by key: " + key.Key + " for " + strconv.Itoa(key.Price) + " credits",
+								"timestamp": time.Now().Unix(),
+							})
+						}
 
 						log.Printf("Successfully billed user %s for key %s. Next billing: %s",
 							username, key.Key, nextBillingTime.Format("2006-01-02 15:04:05"))

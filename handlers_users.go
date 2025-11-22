@@ -52,18 +52,18 @@ func getAccountsBy(key string, value string, max int) ([]User, error) {
 	return matches, nil
 }
 
-func findAccountByLogin(username string, password string) User {
+func findAccountByLogin(username string, password string) (User, error) {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 
 	username = strings.ToLower(username)
 	for _, user := range users {
 		if strings.ToLower(user.GetUsername()) == username && user.GetPassword() == password {
-			return user
+			return user, nil
 		}
 	}
 
-	return nil
+	return nil, fmt.Errorf("account not found for login")
 }
 
 func getIdxOfAccountBy(key string, value string) int {
@@ -158,7 +158,13 @@ func getUser(c *gin.Context) {
 	password := c.Query("password")
 
 	if username != "" && password != "" && foundUser == nil {
-		foundUser = findAccountByLogin(username, password)
+		var err error = nil
+		foundUser, err = findAccountByLogin(username, password)
+		if err != nil && foundUser != nil {
+			addLogin(c, &foundUser, "Failed login")
+			c.JSON(403, gin.H{"error": "Invalid authentication credentials"})
+			return
+		}
 	}
 
 	if foundUser != nil {
@@ -173,7 +179,9 @@ func getUser(c *gin.Context) {
 		ip := c.ClientIP()
 		blocked_ips := foundUser.GetBlockedIps()
 		if slices.Contains(blocked_ips, ip) {
+			addLogin(c, &foundUser, "Blocked ip attempted login")
 			c.JSON(403, gin.H{"error": "Unable to login to this account"})
+			return
 		}
 
 		now := time.Now().UnixMilli()
@@ -184,24 +192,28 @@ func getUser(c *gin.Context) {
 		header := c.GetHeader("CF-IPCountry")
 		if header == "T1" {
 			// block tor
+			addLogin(c, &foundUser, "Tor login attempted")
 			c.JSON(403, gin.H{"error": "Tor is not allowed"})
 			return
 		}
 
-		addLogin(c, &foundUser)
+		addLogin(c, &foundUser, "Successful Login")
+		foundUser["sys.subscription"] = foundUser.GetSubscription()
+
 		go saveUsers()
 		userCopy := copyUser(foundUser)
-		userCopy["sys.subscription"] = foundUser.GetSubscription()
 		delete(userCopy, "password")
 		c.JSON(200, userCopy)
 		return
 	}
 
-	c.JSON(403, gin.H{"error": "Missing authentication credentials"})
+	c.JSON(403, gin.H{"error": "Invalid authentication credentials"})
 }
 
-func addLogin(c *gin.Context, user *User) {
-	tier := user.GetSubscription().Tier
+func addLogin(c *gin.Context, user *User, message string) {
+	if user == nil {
+		return
+	}
 	logins := user.GetLogins()
 	ip := c.ClientIP()
 	hostname := c.GetHeader("Origin")
@@ -212,7 +224,6 @@ func addLogin(c *gin.Context, user *User) {
 	} else {
 		device_type = "Desktop"
 	}
-	hasDrive := hasTierOrHigher(tier, "Drive")
 
 	logins = append(logins, Login{
 		Origin:      hostname,
@@ -221,11 +232,9 @@ func addLogin(c *gin.Context, user *User) {
 		Country:     c.GetHeader("CF-IPCountry"),
 		Timestamp:   time.Now().UnixMilli(),
 		Device_type: device_type,
+		Message:     message,
 	})
-	maxLogins := 10
-	if hasDrive {
-		maxLogins = 100
-	}
+	maxLogins := user.GetSubscriptionBenefits().Max_Login_History
 	if n := len(logins); n > maxLogins {
 		logins = logins[n-maxLogins:]
 	}
@@ -561,11 +570,10 @@ func updateUser(c *gin.Context) {
 			c.JSON(403, gin.H{"error": "User not found"})
 			return
 		}
-		sub := user.GetSubscription()
-		allowedTiers := []string{"Pro", "Max"}
-		freeAndGifUploads := slices.Contains(allowedTiers, sub.Tier)
+		benefits := user.GetSubscriptionBenefits()
+		freeAndGifUploads := benefits.Has_Free_Banner_Uploads
 		if strings.Contains(imageData, "data:image/gif;base64,") {
-			if !freeAndGifUploads {
+			if !benefits.Has_Animated_Banner {
 				c.JSON(400, gin.H{"error": "GIFs are only available to Pro users"})
 				return
 			}
@@ -604,9 +612,8 @@ func updateUser(c *gin.Context) {
 			return
 		}
 		if strings.Contains(imageData, "data:image/gif;base64,") {
-			sub := user.GetSubscription()
-			allowedTiers := []string{"Drive", "Pro", "Max"}
-			if !slices.Contains(allowedTiers, sub.Tier) {
+			benefits := user.GetSubscriptionBenefits()
+			if !benefits.Has_Animated_Pfp {
 				c.JSON(400, gin.H{"error": "GIFs are only available to Pro users"})
 				return
 			}
@@ -653,27 +660,11 @@ func updateUser(c *gin.Context) {
 		}
 	}
 
-	sub := user.GetSubscription().Tier
 	if key == "bio" {
 		length := len(stringValue)
-		switch strings.ToLower(sub) {
-		case "free", "lite", "plus":
-			if length > 200 {
-				c.JSON(400, gin.H{"error": "Bio length exceeds 200 characters"})
-				return
-			}
-		case "drive":
-			if length > 500 {
-				c.JSON(400, gin.H{"error": "Bio length exceeds 500 characters"})
-				return
-			}
-		case "pro":
-			if length > 1000 {
-				c.JSON(400, gin.H{"error": "Bio length exceeds 1000 characters"})
-				return
-			}
-		default:
-			c.JSON(400, gin.H{"error": "Invalid subscription"})
+		bio_length := user.GetSubscriptionBenefits().Bio_Length
+		if length > bio_length {
+			c.JSON(400, gin.H{"error": "Bio length exceeds " + strconv.Itoa(bio_length) + " characters"})
 			return
 		}
 	}
@@ -1398,6 +1389,8 @@ func claimDaily(c *gin.Context) {
 
 	username := strings.ToLower(user.GetUsername())
 
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
 	waitTime := canClaimDaily(user)
 	if waitTime > 0 {
 		c.JSON(400, gin.H{"error": "Daily claim already made, please wait " +
