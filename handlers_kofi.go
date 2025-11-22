@@ -29,40 +29,42 @@ func handleKofiTransaction(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "Invalid verification code"})
 		return
 	}
+	fmt.Println(JSONStringify(parsedData))
+
+	email := getStringOrEmpty(parsedData["email"])
+
+	foundBy := "None"
+	accounts := []User{}
+	var account User = nil
+
+	discord_id := getStringOrEmpty(parsedData["discord_id"])
+	if discord_id != "" {
+		accounts, err = getAccountsBy("discord_id", discord_id, -1)
+		if err == nil {
+			foundBy = "Discord"
+		}
+	}
+	if email != "" && len(accounts) == 0 {
+		accounts, err = getAccountsBy("email", email, -1)
+		if err == nil {
+			foundBy = "Email"
+		}
+	}
+	accountInfo := "No linked account found"
+	if len(accounts) > 0 {
+		account = accounts[0]
+		accountInfo = fmt.Sprintf("**Username:** %s", account.GetUsername())
+	}
 
 	switch getStringOrEmpty(parsedData["type"]) {
 	case "Donation":
 		// TODO: handle donations
 	case "Subscription":
 		name := getStringOrEmpty(parsedData["tier_name"])
-
 		if name == "" {
 			// this exits if its a monthly donation, subscriptions have teir_name
 			c.JSON(400, gin.H{"error": "No tier name found"})
 			return
-		}
-		email := getStringOrEmpty(parsedData["email"])
-
-		foundBy := "None"
-		accounts := []User{}
-
-		discord_id := getStringOrEmpty(parsedData["discord_id"])
-		if discord_id != "" {
-			accounts, err = getAccountsBy("discord_id", discord_id, -1)
-			if err == nil {
-				foundBy = "Discord"
-			}
-		}
-		if email != "" && len(accounts) == 0 {
-			accounts, err = getAccountsBy("email", email, -1)
-			if err == nil {
-				foundBy = "Email"
-			}
-		}
-		accountInfo := "No linked account found"
-		if len(accounts) > 0 {
-			account := accounts[0]
-			accountInfo = fmt.Sprintf("**Username:** %s", account.GetUsername())
 		}
 
 		sendDiscordWebhook([]map[string]any{
@@ -97,7 +99,32 @@ func handleKofiTransaction(c *gin.Context) {
 
 		c.JSON(200, gin.H{"status": "success"})
 	case "Shop Order":
-		// TODO: handle shop orders
+		shop_items := parsedData["shop_items"].([]any)
+		for _, shop_item := range shop_items {
+			item := shop_item.(map[string]any)
+			sendDiscordWebhook([]map[string]any{
+				{
+					"title": "New Shop Order",
+					"description": fmt.Sprintf("**User:** %s\n**Amount:** %s %s\n**Message:** %s\n**Email:** %s\n\n[View on Ko-fi](%s)\n**Found By:** %s\n\n%s",
+						parsedData["from_name"],
+						parsedData["amount"],
+						parsedData["currency"],
+						parsedData["message"],
+						parsedData["email"],
+						parsedData["url"],
+						foundBy,
+						accountInfo,
+					),
+					"timestamp": time.Now().Format(time.RFC3339),
+				},
+			})
+			switch item["item_type"].(string) {
+			case "eebeb7269f":
+				// add 100 rotur credits to the user
+				account.SetBalance(float64(account.GetCredits()) + 100)
+				go saveUsers()
+			}
+		}
 	}
 
 	c.JSON(200, gin.H{"status": "success"})
