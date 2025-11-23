@@ -326,7 +326,7 @@ func adminAddUserToKey(c *gin.Context) {
 
 	for i := range keys {
 		if keys[i].Key == id {
-			if strings.EqualFold(keys[i].Creator, user.GetUsername()) {
+			if !strings.EqualFold(keys[i].Creator, user.GetUsername()) {
 				c.JSON(403, gin.H{"error": "You can only add users to your own keys"})
 				return
 			}
@@ -362,7 +362,7 @@ func adminRemoveUserFromKey(c *gin.Context) {
 
 	for i := range keys {
 		if keys[i].Key == id {
-			if strings.EqualFold(keys[i].Creator, user.GetUsername()) {
+			if !strings.EqualFold(keys[i].Creator, user.GetUsername()) {
 				c.JSON(403, gin.H{"error": "You can only remove users from your own keys"})
 				return
 			}
