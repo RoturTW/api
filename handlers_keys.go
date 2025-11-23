@@ -300,7 +300,7 @@ func getKey(c *gin.Context) {
 
 	for _, key := range keys {
 		if key.Key == id {
-			c.JSON(200, key)
+			c.JSON(200, key.ToPublic())
 			return
 		}
 	}

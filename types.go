@@ -630,6 +630,15 @@ func (k *Key) setKey(key string, value any) {
 	}
 }
 
+func (k *Key) ToPublic() map[string]any {
+	return map[string]any{
+		"key":   k.Key,
+		"name":  k.Name,
+		"price": k.Price,
+		"type":  k.Type,
+	}
+}
+
 // KeyUserData represents user data for a key
 type KeyUserData struct {
 	Time        float64 `json:"time"`
