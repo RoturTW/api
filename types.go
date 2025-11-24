@@ -308,6 +308,15 @@ func (u User) GetSubscription() subscription {
 		if checkExternalBilling() {
 			return val
 		}
+		go sendDiscordWebhook([]map[string]any{
+			{
+				"title": "Lost Subscription",
+				"description": fmt.Sprintf("**User:** %s\n**Tier:** %s\n**Next Billing:** %s",
+					u.GetUsername(), val.Tier, time.Unix(val.Next_billing/1000, 0).Format(time.RFC3339)),
+				"color":     0x57cdac,
+				"timestamp": time.Now().Format(time.RFC3339),
+			},
+		})
 		val.Active = false
 		val.Next_billing = 0
 		val.Tier = "Free"
