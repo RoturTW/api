@@ -1355,7 +1355,7 @@ func canClaimDaily(user *User) float64 {
 	claimsData := loadDailyClaims()
 
 	nextClaimTime, ok := claimsData[username]
-	if !ok {
+	if !ok || nextClaimTime == 0 {
 		return 0
 	}
 
