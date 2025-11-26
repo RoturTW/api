@@ -92,16 +92,16 @@ func doAfter(fn func(any), data any, after time.Duration) {
 }
 
 func hasTierOrHigher(tier string, required string) bool {
-	required = strings.ToLower(required)
-	switch strings.ToLower(tier) {
+	tier = strings.ToLower(tier)
+	switch strings.ToLower(required) {
 	case "max":
-		return true
+		return tier == "max"
 	case "pro":
-		return required == "pro" || required == "max"
+		return tier == "pro" || tier == "max"
 	case "drive":
-		return required == "drive" || required == "pro" || required == "max"
+		return tier == "drive" || tier == "pro" || tier == "max"
 	case "lite":
-		return required == "lite" || required == "drive" || required == "pro" || required == "max"
+		return tier == "lite" || tier == "drive" || tier == "pro" || tier == "max"
 	}
 	return false
 }

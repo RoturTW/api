@@ -181,6 +181,9 @@ func patchUserUpdate(username, key string, value any) bool {
 }
 
 func broadcastUserUpdate(username, key string, value any) bool {
+	mu := getUserMutex(username)
+	mu.Lock()
+	defer mu.Unlock()
 	payload := createEventPayload("user_account_update", map[string]any{
 		"username": username,
 		"key":      key,

@@ -2,11 +2,15 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,16 +36,53 @@ func renderBioRegex(bio string, profile *User, otherKeys map[string]any) string 
 		safeProfile[k] = fmt.Sprintf("%v", v)
 	}
 
-	re := regexp.MustCompile(`{{\s*user ([a-zA-Z0-9_.]+)\s*}}`)
+	re := regexp.MustCompile(`{{\s*([a-zA-Z0-9_]+)\s+([:\/?&\-a-zA-Z0-9_.]+)\s*}}`)
 
 	result := re.ReplaceAllStringFunc(bio, func(match string) string {
-		key := strings.TrimSpace(re.FindStringSubmatch(match)[1])
-		if val, ok := safeProfile[key]; ok {
-			return val
+		sub := re.FindStringSubmatch(match)
+		if len(sub) != 3 {
+			return ""
+		}
+
+		prefix := sub[1]
+		key := sub[2]
+
+		switch prefix {
+		case "user":
+			if val, ok := safeProfile[key]; ok {
+				return val
+			}
+			return ""
+		case "url":
+			tier := profile.GetSubscription().Tier
+			if !hasTierOrHigher(tier, "Pro") {
+				return "{{ Error, url only available to Pro users }}"
+			}
+			client := &http.Client{
+				Timeout: 3 * time.Second,
+			}
+
+			resp, err := client.Get("https://proxy.mistium.com?url=" + url.QueryEscape(key))
+			if err != nil {
+				return ""
+			}
+			defer resp.Body.Close()
+
+			limited := io.LimitReader(resp.Body, 1000)
+
+			body, err := io.ReadAll(limited)
+			if err != nil {
+				return ""
+			}
+
+			if len(body) > 1000 {
+				body = body[:1000]
+			}
+
+			return string(body)
 		}
 		return ""
 	})
-
 	return result
 }
 
@@ -200,8 +241,12 @@ func getProfile(c *gin.Context) {
 
 	benefits := foundUser.GetSubscriptionBenefits()
 	bio := getStringOrEmpty(foundUser.Get("bio"))
-	if bio != "" && benefits.Has_Profile_notes {
+	if bio != "" && benefits.Has_Bio_templating {
 		bio = renderBioRegex(bio, foundUser, profileData)
+	}
+
+	if len(bio) > benefits.Bio_Length {
+		bio = bio[:benefits.Bio_Length]
 	}
 	profileData["bio"] = bio
 

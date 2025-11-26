@@ -29,6 +29,20 @@ type sub_benefits struct {
 	Has_Profile_notes       bool `json:"profile_notes"`
 }
 
+var userMutexesLock sync.Mutex
+var userMutexes = map[string]*sync.Mutex{}
+
+func getUserMutex(username string) *sync.Mutex {
+	userMutexesLock.Lock()
+	defer userMutexesLock.Unlock()
+	mu, ok := userMutexes[username]
+	if !ok {
+		mu = &sync.Mutex{}
+		userMutexes[username] = mu
+	}
+	return mu
+}
+
 var subs_benefits = map[string]sub_benefits{
 	"free":  tierFree(),
 	"lite":  tierLite(),
@@ -410,6 +424,9 @@ func (u User) DelKey(key string) error {
 }
 
 func (u User) Set(key string, value any) {
+	mu := getUserMutex(u.GetUsername())
+	mu.Lock()
+	defer mu.Unlock()
 	oldValue := u[key]
 	if reflect.DeepEqual(oldValue, value) {
 		return
