@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"os"
 	"sort"
@@ -46,9 +47,7 @@ func getNotifications(c *gin.Context) {
 					"id":        event.ID,
 					"timestamp": event.Timestamp,
 				}
-				for k, v := range event.Data {
-					notification[k] = v
-				}
+				maps.Copy(notification, event.Data)
 				notifications = append(notifications, notification)
 			}
 		}
@@ -105,16 +104,13 @@ func createEventPayload(eventType string, data any) map[string]any {
 	return map[string]any{
 		"event_type": eventType,
 		"data":       data,
+		"from":       "rotur",
 	}
 }
 
-func broadcastEvent(eventType string, data any) bool {
+func broadcastClawEvent(eventType string, data any) bool {
 	payload := createEventPayload(eventType, data)
 	return makeHTTPRequest("POST", WEBSOCKET_SERVER_URL, payload, 2*time.Second, "WebSocket", 200)
-}
-
-func broadcastNewPost(postData Post) {
-	broadcastEvent("new_post", postData)
 }
 
 func sendPostToDiscord(postData Post) {
@@ -208,6 +204,22 @@ func broadcastUserRemove(username, key string) bool {
 func addUserEvent(username, eventType string, data map[string]any) Event {
 	eventsHistoryMutex.Lock()
 	defer eventsHistoryMutex.Unlock()
+
+	switch eventType {
+	case "follow":
+		go broadcastClawEvent("followers", map[string]any{
+			"username":  username,
+			"followers": len(data["followers"].([]string)),
+		})
+	case "reply":
+		post_id := data["post_id"].(string)
+		post := getPostById(post_id)
+		go broadcastClawEvent("update_post", map[string]any{
+			"id":   post_id,
+			"key":  "replies",
+			"data": post.Replies,
+		})
+	}
 
 	username = strings.ToLower(username)
 

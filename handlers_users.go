@@ -819,37 +819,8 @@ func updateUserAdmin(c *gin.Context) {
 }
 
 func gambleCredits(c *gin.Context) {
-	user := c.MustGet("user").(*User)
-
-	var req struct {
-		Amount float64 `json:"amount"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": "Invalid request payload"})
-		return
-	}
-
-	nAmount, ok := normalizeEscrowAmount(req.Amount)
-	if !ok {
-		c.JSON(400, gin.H{"error": "Minimum amount is 0.01"})
-		return
-	}
-
-	cf := user.GetCredits()
-	if cf < nAmount {
-		c.JSON(400, gin.H{"error": "Insufficient funds"})
-		return
-	}
-
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	if r.Intn(100) < 40 {
-		user.SetBalance(roundVal(cf + nAmount))
-		c.JSON(200, gin.H{"message": "You won!", "won": true, "amount": nAmount, "balance": user.GetCredits()})
-	} else {
-		user.SetBalance(roundVal(cf - nAmount))
-		c.JSON(200, gin.H{"message": "You lost!", "won": false, "amount": nAmount, "balance": user.GetCredits()})
-	}
-	go saveUsers()
+	c.JSON(400, gin.H{"error": "This endpoint is no longer available"})
+	return
 }
 
 func deleteUserKey(c *gin.Context) {

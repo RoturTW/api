@@ -655,7 +655,7 @@ func checkSubscriptions() {
 						userData.NextBilling = newNextBilling
 						key.Users[username] = userData
 
-						if len(*key.Webhook) > 0 {
+						if key.Webhook != nil && len(*key.Webhook) > 0 {
 							_ = sendWebhook(*key.Webhook, map[string]any{
 								"username":  username, // purchaser
 								"key":       key.Key,  // id

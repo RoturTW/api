@@ -142,12 +142,27 @@ func createPost(c *gin.Context) {
 	// Send the new post to the WebSocket server only if it's not profile-only
 	if !profileOnly {
 		go func() {
-			broadcastNewPost(newPost)
+			broadcastClawEvent("new_post", newPost)
 			sendPostToDiscord(newPost)
 		}()
 	}
 
 	c.JSON(201, newPost)
+}
+
+func getPostById(id string) *Post {
+	postsMutex.Lock()
+	defer postsMutex.Unlock()
+
+	var targetPost *Post = nil
+	for i := range posts {
+		if posts[i].ID == id {
+			targetPost = &posts[i]
+			break
+		}
+	}
+
+	return targetPost
 }
 
 func replyToPost(c *gin.Context) {
@@ -184,25 +199,19 @@ func replyToPost(c *gin.Context) {
 		return
 	}
 
-	postsMutex.Lock()
-	var targetPost *Post
-	for i := range posts {
-		if posts[i].ID == postID {
-			targetPost = &posts[i]
-			break
-		}
-	}
+	var targetPost *Post = getPostById(postID)
 
 	if targetPost == nil {
-		postsMutex.Unlock()
 		c.JSON(404, gin.H{"error": "Post not found"})
 		return
 	}
 
+	postsMutex.Lock()
+	defer postsMutex.Unlock()
+
 	idx := getIdxOfAccountBy("username", targetPost.User)
 	targetUser := users[idx]
 	if isUserBlockedBy(targetUser, user.GetUsername()) {
-		postsMutex.Unlock()
 		c.JSON(400, gin.H{"error": "You cant reply to this post"})
 		return
 	}
@@ -219,17 +228,8 @@ func replyToPost(c *gin.Context) {
 	}
 
 	targetPost.Replies = append(targetPost.Replies, newReply)
-	postsMutex.Unlock()
 
 	go savePosts()
-
-	go func() {
-		broadcastEvent("update_post", map[string]any{
-			"id":   postID,
-			"key":  "replies",
-			"data": targetPost.Replies,
-		})
-	}()
 
 	addUserEvent(targetPost.User, "reply", map[string]any{
 		"post_id":  postID,
@@ -282,7 +282,7 @@ func deletePost(c *gin.Context) {
 
 	// Broadcast deletion event for public posts
 	if wasPublic {
-		go broadcastEvent("delete_post", map[string]any{"id": postID})
+		go broadcastClawEvent("delete_post", map[string]any{"id": postID})
 	}
 
 	c.JSON(200, gin.H{"message": "Post deleted successfully"})
@@ -367,7 +367,7 @@ func ratePost(c *gin.Context) {
 
 	// Broadcast rating update for public posts
 	if !targetPost.ProfileOnly {
-		go broadcastEvent("update_post", map[string]any{
+		go broadcastClawEvent("update_post", map[string]any{
 			"id":   postID,
 			"key":  "likes",
 			"data": targetPost.Likes,
@@ -498,7 +498,7 @@ func pinPost(c *gin.Context) {
 
 	// Broadcast pin update for public posts
 	if !targetPost.ProfileOnly {
-		go broadcastEvent("update_post", map[string]any{
+		go broadcastClawEvent("update_post", map[string]any{
 			"id":   postID,
 			"key":  "pinned",
 			"data": true,
@@ -546,7 +546,7 @@ func unpinPost(c *gin.Context) {
 
 	// Broadcast unpin update for public posts
 	if !targetPost.ProfileOnly {
-		go broadcastEvent("update_post", map[string]any{
+		go broadcastClawEvent("update_post", map[string]any{
 			"id":   postID,
 			"key":  "pinned",
 			"data": false,

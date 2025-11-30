@@ -118,10 +118,10 @@ func handleKofiTransaction(c *gin.Context) {
 					"timestamp": time.Now().Format(time.RFC3339),
 				},
 			})
-			switch item["item_type"].(string) {
+			switch item["direct_link_code"].(string) {
 			case "eebeb7269f":
 				// add 100 rotur credits to the user
-				account.SetBalance(float64(account.GetCredits()) + 100)
+				account.SetBalance(float64(account.GetCredits()) + 30)
 				go saveUsers()
 			}
 		}

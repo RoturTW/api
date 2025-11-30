@@ -59,13 +59,8 @@ func followUser(c *gin.Context) {
 
 	go saveFollowers()
 
-	go broadcastEvent("followers", map[string]any{
-		"username":  targetUsername,
-		"followers": len(data.Followers),
-	})
-
 	addUserEvent(targetUsername, "follow", map[string]any{
-		"follower": currentUsername,
+		"followers": data.Followers,
 	})
 
 	c.JSON(200, gin.H{"message": "You are now following " + targetUsername})
@@ -116,7 +111,7 @@ func unfollowUser(c *gin.Context) {
 
 	go saveFollowers()
 
-	go broadcastEvent("followers", map[string]any{
+	go broadcastClawEvent("followers", map[string]any{
 		"username":  targetUsername,
 		"followers": len(data.Followers),
 	})
