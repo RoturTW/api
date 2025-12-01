@@ -19,6 +19,7 @@ type subscription struct {
 type sub_benefits struct {
 	Max_Keys                int  `json:"max_keys"`
 	Max_Login_History       int  `json:"max_login_history"`
+	Max_Transaction_History int  `json:"max_transaction_history"`
 	Max_Rmails              int  `json:"max_rmails"`
 	FileSystem_Size         int  `json:"file_system_size"`
 	Bio_Length              int  `json:"bio_length"`
@@ -54,11 +55,12 @@ var subs_benefits = map[string]sub_benefits{
 
 func tierFree() sub_benefits {
 	benefits := sub_benefits{
-		Max_Keys:          5,
-		Max_Login_History: 10,
-		Max_Rmails:        100,
-		FileSystem_Size:   5_000_000,
-		Bio_Length:        300,
+		Max_Keys:                5,
+		Max_Login_History:       10,
+		Max_Rmails:              100,
+		FileSystem_Size:         5_000_000,
+		Bio_Length:              300,
+		Max_Transaction_History: 20,
 	}
 	return benefits
 }
@@ -85,6 +87,7 @@ func tierDrive() sub_benefits {
 	b.FileSystem_Size = 15_000_000
 	b.Bio_Length = 500
 	b.Has_Animated_Pfp = true
+	b.Max_Transaction_History = 100
 	return b
 }
 
@@ -96,6 +99,7 @@ func tierPro() sub_benefits {
 	b.Bio_Length = 1000
 	b.Has_Animated_Banner = true
 	b.Has_Free_Banner_Uploads = true
+	b.Max_Transaction_History = 500
 	return b
 }
 

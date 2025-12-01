@@ -944,8 +944,9 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 	appendTx := func(u *User, tx map[string]any) {
 		txs := ensureTxSlice(u)
 		txs = append([]map[string]any{tx}, txs...)
-		if len(txs) > 20 {
-			txs = txs[:20]
+		benefits := u.GetSubscriptionBenefits()
+		if len(txs) > benefits.Max_Transaction_History {
+			txs = txs[:benefits.Max_Transaction_History]
 		}
 		(*u)["sys.transactions"] = txs
 	}
