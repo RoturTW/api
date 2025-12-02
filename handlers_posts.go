@@ -352,8 +352,6 @@ func ratePost(c *gin.Context) {
 		targetPost.Likes = newLikes
 	}
 
-	postsMutex.Unlock()
-
 	go savePosts()
 
 	// Broadcast rating update for public posts
