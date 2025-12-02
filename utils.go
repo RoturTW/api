@@ -285,6 +285,15 @@ func cleanRateLimitStorage() {
 	}
 }
 
+func getUserByIdx(idx int) (*User, error) {
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+	if idx < 0 || len(users) <= idx {
+		return nil, fmt.Errorf("index out of bounds")
+	}
+	return &users[idx], nil
+}
+
 func rateLimit(limitType string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rateLimitKey := getRateLimitKey(c)
@@ -334,14 +343,7 @@ func getBannedIPs() []string {
 
 func isBannedIp(ip string) bool {
 	bannedIPs := getBannedIPs()
-	if slices.Contains(bannedIPs, ip) {
-		return true
-	}
-
-	if slices.Contains(torips, ip) {
-		return true
-	}
-	return false
+	return slices.Contains(bannedIPs, ip)
 }
 
 func corsMiddleware() gin.HandlerFunc {

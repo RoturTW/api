@@ -126,13 +126,13 @@ func getUserBy(c *gin.Context) {
 		return
 	}
 
-	users, err := getAccountsBy(key, value, 1)
+	foundUsers, err := getAccountsBy(key, value, 1)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
 
-	copy := copyUser(users[0])
+	copy := copyUser(foundUsers[0])
 	delete(copy, "password")
 
 	c.JSON(200, copy)
@@ -578,7 +578,7 @@ func updateUser(c *gin.Context) {
 				return
 			}
 		}
-		var currencyFloat float64 = users[userIndex].GetCredits()
+		var currencyFloat float64 = user.GetCredits()
 		if currencyFloat < 10 && !freeAndGifUploads {
 			c.JSON(403, gin.H{"error": "Not enough credits to set banner (10 required)"})
 			return
@@ -594,12 +594,14 @@ func updateUser(c *gin.Context) {
 			return
 		}
 		if !freeAndGifUploads {
-			users[userIndex].SetBalance(currencyFloat - 10)
+			usersMutex.Lock()
+			defer usersMutex.Unlock()
+			user.SetBalance(currencyFloat - 10)
 		}
 		go doAfter(func(data any) {
 			usersMutex.Lock()
 			defer usersMutex.Unlock()
-			users[userIndex].Set("sys.banner", "https://avatars.rotur.dev/.banners/"+user.GetUsername())
+			user.Set("sys.banner", "https://avatars.rotur.dev/.banners/"+user.GetUsername())
 			go saveUsers()
 		}, nil, time.Second*2)
 		c.JSON(200, gin.H{"message": "Banner uploaded successfully"})
@@ -662,6 +664,8 @@ func updateUser(c *gin.Context) {
 	}
 
 	if key == "email" {
+		usersMutex.RLock()
+		defer usersMutex.RUnlock()
 		for _, user := range users {
 			if strings.EqualFold(getStringOrEmpty(user.Get("email")), stringValue) {
 				c.JSON(400, gin.H{"error": "Email already in use"})
@@ -756,6 +760,8 @@ func updateUserAdmin(c *gin.Context) {
 			}
 
 			// Ensure sys.currency stays a float64 when updated via admin endpoint
+			usersMutex.Lock()
+			defer usersMutex.Unlock()
 			if key == "sys.currency" {
 				users[userIndex].SetBalance(value)
 			} else {
@@ -797,6 +803,8 @@ func updateUserAdmin(c *gin.Context) {
 				return
 			}
 
+			usersMutex.Lock()
+			defer usersMutex.Unlock()
 			users[userIndex].DelKey(key)
 
 			go saveUsers()
@@ -820,7 +828,6 @@ func updateUserAdmin(c *gin.Context) {
 
 func gambleCredits(c *gin.Context) {
 	c.JSON(400, gin.H{"error": "This endpoint is no longer available"})
-	return
 }
 
 func deleteUserKey(c *gin.Context) {
@@ -964,10 +971,10 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 
 	// Apply tax to taxRecipient if exists
 	if idx := getIdxOfAccountBy("username", taxRecipient); idx != -1 {
-		taxUser := users[idx]
+		taxUser, _ := getUserByIdx(idx)
 		curr := taxUser.GetCredits()
 		taxUser.SetBalance(roundVal(curr + taxRecipientShare))
-		appendTx(&taxUser, map[string]any{
+		appendTx(taxUser, map[string]any{
 			"note":      "transfer tax",
 			"user":      fromUser.GetUsername(),
 			"time":      now,

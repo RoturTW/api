@@ -29,13 +29,11 @@ func sendFriendRequest(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "Account does not exist"})
 		return
 	}
-	if isUserBlockedBy(users[idx], senderName) {
+	target, _ := getUserByIdx(idx)
+	if isUserBlockedBy(*target, senderName) {
 		c.JSON(400, gin.H{"error": "You cant send friend requests to this user"})
 		return
 	}
-	var target User = users[idx]
-
-	usersMutex.Lock()
 
 	senderFriends := sender.GetFriends()
 	targetFriends := target.GetFriends()
@@ -43,7 +41,6 @@ func sendFriendRequest(c *gin.Context) {
 
 	for _, f := range senderFriends {
 		if strings.ToLower(f) == targetLower {
-			usersMutex.Unlock()
 			c.JSON(400, gin.H{"error": "Already Friends"})
 			return
 		}
@@ -54,14 +51,12 @@ func sendFriendRequest(c *gin.Context) {
 		if strings.ToLower(f) == senderName {
 			targetFriends = append(targetFriends, senderName)
 			target.SetFriends(targetFriends)
-			usersMutex.Unlock()
 			c.JSON(400, gin.H{"error": "Already Friends"})
 			return
 		}
 	}
 	for _, r := range targetRequests {
 		if strings.ToLower(r) == senderName {
-			usersMutex.Unlock()
 			c.JSON(400, gin.H{"error": "Already Requested"})
 			return
 		}
@@ -71,7 +66,6 @@ func sendFriendRequest(c *gin.Context) {
 	target.SetRequests(targetRequests)
 	sender.SetFriends(senderFriends)
 
-	usersMutex.Unlock()
 	go saveUsers()
 
 	c.JSON(200, gin.H{"message": "Friend request sent successfully"})
@@ -92,14 +86,13 @@ func acceptFriendRequest(c *gin.Context) {
 		return
 	}
 
-	idx := getIdxOfAccountBy("username", requesterName)
-	if idx == -1 {
+	foundUsers, err := getAccountsBy("username", requesterName, 1)
+	if err != nil {
 		c.JSON(404, gin.H{"error": "Account Does Not Exist"})
 		return
 	}
-	var requester User = users[idx]
-	usersMutex.Lock()
 
+	requester := foundUsers[0]
 	currentRequests := current.GetRequests()
 	found := false
 	newRequests := make([]string, 0, len(currentRequests))
@@ -111,7 +104,6 @@ func acceptFriendRequest(c *gin.Context) {
 		newRequests = append(newRequests, r)
 	}
 	if !found {
-		usersMutex.Unlock()
 		c.JSON(400, gin.H{"error": "No Pending Request"})
 		return
 	}
@@ -139,8 +131,6 @@ func acceptFriendRequest(c *gin.Context) {
 	if !requesterAlreadyHas {
 		requesterFriends = append(requesterFriends, currentName)
 	}
-
-	usersMutex.Unlock()
 
 	current.SetRequests(newRequests)
 	current.SetFriends(currentFriends)
@@ -209,6 +199,8 @@ func removeFriend(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "Account Does Not Exist"})
 		return
 	}
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
 	var other User = users[idx]
 
 	currentFriends := current.GetFriends()

@@ -6,14 +6,15 @@ import (
 	"strconv"
 )
 
+const DAILY_CLAIMS_FILE_PATH = "./rotur_daily.json"
+const USERS_FILE_PATH = "./users.json"
+
 var (
-	USERS_FILE_PATH               string
 	LOCAL_POSTS_PATH              string
 	FOLLOWERS_FILE_PATH           string
 	ITEMS_FILE_PATH               string
 	KEYS_FILE_PATH                string
 	EVENTS_HISTORY_PATH           string
-	DAILY_CLAIMS_FILE_PATH        string
 	SYSTEMS_FILE_PATH             string
 	WEBSOCKET_SERVER_URL          string
 	EVENT_SERVER_URL              string
@@ -67,13 +68,11 @@ func intEnv(key string, def int) int {
 }
 
 func loadConfigFromEnv() {
-	USERS_FILE_PATH = mustEnv("USERS_FILE_PATH", "./users.json")
 	LOCAL_POSTS_PATH = mustEnv("LOCAL_POSTS_PATH", "./posts.json")
 	FOLLOWERS_FILE_PATH = mustEnv("FOLLOWERS_FILE_PATH", "./clawusers.json")
 	ITEMS_FILE_PATH = mustEnv("ITEMS_FILE_PATH", "./items.json")
 	KEYS_FILE_PATH = mustEnv("KEYS_FILE_PATH", "./keys.json")
 	EVENTS_HISTORY_PATH = mustEnv("EVENTS_HISTORY_PATH", "./events_history.json")
-	DAILY_CLAIMS_FILE_PATH = mustEnv("DAILY_CLAIMS_FILE_PATH", "./rotur_daily.json")
 	SYSTEMS_FILE_PATH = mustEnv("SYSTEMS_FILE_PATH", "./systems.json")
 
 	// External services

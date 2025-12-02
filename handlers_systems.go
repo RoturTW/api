@@ -157,8 +157,8 @@ func reloadSystems() error {
 }
 
 func getSystems(c *gin.Context) {
-	systems := getAllSystems()
-	c.JSON(200, systems)
+	allSystems := getAllSystems()
+	c.JSON(200, allSystems)
 }
 
 func getSystemUsers(c *gin.Context) {
@@ -183,14 +183,14 @@ func getSystemUsers(c *gin.Context) {
 		return
 	}
 
-	users, err := getAccountsBy("system", system.Name, -1)
+	foundUsers, err := getAccountsBy("system", system.Name, -1)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
-	usernames := make([]string, 0, len(users))
-	for _, user := range users {
+	usernames := make([]string, 0, len(foundUsers))
+	for _, user := range foundUsers {
 		usernames = append(usernames, user.GetUsername())
 	}
 	c.JSON(200, usernames)

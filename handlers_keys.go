@@ -464,19 +464,19 @@ func buyKey(c *gin.Context) {
 					break
 				}
 			}
+			usersMutex.Unlock()
 
 			if userIndex != -1 {
-				usersMutex.Unlock()
 				// Flexible extraction for sys.currency
-				newCurrency := user.GetCredits() - float64(keys[i].Price)
-				users[userIndex].SetBalance(newCurrency)
+				user.SetBalance(user.GetCredits() - float64(keys[i].Price))
 
 				// Pay the creator
 				if ownerIndex != -1 && ownerIndex != userIndex {
-					var ownerCurrency float64 = users[ownerIndex].GetCredits()
+					owner, _ := getUserByIdx(ownerIndex)
+					var ownerCurrency float64 = owner.GetCredits()
 					// 10% tax on purchase
 					value := float64(keys[i].Price) * 0.9
-					users[ownerIndex].SetBalance(ownerCurrency + value)
+					owner.SetBalance(ownerCurrency + value)
 				}
 
 				if len(*keys[i].Webhook) > 0 {
@@ -491,7 +491,6 @@ func buyKey(c *gin.Context) {
 
 				go saveUsers()
 			} else {
-				usersMutex.Unlock()
 				c.JSON(500, gin.H{"error": "User not found in users list"})
 				return
 			}
@@ -602,7 +601,9 @@ func checkSubscriptions() {
 							continue
 						}
 
+						usersMutex.RLock()
 						var currencyFloat float64 = users[userIndex].GetCredits()
+						usersMutex.RUnlock()
 						if currencyFloat < float64(userData.Price) {
 							log.Printf("User %s does not have enough currency for key %s (needed: %.2f, available: %.2f)",
 								username, key.Key, float64(userData.Price), currencyFloat)
@@ -617,11 +618,13 @@ func checkSubscriptions() {
 							continue
 						}
 						currencyFloat -= float64(userData.Price)
+						usersMutex.Lock()
 						users[userIndex].SetBalance(currencyFloat)
 
 						// 10% tax on purchase
 						value := float64(userData.Price) * 0.9
 						users[ownerIndex].SetBalance(currencyFloat + value)
+						usersMutex.Unlock()
 						go saveUsers()
 
 						// Update total income for the key

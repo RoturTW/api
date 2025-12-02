@@ -22,13 +22,6 @@ var postLimits = map[string]int{
 
 var lockedKeys = []string{"username", "last_login", "max_size", "key", "created", "system", "id"}
 
-type ValidatorInfo struct {
-	Value     string
-	Timestamp int64
-}
-
-var validatorInfos = make(map[string]ValidatorInfo)
-
 func getLimits(c *gin.Context) {
 	c.JSON(200, postLimits)
 }
@@ -206,12 +199,9 @@ func replyToPost(c *gin.Context) {
 		return
 	}
 
-	postsMutex.Lock()
-	defer postsMutex.Unlock()
-
 	idx := getIdxOfAccountBy("username", targetPost.User)
-	targetUser := users[idx]
-	if isUserBlockedBy(targetUser, user.GetUsername()) {
+	targetUser, err := getUserByIdx(idx)
+	if isUserBlockedBy(*targetUser, user.GetUsername()) || err != nil {
 		c.JSON(400, gin.H{"error": "You cant reply to this post"})
 		return
 	}
@@ -317,9 +307,9 @@ func ratePost(c *gin.Context) {
 			break
 		}
 	}
+	postsMutex.Unlock()
 
 	if targetPost == nil {
-		postsMutex.Unlock()
 		c.JSON(404, gin.H{"error": "Post not found"})
 		return
 	}
@@ -327,12 +317,13 @@ func ratePost(c *gin.Context) {
 	if rating == 1 {
 		idx := getIdxOfAccountBy("username", targetPost.User)
 		if idx == -1 {
-			targetUser := users[idx]
-			if isUserBlockedBy(targetUser, user.GetUsername()) {
-				postsMutex.Unlock()
-				c.JSON(400, gin.H{"error": "You cant like this post"})
-				return
-			}
+			c.JSON(400, gin.H{"error": "User does not exist"})
+			return
+		}
+		targetUser, err := getUserByIdx(idx)
+		if isUserBlockedBy(*targetUser, user.GetUsername()) || err != nil {
+			c.JSON(400, gin.H{"error": "You cant like this post"})
+			return
 		}
 	}
 
@@ -406,8 +397,8 @@ func repost(c *gin.Context) {
 	}
 
 	idx := getIdxOfAccountBy("username", originalPost.User)
-	originalUser := users[idx]
-	if isUserBlockedBy(originalUser, user.GetUsername()) {
+	originalUser, err := getUserByIdx(idx)
+	if isUserBlockedBy(*originalUser, user.GetUsername()) || err != nil {
 		postsMutex.Unlock()
 		c.JSON(400, gin.H{"error": "You cant repost this post"})
 		return
@@ -728,11 +719,8 @@ func getFollowingFeed(c *gin.Context) {
 	following := make([]string, 0)
 	followersMutex.RLock()
 	for targetUser, data := range followersData {
-		for _, follower := range data.Followers {
-			if follower == username {
-				following = append(following, targetUser)
-				break
-			}
+		if slices.Contains(data.Followers, username) {
+			following = append(following, targetUser)
 		}
 	}
 	followersMutex.RUnlock()
@@ -741,13 +729,7 @@ func getFollowingFeed(c *gin.Context) {
 	postsMutex.RLock()
 	followingPosts := make([]Post, 0)
 	for _, post := range posts {
-		isFollowed := false
-		for _, followedUser := range following {
-			if post.User == followedUser {
-				isFollowed = true
-				break
-			}
-		}
+		isFollowed := slices.Contains(following, post.User)
 		if isFollowed && !(post.ProfileOnly && post.User != username) {
 			followingPosts = append(followingPosts, post)
 		}

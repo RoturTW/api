@@ -5,10 +5,19 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+type ValidatorInfo struct {
+	Value     string
+	Timestamp int64
+}
+
+var validatorInfos = make(map[string]ValidatorInfo)
+var validatorMutex sync.RWMutex
 
 func generateValidator(c *gin.Context) {
 	authKey := c.Query("auth")
@@ -27,6 +36,8 @@ func generateValidator(c *gin.Context) {
 	hashedKey := hex.EncodeToString(hasher.Sum(nil))
 
 	// Store the validator and timestamp for this user
+	validatorMutex.Lock()
+	defer validatorMutex.Unlock()
 	validatorInfos[user.GetUsername()] = ValidatorInfo{
 		Value:     hashedKey,
 		Timestamp: timestamp,
@@ -64,12 +75,11 @@ func validateToken(c *gin.Context) {
 
 	// Find the user in the users list
 	idx := getIdxOfAccountBy("username", username)
-	if idx == -1 {
+	foundUser, err := getUserByIdx(idx)
+	if err != nil {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
-	var foundUser User = users[idx]
-
 	// Get the user's key (token)
 	userKey := foundUser.GetKey()
 	if userKey == "" {
@@ -78,7 +88,9 @@ func validateToken(c *gin.Context) {
 	}
 
 	// Check if validator matches latest and is not expired
+	validatorMutex.RLock()
 	info, ok := validatorInfos[username]
+	validatorMutex.RUnlock()
 	if !ok || info.Value != encryptedData || time.Now().Unix()-info.Timestamp > 300 {
 		c.JSON(200, gin.H{"valid": false, "error": "Validator expired or invalid"})
 		return

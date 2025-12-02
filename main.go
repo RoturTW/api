@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -12,9 +11,6 @@ func main() {
 	envOnce.Do(loadEnvFile)
 	// (Re)load config in case env was changed externally
 	loadConfigFromEnv()
-
-	// Initialize start time
-	startTime = time.Now()
 
 	// Load initial data
 	loadBannedWords()
@@ -26,8 +22,6 @@ func main() {
 	loadSystems()
 	loadEventsHistory()
 	reconnectFriends()
-
-	StartAutoUpdater(5 * time.Minute)
 
 	go cleanRateLimitStorage()
 	go checkSubscriptions()

@@ -322,7 +322,7 @@ func (u User) GetSubscription() subscription {
 		return val
 	}
 
-	if val.Next_billing < time.Now().UnixMilli() {
+	if val.Next_billing < time.Now().UnixMilli() && val.Active {
 		if checkExternalBilling() {
 			return val
 		}
@@ -730,7 +730,7 @@ var (
 	eventsHistoryMutex sync.RWMutex
 
 	rateLimitStorage = make(map[string]*RateLimit)
-	rateLimitMutex   = sync.RWMutex{}
+	rateLimitMutex   sync.RWMutex
 
 	keyOwnershipCacheMutex sync.RWMutex
 

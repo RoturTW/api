@@ -11,6 +11,8 @@ func calculateUserBadges(user User) []Badge {
 	system := user.Get("system")
 	if system != "" {
 		system := getStringOrEmpty(system)
+		systemsMutex.RLock()
+		defer systemsMutex.RUnlock()
 		systemData, ok := systems[system]
 		if ok {
 			if systemData.Owner.Name != "" {

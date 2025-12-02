@@ -300,6 +300,7 @@ func getSupporters(c *gin.Context) {
 
 	supporters := make([]map[string]string, 0)
 	usersMutex.RLock()
+	defer usersMutex.RUnlock()
 	for _, user := range users {
 		subscriptionName := user.GetSubscription().Tier
 		if subscriptionName == "Free" {
@@ -310,6 +311,5 @@ func getSupporters(c *gin.Context) {
 			"subscription": subscriptionName,
 		})
 	}
-	usersMutex.RUnlock()
 	c.JSON(200, supporters)
 }

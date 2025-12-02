@@ -11,9 +11,9 @@ func authenticateWithKey(key string) *User {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 
-	for i := range users {
-		if users[i].GetKey() == key {
-			return &users[i]
+	for _, user := range users {
+		if user.GetKey() == key {
+			return &user
 		}
 	}
 	return nil
