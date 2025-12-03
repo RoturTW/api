@@ -692,12 +692,12 @@ func updateUser(c *gin.Context) {
 		return
 	}
 
-	if len(stringValue) > 1000 {
-		c.JSON(400, gin.H{"error": "Value length exceeds 1000 characters"})
-		return
-	}
 	if strings.HasPrefix(key, "sys.") && !admin {
 		c.JSON(400, gin.H{"error": "System keys cannot be modified directly"})
+		return
+	}
+	if len(stringValue) > 1000 {
+		c.JSON(400, gin.H{"error": "Value length exceeds 1000 characters"})
 		return
 	}
 	if len(key) > 20 {
@@ -759,13 +759,15 @@ func updateUserAdmin(c *gin.Context) {
 			}
 
 			// Validate key and value constraints
-			if len(key) > 50 {
-				c.JSON(400, gin.H{"error": fmt.Sprintf("Key '%s' length exceeds 50 characters", key)})
-				return
-			}
-			if strVal, ok := value.(string); ok && len(strVal) > 5000 {
-				c.JSON(400, gin.H{"error": fmt.Sprintf("Value for key '%s' length exceeds 5000 characters", key)})
-				return
+			if !strings.HasPrefix(key, "sys.") {
+				if len(key) > 50 {
+					c.JSON(400, gin.H{"error": fmt.Sprintf("Key '%s' length exceeds 50 characters", key)})
+					return
+				}
+				if strVal, ok := value.(string); ok && len(strVal) > 5000 {
+					c.JSON(400, gin.H{"error": fmt.Sprintf("Value for key '%s' length exceeds 5000 characters", key)})
+					return
+				}
 			}
 
 			// Ensure sys.currency stays a float64 when updated via admin endpoint
