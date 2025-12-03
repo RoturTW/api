@@ -59,7 +59,8 @@ func main() {
 	{
 		stats.GET("/economy", rateLimit("default"), getEconomyStats)
 		stats.GET("/users", rateLimit("default"), getUserStats)
-		stats.GET("/rich", rateLimit("default"), getRichList)
+		// stats.GET("/rich", rateLimit("default"), getRichList)
+		stats.GET("/most_gained", rateLimit("default"), getMostGained)
 		stats.GET("/systems", rateLimit("default"), getSystemStats)
 		stats.GET("/followers", rateLimit("default"), getFollowersStats)
 	}

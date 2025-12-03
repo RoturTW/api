@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -164,6 +165,81 @@ func getRichList(c *gin.Context) {
 	}
 
 	c.JSON(200, richList)
+}
+
+func getMostGained(c *gin.Context) {
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
+	max := c.Query("max")
+	if max == "" {
+		max = "10"
+	}
+	maxInt, err := strconv.Atoi(max)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid max parameter"})
+		return
+	}
+	if maxInt > 10 {
+		maxInt = 10
+	}
+
+	monthAgo := time.Now().AddDate(0, -1, 0).UnixMilli()
+
+	type result struct {
+		User   string  `json:"user"`
+		Earned float64 `json:"earned"`
+	}
+
+	leaderboard := make([]result, 0, 256)
+
+	for _, user := range users {
+		if user.Get("sys.banned") != nil || user.Get("private") == true {
+			continue
+		}
+
+		txs := user.GetTransactions()
+		if len(txs) == 0 {
+			continue
+		}
+
+		var earned float64
+
+		for i := len(txs) - 1; i >= 0; i-- {
+			tx := txs[i]
+
+			t, ok := tx["time"].(float64)
+			if !ok || int64(t) < monthAgo {
+				continue
+			}
+
+			amt, ok := tx["amount"].(float64)
+			if !ok || amt <= 0 {
+				continue
+			}
+
+			typ, _ := tx["type"].(string)
+			switch typ {
+			case "in", "key_sale", "tax":
+				earned += amt
+			case "out":
+				earned -= amt
+			}
+		}
+
+		if earned > 0 {
+			leaderboard = append(leaderboard, result{
+				User:   user.GetUsername(),
+				Earned: earned,
+			})
+		}
+	}
+
+	sort.Slice(leaderboard, func(i, j int) bool {
+		return leaderboard[i].Earned > leaderboard[j].Earned
+	})
+
+	c.JSON(200, leaderboard[:maxInt])
 }
 
 func getSystemStats(c *gin.Context) {

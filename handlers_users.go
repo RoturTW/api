@@ -1106,13 +1106,14 @@ func transferCreditsAdmin(c *gin.Context) {
 	toUsername := c.Query("to")
 	amountStr := c.Query("amount")
 	fromUsername := c.Query("from")
+	note := c.Query("note")
 
 	amountNum, err := strconv.ParseFloat(amountStr, 64)
 	if err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	err = PerformCreditTransfer(fromUsername, toUsername, amountNum, "")
+	err = PerformCreditTransfer(fromUsername, toUsername, amountNum, note)
 	if err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
