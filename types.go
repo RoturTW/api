@@ -396,8 +396,7 @@ func (u User) addTransaction(tx map[string]any) {
 	txs := u.GetTransactions()
 	benefits := u.GetSubscriptionBenefits()
 
-	tx["new_total"] = u.GetCredits() + getFloatOrDefault(tx["amount"], 0)
-	tx["now"] = time.Now().UnixMilli()
+	tx["time"] = time.Now().UnixMilli()
 
 	noteData, ok := tx["note"]
 	if !ok {
@@ -407,8 +406,9 @@ func (u User) addTransaction(tx map[string]any) {
 	if len(noteStr) > 50 {
 		noteStr = noteStr[:50]
 	}
+	tx["note"] = noteStr
 
-	txs = append(txs, tx)
+	txs = append([]map[string]any{tx}, txs...)
 	if len(txs) > benefits.Max_Transaction_History {
 		txs = txs[:benefits.Max_Transaction_History]
 	}

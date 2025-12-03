@@ -468,7 +468,17 @@ func buyKey(c *gin.Context) {
 
 			if userIndex != -1 {
 				// Flexible extraction for sys.currency
-				user.SetBalance(user.GetCredits() - float64(keys[i].Price))
+				newBal := user.GetCredits() - float64(keys[i].Price)
+				user.SetBalance(newBal)
+				user.addTransaction(map[string]any{
+					"note":      "key purchase",
+					"key_id":    keys[i].Key,
+					"key_name":  keys[i].Name,
+					"user":      user.GetUsername(),
+					"amount":    float64(keys[i].Price),
+					"type":      "key_buy",
+					"new_total": newBal,
+				})
 
 				// Pay the creator
 				if ownerIndex != -1 && ownerIndex != userIndex {
@@ -476,7 +486,17 @@ func buyKey(c *gin.Context) {
 					var ownerCurrency float64 = owner.GetCredits()
 					// 10% tax on purchase
 					value := float64(keys[i].Price) * 0.9
-					owner.SetBalance(ownerCurrency + value)
+					newBal := ownerCurrency + value
+					owner.SetBalance(newBal)
+					owner.addTransaction(map[string]any{
+						"note":      "key purchase",
+						"key_id":    keys[i].Key,
+						"key_name":  keys[i].Name,
+						"user":      user.GetUsername(),
+						"amount":    float64(keys[i].Price),
+						"type":      "key_sale",
+						"new_total": newBal,
+					})
 				}
 
 				if len(*keys[i].Webhook) > 0 {
@@ -623,25 +643,28 @@ func checkSubscriptions() {
 						usersMutex.Lock()
 						purchaser.SetBalance(currencyFloat)
 						purchaser.addTransaction(map[string]any{
-							"note":     "key purchase",
-							"key_id":   key.Key,
-							"key_name": key.Name,
-							"user":     key.Creator,
-							"amount":   float64(userData.Price),
-							"type":     "key_buy",
+							"note":      "key purchase",
+							"key_id":    key.Key,
+							"key_name":  key.Name,
+							"user":      key.Creator,
+							"amount":    float64(userData.Price),
+							"type":      "key_buy",
+							"new_total": currencyFloat,
 						})
 
 						// 10% tax on purchase
 						value := float64(userData.Price) * 0.9
 						owner := users[ownerIndex]
-						owner.SetBalance(owner.GetCredits() + value)
+						newBal := owner.GetCredits() + value
+						owner.SetBalance(newBal)
 						owner.addTransaction(map[string]any{
-							"note":     "key purchase",
-							"key_id":   key.Key,
-							"key_name": key.Name,
-							"user":     username,
-							"amount":   float64(userData.Price),
-							"type":     "key_sale",
+							"note":      "key purchase",
+							"key_id":    key.Key,
+							"key_name":  key.Name,
+							"user":      username,
+							"amount":    float64(userData.Price),
+							"type":      "key_sale",
+							"new_total": newBal,
 						})
 						usersMutex.Unlock()
 						go saveUsers()

@@ -99,6 +99,7 @@ func escrowTransfer(c *gin.Context) {
 		"amount":      nAmount,
 		"type":        "escrow_out",
 		"petition_id": req.PetitionID,
+		"new_total":   newBal,
 	})
 
 	go saveUsers()
@@ -200,6 +201,7 @@ func escrowRelease(c *gin.Context) {
 		"amount":      nAmount,
 		"type":        "escrow_in",
 		"petition_id": req.PetitionID,
+		"new_total":   newBal,
 	})
 
 	go saveUsers()

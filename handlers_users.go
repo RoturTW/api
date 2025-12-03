@@ -967,16 +967,18 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 
 	// Log transactions
 	fromUser.addTransaction(map[string]any{
-		"note":   note,
-		"user":   toUser.GetUsername(),
-		"amount": nAmount + totalTax,
-		"type":   "out",
+		"note":      note,
+		"user":      toUser.GetUsername(),
+		"amount":    nAmount + totalTax,
+		"type":      "out",
+		"new_total": fromCurrency - nAmount - totalTax,
 	})
 	toUser.addTransaction(map[string]any{
-		"note":   note,
-		"user":   fromUser.GetUsername(),
-		"amount": nAmount,
-		"type":   "in",
+		"note":      note,
+		"user":      fromUser.GetUsername(),
+		"amount":    nAmount,
+		"type":      "in",
+		"new_total": toCurrency + nAmount,
 	})
 
 	go saveUsers()
