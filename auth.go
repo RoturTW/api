@@ -46,8 +46,12 @@ func getKeyNextBilling(username string, key string) int64 {
 
 	username = strings.ToLower(username)
 
-	keysMutex.RLock()
-	defer keysMutex.RUnlock()
+	// we have to try here because inside of subscription check
+	// the lock is already taken and this can be called inside of there
+	locked := keysMutex.TryLock()
+	if locked {
+		defer keysMutex.Unlock()
+	}
 
 	for _, userKey := range keys {
 		if userKey.Key == key {

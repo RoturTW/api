@@ -600,10 +600,9 @@ func checkSubscriptions() {
 				currentTimeMs := time.Now().UnixMilli()
 				nextBillingTime := time.Unix(nextBilling/1000, 0)
 
-				log.Printf("User %s in key %s: Next billing %s, Current time %s",
+				log.Printf("User %s in key %s: Next billing %s",
 					username, key.Key,
-					nextBillingTime.Format("2006-01-02 15:04:05"),
-					time.Now().Format("2006-01-02 15:04:05"))
+					nextBillingTime.Format("2006-01-02 15:04:05"))
 
 				if currentTimeMs >= nextBilling {
 					if userData.Price != 0 {

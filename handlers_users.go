@@ -455,6 +455,7 @@ func registerUser(c *gin.Context) {
 func findUserSize(username string) int {
 	totalSize := 0
 	usersMutex.RLock()
+	defer usersMutex.RUnlock()
 	for _, u := range users {
 		if strings.EqualFold(u.GetUsername(), username) {
 			for k, v := range u {
@@ -490,7 +491,6 @@ func findUserSize(username string) int {
 			}
 		}
 	}
-	usersMutex.RUnlock()
 	return totalSize
 }
 
@@ -594,13 +594,9 @@ func updateUser(c *gin.Context) {
 			return
 		}
 		if !freeAndGifUploads {
-			usersMutex.Lock()
-			defer usersMutex.Unlock()
 			user.SetBalance(currencyFloat - 10)
 		}
 		go doAfter(func(data any) {
-			usersMutex.Lock()
-			defer usersMutex.Unlock()
 			user.Set("sys.banner", "https://avatars.rotur.dev/.banners/"+user.GetUsername())
 			go saveUsers()
 		}, nil, time.Second*2)
@@ -636,8 +632,6 @@ func updateUser(c *gin.Context) {
 			return
 		}
 		go doAfter(func(data any) {
-			usersMutex.Lock()
-			defer usersMutex.Unlock()
 			broadcastUserUpdate(user.GetUsername(), "pfp", "https://avatars.rotur.dev/"+user.GetUsername())
 			go saveUsers()
 		}, nil, time.Second*2)
@@ -665,13 +659,14 @@ func updateUser(c *gin.Context) {
 
 	if key == "email" {
 		usersMutex.RLock()
-		defer usersMutex.RUnlock()
 		for _, user := range users {
 			if strings.EqualFold(getStringOrEmpty(user.Get("email")), stringValue) {
 				c.JSON(400, gin.H{"error": "Email already in use"})
+				usersMutex.RUnlock()
 				return
 			}
 		}
+		usersMutex.RUnlock()
 	}
 
 	if key == "bio" {
@@ -681,6 +676,20 @@ func updateUser(c *gin.Context) {
 			c.JSON(400, gin.H{"error": "Bio length exceeds " + strconv.Itoa(bio_length) + " characters"})
 			return
 		}
+	}
+
+	if key == "system" {
+		// switch your account's system
+		systems := getAllSystems()
+		for _, system := range systems {
+			if system.Name == stringValue {
+				user.Set("system", system.Name)
+				c.JSON(200, gin.H{"message": "Successfully switched system to " + system.Name})
+				return
+			}
+		}
+		c.JSON(404, gin.H{"error": "System not found"})
+		return
 	}
 
 	if len(stringValue) > 1000 {
@@ -760,12 +769,13 @@ func updateUserAdmin(c *gin.Context) {
 			}
 
 			// Ensure sys.currency stays a float64 when updated via admin endpoint
-			usersMutex.Lock()
-			defer usersMutex.Unlock()
+			usersMutex.RLock()
+			user := users[userIndex]
+			usersMutex.RUnlock()
 			if key == "sys.currency" {
-				users[userIndex].SetBalance(value)
+				user.SetBalance(value)
 			} else {
-				users[userIndex].Set(key, value)
+				user.Set(key, value)
 			}
 
 			go saveUsers()
@@ -804,8 +814,8 @@ func updateUserAdmin(c *gin.Context) {
 			}
 
 			usersMutex.Lock()
-			defer usersMutex.Unlock()
 			users[userIndex].DelKey(key)
+			usersMutex.Unlock()
 
 			go saveUsers()
 
@@ -910,8 +920,10 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 	}
 
 	fromCurrency := roundVal(fromUser.GetCredits())
-	if fromCurrency < (nAmount + totalTax) {
-		return fmt.Errorf("insufficient funds (required: %.2f, available: %.2f)", nAmount+totalTax, fromCurrency)
+	if fromUsername != "rotur" {
+		if fromCurrency < (nAmount + totalTax) {
+			return fmt.Errorf("insufficient funds (required: %.2f, available: %.2f)", nAmount+totalTax, fromCurrency)
+		}
 	}
 
 	toCurrency := roundVal(toUser.GetCredits())
@@ -932,31 +944,32 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 	note = mkNote(note)
 
 	// Tax handling
-	taxRecipient := "mist"
-	fromSystem := fromUser.Get("system")
-	if fromSystem != nil {
-		systemsMutex.RLock()
-		if sys, ok := systems[fromSystem.(string)]; ok {
-			taxRecipient = sys.Owner.Name
+	if fromUsername != "rotur" {
+		taxRecipient := "mist"
+		fromSystem := fromUser.Get("system")
+		if fromSystem != nil {
+			systemsMutex.RLock()
+			if sys, ok := systems[fromSystem.(string)]; ok {
+				taxRecipient = sys.Owner.Name
+			}
+			systemsMutex.RUnlock()
 		}
-		systemsMutex.RUnlock()
-	}
 
-	// Apply tax to taxRecipient if exists
-	if idx := getIdxOfAccountBy("username", taxRecipient); idx != -1 {
-		taxUser, _ := getUserByIdx(idx)
-		curr := taxUser.GetCredits()
-		taxUser.SetBalance(roundVal(curr + taxRecipientShare))
-		taxUser.addTransaction(map[string]any{
-			"note":      "transfer tax",
-			"user":      fromUser.GetUsername(),
-			"time":      now,
-			"amount":    taxRecipientShare,
-			"type":      "tax",
-			"new_total": curr + taxRecipientShare,
-		})
+		// Apply tax to taxRecipient if exists
+		if idx := getIdxOfAccountBy("username", taxRecipient); idx != -1 {
+			taxUser, _ := getUserByIdx(idx)
+			curr := taxUser.GetCredits()
+			taxUser.SetBalance(roundVal(curr + taxRecipientShare))
+			taxUser.addTransaction(map[string]any{
+				"note":      "transfer tax",
+				"user":      fromUser.GetUsername(),
+				"time":      now,
+				"amount":    taxRecipientShare,
+				"type":      "tax",
+				"new_total": curr + taxRecipientShare,
+			})
+		}
 	}
-
 	// Update balances
 	if fromUser.GetUsername() != "rotur" {
 		fromUser.SetBalance(roundVal(fromCurrency - (nAmount + totalTax)))
@@ -1450,71 +1463,4 @@ func getBadges(c *gin.Context) {
 	}
 
 	c.JSON(404, gin.H{"error": "User not found"})
-}
-
-func enactInactivityTax() {
-	ticker := time.NewTicker(time.Duration(INACTIVITY_TAX_CHECK_INTERVAL) * time.Second)
-	defer ticker.Stop()
-
-	month := time.Hour.Milliseconds() * 24 * 30
-
-	for range ticker.C {
-		fmt.Println("enactInactivityTax")
-
-		now := time.Now().UnixMilli()
-		taxed := false
-
-		usersMutex.Lock()
-
-		for i := range users {
-			lastInactive := users[i].GetInt("sys.last_inactive")
-			lastLogin := users[i].GetInt("sys.last_login")
-
-			if lastLogin == 0 {
-				lastLogin = int(now)
-				users[i].Set("sys.last_login", lastLogin)
-			}
-			if lastInactive < lastLogin {
-				users[i].Set("sys.last_inactive", lastLogin)
-			}
-
-			if now-int64(lastInactive) < month {
-				continue
-			}
-
-			transfers := getObjectSlice(users[i], "sys.transactions")
-
-			var latest int64
-			default_ts := int(month + 1000)
-			for _, t := range transfers {
-				ts := int64(getIntOrDefault(t["time"], default_ts))
-				if ts > latest {
-					latest = ts
-				}
-			}
-
-			if now-latest < month {
-				continue
-			}
-
-			oldBal := users[i].GetCredits()
-			if oldBal < 0.01 {
-				continue
-			}
-			newBal := oldBal * 95 / 100
-			users[i].SetBalance(newBal)
-			users[i].Set("sys.last_inactive", now)
-
-			fmt.Printf("enactInactivityTax: %s (%.2f%% balance decay, %f → %f)\n",
-				users[i].GetUsername(), 5.0, oldBal, newBal)
-
-			taxed = true
-		}
-
-		usersMutex.Unlock()
-
-		if taxed {
-			saveUsers()
-		}
-	}
 }

@@ -279,7 +279,8 @@ func (u User) GetLogins() []Login {
 }
 
 func (u User) GetSubscription() subscription {
-	if strings.EqualFold(u.GetUsername(), "mist") {
+	username := u.GetUsername()
+	if strings.EqualFold(username, "mist") {
 		// keep me as the sigma
 		return subscription{
 			Active:       true,
@@ -293,9 +294,8 @@ func (u User) GetSubscription() subscription {
 		Tier:         "Free",
 		Next_billing: 0,
 	}
-
 	checkExternalBilling := func() (ok bool) {
-		next := getKeyNextBilling(u.GetUsername(), "4f229157f0c40f5a98cbf28efd39cfe8")
+		next := getKeyNextBilling(username, "4f229157f0c40f5a98cbf28efd39cfe8")
 		if next == 0 {
 			return false
 		}
@@ -304,7 +304,6 @@ func (u User) GetSubscription() subscription {
 		val.Next_billing = next
 		return true
 	}
-
 	if usub == nil {
 		_ = checkExternalBilling()
 		return val
@@ -332,7 +331,7 @@ func (u User) GetSubscription() subscription {
 			{
 				"title": "Lost Subscription",
 				"description": fmt.Sprintf("**User:** %s\n**Tier:** %s\n**Next Billing:** %s",
-					u.GetUsername(), val.Tier, time.Unix(val.Next_billing/1000, 0).Format(time.RFC3339)),
+					username, val.Tier, time.Unix(val.Next_billing/1000, 0).Format(time.RFC3339)),
 				"color":     0x57cdac,
 				"timestamp": time.Now().Format(time.RFC3339),
 			},
@@ -420,11 +419,17 @@ func (u User) SetLogins(logins []Login) {
 }
 
 func (u User) Has(key string) bool {
+	mu := getUserMutex(u.GetUsername())
+	mu.Lock()
+	defer mu.Unlock()
 	_, ok := u[key]
 	return ok
 }
 
 func (u User) Get(key string) any {
+	mu := getUserMutex(u.GetUsername())
+	mu.Lock()
+	defer mu.Unlock()
 	value, ok := u[key]
 	if ok {
 		return value
@@ -433,6 +438,9 @@ func (u User) Get(key string) any {
 }
 
 func (u User) GetString(key string) string {
+	mu := getUserMutex(u.GetUsername())
+	mu.Lock()
+	defer mu.Unlock()
 	value, ok := u[key]
 	if ok {
 		switch v := value.(type) {
@@ -448,6 +456,9 @@ func (u User) GetString(key string) string {
 }
 
 func (u User) GetInt(key string) int {
+	mu := getUserMutex(u.GetUsername())
+	mu.Lock()
+	defer mu.Unlock()
 	value, ok := u[key]
 	if ok {
 		switch v := value.(type) {
@@ -467,8 +478,9 @@ func (u User) GetInt(key string) int {
 }
 
 func (u User) DelKey(key string) error {
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
+	mu := getUserMutex(u.GetUsername())
+	mu.Lock()
+	defer mu.Unlock()
 	delete(u, key)
 	go notify("sys.delete", map[string]any{
 		"username": u.GetUsername(),
