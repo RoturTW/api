@@ -931,33 +931,6 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 	}
 	note = mkNote(note)
 
-	// Helper: get or fix transaction slice
-	ensureTxSlice := func(u *User) []map[string]any {
-		raw := (*u)["sys.transactions"]
-		list := make([]map[string]any, 0)
-		switch v := raw.(type) {
-		case nil:
-		case []any:
-			for _, item := range v {
-				if m, ok := item.(map[string]any); ok {
-					list = append(list, m)
-				}
-			}
-		case []map[string]any:
-			list = v
-		}
-		return list
-	}
-	appendTx := func(u *User, tx map[string]any) {
-		txs := ensureTxSlice(u)
-		txs = append([]map[string]any{tx}, txs...)
-		benefits := u.GetSubscriptionBenefits()
-		if len(txs) > benefits.Max_Transaction_History {
-			txs = txs[:benefits.Max_Transaction_History]
-		}
-		(*u)["sys.transactions"] = txs
-	}
-
 	// Tax handling
 	taxRecipient := "mist"
 	fromSystem := fromUser.Get("system")
@@ -974,7 +947,7 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 		taxUser, _ := getUserByIdx(idx)
 		curr := taxUser.GetCredits()
 		taxUser.SetBalance(roundVal(curr + taxRecipientShare))
-		appendTx(taxUser, map[string]any{
+		taxUser.addTransaction(map[string]any{
 			"note":      "transfer tax",
 			"user":      fromUser.GetUsername(),
 			"time":      now,
@@ -982,7 +955,6 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 			"type":      "tax",
 			"new_total": curr + taxRecipientShare,
 		})
-		go broadcastUserUpdate(taxUser.GetUsername(), "sys.transactions", taxUser.Get("sys.transactions"))
 	}
 
 	// Update balances
@@ -994,25 +966,19 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 	}
 
 	// Log transactions
-	appendTx(&fromUser, map[string]any{
-		"note":      note,
-		"user":      toUser.GetUsername(),
-		"time":      now,
-		"amount":    nAmount + totalTax,
-		"type":      "out",
-		"new_total": fromCurrency - nAmount - totalTax,
+	fromUser.addTransaction(map[string]any{
+		"note":   note,
+		"user":   toUser.GetUsername(),
+		"amount": nAmount + totalTax,
+		"type":   "out",
 	})
-	appendTx(&toUser, map[string]any{
-		"note":      note,
-		"user":      fromUser.GetUsername(),
-		"time":      now,
-		"amount":    nAmount,
-		"type":      "in",
-		"new_total": toCurrency + nAmount,
+	toUser.addTransaction(map[string]any{
+		"note":   note,
+		"user":   fromUser.GetUsername(),
+		"amount": nAmount,
+		"type":   "in",
 	})
 
-	go broadcastUserUpdate(fromUser.GetUsername(), "sys.transactions", fromUser.Get("sys.transactions"))
-	go broadcastUserUpdate(toUser.GetUsername(), "sys.transactions", toUser.Get("sys.transactions"))
 	go saveUsers()
 
 	return nil

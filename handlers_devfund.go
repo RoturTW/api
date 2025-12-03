@@ -92,34 +92,7 @@ func escrowTransfer(c *gin.Context) {
 		note = note[:50]
 	}
 
-	// Helper to add transaction
-	addTransaction := func(u *User, tx map[string]any) {
-		raw := (*u)["sys.transactions"]
-		var txs []map[string]any
-
-		switch v := raw.(type) {
-		case nil:
-			txs = make([]map[string]any, 0)
-		case []any:
-			for _, item := range v {
-				if m, ok := item.(map[string]any); ok {
-					txs = append(txs, m)
-				}
-			}
-		case []map[string]any:
-			txs = v
-		default:
-			txs = make([]map[string]any, 0)
-		}
-
-		txs = append([]map[string]any{tx}, txs...)
-		if len(txs) > 20 {
-			txs = txs[:20]
-		}
-		(*u)["sys.transactions"] = txs
-	}
-
-	addTransaction(fromUser, map[string]any{
+	fromUser.addTransaction(map[string]any{
 		"note":        note,
 		"user":        "devfund-escrow",
 		"time":        now,
@@ -129,7 +102,6 @@ func escrowTransfer(c *gin.Context) {
 	})
 
 	go saveUsers()
-	go broadcastUserUpdate(fromUser.GetUsername(), "sys.transactions", fromUser.Get("sys.transactions"))
 
 	c.JSON(200, gin.H{
 		"message":     "Escrow transfer successful",
@@ -221,33 +193,7 @@ func escrowRelease(c *gin.Context) {
 	}
 
 	// Helper to add transaction
-	addTransaction := func(u *User, tx map[string]any) {
-		raw := (*u)["sys.transactions"]
-		var txs []map[string]any
-
-		switch v := raw.(type) {
-		case nil:
-			txs = make([]map[string]any, 0)
-		case []any:
-			for _, item := range v {
-				if m, ok := item.(map[string]any); ok {
-					txs = append(txs, m)
-				}
-			}
-		case []map[string]any:
-			txs = v
-		default:
-			txs = make([]map[string]any, 0)
-		}
-
-		txs = append([]map[string]any{tx}, txs...)
-		if len(txs) > 20 {
-			txs = txs[:20]
-		}
-		(*u)["sys.transactions"] = txs
-	}
-
-	addTransaction(toUser, map[string]any{
+	toUser.addTransaction(map[string]any{
 		"note":        note,
 		"user":        "devfund-escrow",
 		"time":        now,
@@ -257,7 +203,6 @@ func escrowRelease(c *gin.Context) {
 	})
 
 	go saveUsers()
-	go broadcastUserUpdate(toUser.GetUsername(), "sys.transactions", toUser.Get("sys.transactions"))
 
 	c.JSON(200, gin.H{
 		"message":     "Escrow release successful",

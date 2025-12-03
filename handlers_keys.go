@@ -602,7 +602,9 @@ func checkSubscriptions() {
 						}
 
 						usersMutex.RLock()
-						var currencyFloat float64 = users[userIndex].GetCredits()
+						purchaser := users[userIndex]
+
+						var currencyFloat float64 = purchaser.GetCredits()
 						usersMutex.RUnlock()
 						if currencyFloat < float64(userData.Price) {
 							log.Printf("User %s does not have enough currency for key %s (needed: %.2f, available: %.2f)",
@@ -619,11 +621,28 @@ func checkSubscriptions() {
 						}
 						currencyFloat -= float64(userData.Price)
 						usersMutex.Lock()
-						users[userIndex].SetBalance(currencyFloat)
+						purchaser.SetBalance(currencyFloat)
+						purchaser.addTransaction(map[string]any{
+							"note":     "key purchase",
+							"key_id":   key.Key,
+							"key_name": key.Name,
+							"user":     key.Creator,
+							"amount":   float64(userData.Price),
+							"type":     "key_buy",
+						})
 
 						// 10% tax on purchase
 						value := float64(userData.Price) * 0.9
-						users[ownerIndex].SetBalance(users[ownerIndex].GetCredits() + value)
+						owner := users[ownerIndex]
+						owner.SetBalance(owner.GetCredits() + value)
+						owner.addTransaction(map[string]any{
+							"note":     "key purchase",
+							"key_id":   key.Key,
+							"key_name": key.Name,
+							"user":     username,
+							"amount":   float64(userData.Price),
+							"type":     "key_sale",
+						})
 						usersMutex.Unlock()
 						go saveUsers()
 

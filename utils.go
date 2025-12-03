@@ -71,6 +71,27 @@ func getIntOrDefault(val any, defaultVal int) int {
 	return defaultVal
 }
 
+func getFloatOrDefault(val any, defaultVal float64) float64 {
+	if val == nil {
+		return defaultVal
+	}
+	switch val := val.(type) {
+	case float64:
+		return val
+	case float32:
+		return float64(val)
+	case int:
+		return float64(val)
+	case int64:
+		return float64(val)
+	case json.Number:
+		f, _ := val.Float64()
+		return f
+	default:
+		return defaultVal
+	}
+}
+
 func requireTier(tier string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user := c.MustGet("user").(*User)

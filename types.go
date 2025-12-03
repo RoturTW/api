@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mitchellh/mapstructure"
 )
 
 type subscription struct {
@@ -365,6 +367,54 @@ func (u User) SetSubscription(sub subscription) {
 	u.Set("max_size", getUserMaxSize(&u))
 }
 
+func (u User) GetTransactions() []map[string]any {
+	raw := u.Get("sys.transactions")
+
+	v, ok := raw.([]any)
+	if !ok {
+		return []map[string]any{}
+	}
+
+	txs := make([]map[string]any, 0)
+
+	for _, item := range v {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		var tx map[string]any
+		if err := mapstructure.Decode(m, &tx); err == nil {
+			txs = append(txs, tx)
+		}
+	}
+
+	return txs
+}
+
+func (u User) addTransaction(tx map[string]any) {
+	txs := u.GetTransactions()
+	benefits := u.GetSubscriptionBenefits()
+
+	tx["new_total"] = u.GetCredits() + getFloatOrDefault(tx["amount"], 0)
+	tx["now"] = time.Now().UnixMilli()
+
+	noteData, ok := tx["note"]
+	if !ok {
+		tx["note"] = ""
+	}
+	noteStr := strings.TrimSpace(getStringOrEmpty(noteData))
+	if len(noteStr) > 50 {
+		noteStr = noteStr[:50]
+	}
+
+	txs = append(txs, tx)
+	if len(txs) > benefits.Max_Transaction_History {
+		txs = txs[:benefits.Max_Transaction_History]
+	}
+	u.Set("sys.transactions", txs)
+}
+
 func (u User) SetLogins(logins []Login) {
 	u.Set("sys.logins", logins)
 }
@@ -534,6 +584,7 @@ type Transaction struct {
 	Amount    float64 `json:"amount"`
 	Note      string  `json:"note"`
 	Timestamp int64   `json:"timestamp"`
+	New_total float64 `json:"new_total"`
 }
 
 // UnmarshalJSON custom unmarshaler to handle timestamp as string or number
