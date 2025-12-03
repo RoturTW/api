@@ -103,7 +103,6 @@ func getProfile(c *gin.Context) {
 
 	// Convert the name to lowercase for case-insensitive comparison
 	nameLower := strings.ToLower(name)
-
 	// Find user with case-insensitive matching
 	usersMutex.RLock()
 	var foundUser *User
@@ -116,6 +115,8 @@ func getProfile(c *gin.Context) {
 				break
 			}
 		}
+		name = foundUser.GetUsername()
+		nameLower = strings.ToLower(name)
 	} else {
 		for i, user := range users {
 			if strings.ToLower(user.GetUsername()) == nameLower {
