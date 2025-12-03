@@ -623,7 +623,7 @@ func checkSubscriptions() {
 
 						// 10% tax on purchase
 						value := float64(userData.Price) * 0.9
-						users[ownerIndex].SetBalance(currencyFloat + value)
+						users[ownerIndex].SetBalance(users[ownerIndex].GetCredits() + value)
 						usersMutex.Unlock()
 						go saveUsers()
 
