@@ -326,7 +326,16 @@ func registerUser(c *gin.Context) {
 				"timestamp": time.Now().Format(time.RFC3339),
 			},
 		})
-		c.JSON(403, gin.H{"error": "so sad, stay mad"})
+		randomResponses := []string{
+			"so sad, stay mad",
+			"L bozo",
+			"L",
+			":3",
+			"damn so close that time",
+			"awwww",
+			"ur gay :3 (and gay people are awesome)",
+		}
+		c.JSON(403, gin.H{"error": randomResponses[rand.Intn(len(randomResponses))]})
 		return
 	}
 
