@@ -334,6 +334,8 @@ func registerUser(c *gin.Context) {
 			"damn so close that time",
 			"awwww",
 			"ur gay :3 (and gay people are awesome)",
+			"Take a shower",
+			"even a toddler could do this better",
 		}
 		c.JSON(403, gin.H{"error": randomResponses[rand.Intn(len(randomResponses))]})
 		return
