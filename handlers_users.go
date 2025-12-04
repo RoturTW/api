@@ -308,8 +308,24 @@ func registerUser(c *gin.Context) {
 	}
 
 	ip := c.ClientIP()
+	from_url := c.GetHeader("referer")
+	if from_url == "" {
+		from_url = c.GetHeader("origin")
+		if from_url == "" {
+			from_url = "unknown"
+		}
+	}
 
 	if isBannedIp(ip) {
+		go sendDiscordWebhook([]map[string]any{
+			{
+				"title": "Failed Registration, banned IP",
+				"description": fmt.Sprintf("**User:** %s\n**IP:** %s\n**Hostname:** %s",
+					req.Username, ip, from_url),
+				"color":     0xff0000,
+				"timestamp": time.Now().Format(time.RFC3339),
+			},
+		})
 		c.JSON(403, gin.H{"error": "so sad, stay mad"})
 		return
 	}
@@ -409,11 +425,11 @@ func registerUser(c *gin.Context) {
 
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(c.ClientIP())))
 
-	sendDiscordWebhook([]map[string]any{
+	go sendDiscordWebhook([]map[string]any{
 		{
 			"title": "New Account Registered",
 			"description": fmt.Sprintf("**Username:** %s\n**Email:** %s\n**System:** %s\n**IP:** %s\n**Host:** %s",
-				username, email, matchedSystem.Name, hash, c.Request.Host),
+				username, email, matchedSystem.Name, hash, from_url),
 			"color":     0x57cdac,
 			"timestamp": time.Now().Format(time.RFC3339),
 		},
@@ -1222,7 +1238,7 @@ func performUserDeletion(username string, isAdmin bool) error {
 	if isAdmin {
 		logPrefix = "Admin deleting user"
 	}
-	log.Printf("%s %s (total before=%d)", logPrefix, usernameLower, len(users))
+	log.Printf("%s %s", logPrefix, usernameLower)
 
 	usersMutex.Lock()
 	defer usersMutex.Unlock()
@@ -1296,8 +1312,6 @@ func performUserDeletion(username string, isAdmin bool) error {
 			log.Printf("Error removing user file %s: %v", userFile, err)
 		}
 	}(usernameLower)
-
-	log.Printf("%s %s (total after=%d)", logPrefix, usernameLower, len(users))
 	return nil
 }
 

@@ -147,7 +147,7 @@ func getProfile(c *gin.Context) {
 			"followers":  0,
 			"following":  0,
 			"posts":      []any{},
-			"created":    time.Now().Unix(),
+			"created":    time.Now().UnixMilli(),
 			"private":    true,
 			"sys.banned": true,
 		})
