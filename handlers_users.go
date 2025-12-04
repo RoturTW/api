@@ -170,9 +170,22 @@ func getUser(c *gin.Context) {
 	if foundUser != nil {
 		usersMutex.Lock()
 		defer usersMutex.Unlock()
+
+		banned := foundUser.Get("sys.banned")
+		if banned == "true" || banned == true {
+			c.JSON(403, gin.H{
+				"error":    "User is banned",
+				"username": foundUser.GetUsername(),
+			})
+		}
 		if foundUser.Get("sys.tos_accepted") != true {
 			// early return - TOS not accepted
-			c.JSON(403, gin.H{"error": "Terms-Of-Service are not accepted or outdated", "username": foundUser.GetUsername(), "token": foundUser.GetKey(), "sys.tos_accepted": false})
+			c.JSON(403, gin.H{
+				"error":            "Terms-Of-Service are not accepted or outdated",
+				"username":         foundUser.GetUsername(),
+				"token":            foundUser.GetKey(),
+				"sys.tos_accepted": false,
+			})
 			return
 		}
 
@@ -1214,7 +1227,12 @@ func performUserDeletion(username string, isAdmin bool) error {
 	usersMutex.Lock()
 	defer usersMutex.Unlock()
 
-	users = append(users[:idx], users[idx+1:]...)
+	// set as banned
+	users[idx] = User{
+		"username":   username,
+		"private":    true,
+		"sys.banned": true,
+	}
 
 	go broadcastUserUpdate(usernameLower, "sys._deleted", true)
 

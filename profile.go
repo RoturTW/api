@@ -133,6 +133,15 @@ func getProfile(c *gin.Context) {
 		return
 	}
 
+	banned := foundUser.Get("sys.banned")
+	if banned == "true" || banned == true {
+		foundUser = &User{
+			"username":   ".banned_user",
+			"private":    true,
+			"sys.banned": true,
+		}
+	}
+
 	// Get user posts
 	postsMutex.RLock()
 	pinnedPosts := make([]Post, 0)

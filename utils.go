@@ -349,6 +349,10 @@ func requiresAuth(c *gin.Context) {
 	}
 
 	user.GetSubscription()
+	banned := user.Get("sys.banned")
+	if banned == "true" || banned == true {
+		c.JSON(403, gin.H{"error": "User is banned"})
+	}
 
 	c.Set("user", user)
 	c.Next()
