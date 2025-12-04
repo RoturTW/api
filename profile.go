@@ -137,6 +137,17 @@ func getProfile(c *gin.Context) {
 	if banned == "true" || banned == true {
 		foundUser = &User{
 			"username":   ".banned_user",
+			"badges":     []any{},
+			"currency":   0,
+			"max_size":   "0",
+			"pfp":        "https://avatars.rotur.dev/.banned_user",
+			"bio":        "This user is banned.",
+			"banner":     "https://avatars.rotur.dev/.banners/.banned_user",
+			"index":      0,
+			"followers":  0,
+			"following":  0,
+			"posts":      []any{},
+			"created":    time.Now().Unix(),
 			"private":    true,
 			"sys.banned": true,
 		}
