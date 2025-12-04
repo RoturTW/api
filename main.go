@@ -129,7 +129,7 @@ func main() {
 	r.GET("/get_user", rateLimit("profile"), getUser)
 	r.GET("/get_user_new", rateLimit("profile"), getUser)
 
-	r.POST("/create_user", registerUser)
+	r.POST("/create_user", rateLimit("register"), registerUser)
 
 	me := r.Group("/me")
 	{

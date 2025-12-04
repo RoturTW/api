@@ -32,14 +32,15 @@ var (
 	}
 
 	rateLimits = map[string]RateLimitConfig{
-		"default": {Count: 100, Period: 60},
-		"post":    {Count: 5, Period: 60},
-		"reply":   {Count: 10, Period: 60},
-		"follow":  {Count: 20, Period: 60},
-		"profile": {Count: 30, Period: 60},
-		"search":  {Count: 20, Period: 60},
-		"ai":      {Count: 5, Period: 10},
-		"global":  {Count: 10, Period: 10}, // Global rate limit: 10 requests per 10 seconds
+		"default":  {Count: 100, Period: 60},
+		"post":     {Count: 5, Period: 60},
+		"reply":    {Count: 10, Period: 60},
+		"follow":   {Count: 20, Period: 60},
+		"profile":  {Count: 30, Period: 60},
+		"search":   {Count: 20, Period: 60},
+		"ai":       {Count: 5, Period: 10},
+		"register": {Count: 5, Period: 10},
+		"global":   {Count: 10, Period: 10}, // Global rate limit: 10 requests per 10 seconds
 	}
 )
 
