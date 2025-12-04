@@ -135,7 +135,7 @@ func getProfile(c *gin.Context) {
 
 	banned := foundUser.Get("sys.banned")
 	if banned == "true" || banned == true {
-		foundUser = &User{
+		c.JSON(200, gin.H{
 			"username":   ".banned_user",
 			"badges":     []any{},
 			"currency":   0,
@@ -150,7 +150,8 @@ func getProfile(c *gin.Context) {
 			"created":    time.Now().Unix(),
 			"private":    true,
 			"sys.banned": true,
-		}
+		})
+		return
 	}
 
 	// Get user posts
