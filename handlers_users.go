@@ -1246,6 +1246,7 @@ func performUserDeletion(username string, isAdmin bool) error {
 	// set as banned
 	users[idx] = User{
 		"username":   username,
+		"email":      users[idx].Get("email"), // so that the same email cant be used by a banned user
 		"private":    true,
 		"sys.banned": true,
 	}
