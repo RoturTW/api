@@ -359,11 +359,21 @@ func requiresAuth(c *gin.Context) {
 }
 
 func getBannedIPs() []string {
-	bannedIPs := os.Getenv("BANNED_IPS")
-	if bannedIPs == "" {
+	file, err := os.Open("/Users/admin/Documents/rotur/banned.json")
+	if err != nil {
 		return []string{}
 	}
-	return strings.Split(bannedIPs, ",")
+	defer file.Close()
+
+	var data struct {
+		IPs []string `json:"ips"`
+	}
+
+	if err := json.NewDecoder(file).Decode(&data); err != nil {
+		return []string{}
+	}
+
+	return data.IPs
 }
 
 func isBannedIp(ip string) bool {
