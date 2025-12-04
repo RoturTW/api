@@ -317,15 +317,6 @@ func registerUser(c *gin.Context) {
 	}
 
 	if isBannedIp(ip) {
-		go sendDiscordWebhook([]map[string]any{
-			{
-				"title": "Failed Registration, banned IP",
-				"description": fmt.Sprintf("**User:** %s\n**IP:** %s\n**Hostname:** %s",
-					req.Username, ip, from_url),
-				"color":     0xff0000,
-				"timestamp": time.Now().Format(time.RFC3339),
-			},
-		})
 		randomResponses := []string{
 			"so sad, stay mad",
 			"L bozo",
