@@ -339,6 +339,8 @@ func (u User) GetSubscription() subscription {
 		val.Active = false
 		val.Next_billing = 0
 		val.Tier = "Free"
+		u.SetSubscription(val)
+		go saveUsers()
 	}
 	return val
 }
