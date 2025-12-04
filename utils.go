@@ -378,7 +378,16 @@ func getBannedIPs() []string {
 
 func isBannedIp(ip string) bool {
 	bannedIPs := getBannedIPs()
-	return slices.Contains(bannedIPs, ip)
+	if slices.Contains(bannedIPs, ip) {
+		return true
+	}
+	for _, bannedIP := range bannedIPs {
+		// handle when ipv6 all start with the same prefix, so ban a block of them
+		if bannedIP[4] == ":"[0] && strings.HasPrefix(ip, bannedIP) {
+			return true
+		}
+	}
+	return false
 }
 
 func corsMiddleware() gin.HandlerFunc {
