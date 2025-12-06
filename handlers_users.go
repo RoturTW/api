@@ -211,7 +211,7 @@ func getUser(c *gin.Context) {
 		}
 
 		addLogin(c, &foundUser, "Successful Login")
-		foundUser["sys.subscription"] = foundUser.GetSubscription()
+		foundUser.SetSubscription(foundUser.GetSubscription())
 
 		go saveUsers()
 		userCopy := copyUser(foundUser)

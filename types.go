@@ -364,8 +364,18 @@ func (u User) SetSocialLinks(links []string) {
 }
 
 func (u User) SetSubscription(sub subscription) {
-	u.Set("sys.subscription", sub)
-	u.Set("max_size", getUserMaxSize(&u))
+	u.Set("sys.subscription", map[string]any{
+		"active":       sub.Active,
+		"tier":         sub.Tier,
+		"next_billing": sub.Next_billing,
+	})
+	u.Set("max_size", u.GetMaxSize())
+}
+
+func (u User) GetMaxSize() string {
+	amt := strconv.Itoa(u.GetSubscriptionBenefits().FileSystem_Size)
+	u.Set("max_size", amt)
+	return amt
 }
 
 func (u User) GetTransactions() []map[string]any {

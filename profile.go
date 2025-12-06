@@ -232,7 +232,7 @@ func getProfile(c *gin.Context) {
 		}
 	}
 
-	maxSizeStr := getUserMaxSize(foundUser)
+	maxSizeStr := foundUser.GetMaxSize()
 	sub := foundUser.GetSubscription().Tier
 
 	// Calculate dynamic badges
@@ -309,12 +309,6 @@ func getProfile(c *gin.Context) {
 	}
 
 	c.JSON(200, profileData)
-}
-
-func getUserMaxSize(user *User) string {
-	amt := strconv.Itoa(user.GetSubscriptionBenefits().FileSystem_Size)
-	user.Set("max_size", amt)
-	return amt
 }
 
 func getSupporters(c *gin.Context) {
