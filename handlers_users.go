@@ -1398,7 +1398,6 @@ func claimDaily(c *gin.Context) {
 	username := strings.ToLower(user.GetUsername())
 
 	usersMutex.Lock()
-	defer usersMutex.Unlock()
 	waitTime := canClaimDaily(user)
 	if waitTime > 0 {
 		c.JSON(400, gin.H{"error": "Daily claim already made, please wait " +
@@ -1411,6 +1410,7 @@ func claimDaily(c *gin.Context) {
 	currentTime := float64(time.Now().Unix())
 	claimsData[username] = currentTime
 	saveDailyClaims(claimsData)
+	usersMutex.Unlock()
 
 	PerformCreditTransfer("rotur", username, 1.0, "Daily credit")
 	go saveUsers()
