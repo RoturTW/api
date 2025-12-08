@@ -1396,13 +1396,13 @@ func claimDaily(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
 	username := strings.ToLower(user.GetUsername())
-
 	usersMutex.Lock()
 	waitTime := canClaimDaily(user)
 	if waitTime > 0 {
 		c.JSON(400, gin.H{"error": "Daily claim already made, please wait " +
 			strings.TrimSuffix(strings.TrimSuffix(
 				fmt.Sprintf("%.1f", 24-(waitTime/3600)), "0"), ".") + " hours"})
+		usersMutex.Unlock()
 		return
 	}
 
