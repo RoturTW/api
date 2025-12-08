@@ -8,8 +8,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/mitchellh/mapstructure"
 )
 
 type subscription struct {
@@ -381,26 +379,22 @@ func (u User) GetMaxSize() string {
 func (u User) GetTransactions() []map[string]any {
 	raw := u.Get("sys.transactions")
 
-	v, ok := raw.([]any)
-	if !ok {
+	switch v := raw.(type) {
+	case []map[string]any:
+		return v
+	case []any:
+		txs := make([]map[string]any, 0)
+		for _, item := range v {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			txs = append(txs, m)
+		}
+		return txs
+	default:
 		return []map[string]any{}
 	}
-
-	txs := make([]map[string]any, 0)
-
-	for _, item := range v {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		var tx map[string]any
-		if err := mapstructure.Decode(m, &tx); err == nil {
-			txs = append(txs, tx)
-		}
-	}
-
-	return txs
 }
 
 func (u User) addTransaction(tx map[string]any) {

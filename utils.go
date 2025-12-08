@@ -36,6 +36,12 @@ func generateShortToken() string {
 	return hex.EncodeToString(bytes)
 }
 
+func reverse[T any](s []T) {
+	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+		s[i], s[j] = s[j], s[i]
+	}
+}
+
 func roundVal(val float64) float64 {
 	return math.Round(val*100) / 100
 }

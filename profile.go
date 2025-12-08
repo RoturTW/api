@@ -36,7 +36,7 @@ func renderBioRegex(bio string, profile *User, otherKeys map[string]any) string 
 		safeProfile[k] = fmt.Sprintf("%v", v)
 	}
 
-	re := regexp.MustCompile(`{{\s*([a-zA-Z0-9_]+)\s+([:\/?&\-a-zA-Z0-9_.]+)\s*}}`)
+	re := regexp.MustCompile(`{{\s*([a-zA-Z0-9_]+)\s+([:\/?&\-a-zA-Z0-9_.%]+)\s*}}`)
 
 	result := re.ReplaceAllStringFunc(bio, func(match string) string {
 		sub := re.FindStringSubmatch(match)
@@ -80,6 +80,23 @@ func renderBioRegex(bio string, profile *User, otherKeys map[string]any) string 
 			}
 
 			return string(body)
+		case "flex":
+			if key == "economy%" {
+				currencyData := getUserCreditData()
+
+				total := 0.0
+				for _, amount := range currencyData {
+					total += amount
+				}
+
+				if total == 0 {
+					return "0%"
+				}
+
+				current := getFloatOrDefault(safeProfile["sys.currency"], 0.0)
+				return fmt.Sprintf("%.2f%%", (current/total)*100)
+			}
+
 		}
 		return ""
 	})
@@ -114,6 +131,11 @@ func getProfile(c *gin.Context) {
 				userIndex = i
 				break
 			}
+		}
+		if foundUser == nil {
+			c.JSON(404, gin.H{"error": "User not found"})
+			usersMutex.RUnlock()
+			return
 		}
 		name = foundUser.GetUsername()
 		nameLower = strings.ToLower(name)

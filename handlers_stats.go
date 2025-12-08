@@ -167,6 +167,13 @@ func getRichList(c *gin.Context) {
 	c.JSON(200, richList)
 }
 
+func findSinceMonth(txs []map[string]any, cutoff int64) int {
+	return sort.Search(len(txs), func(i int) bool {
+		t, _ := txs[i]["time"].(float64)
+		return int64(t) >= cutoff
+	})
+}
+
 func getMostGained(c *gin.Context) {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
@@ -191,7 +198,7 @@ func getMostGained(c *gin.Context) {
 		Earned float64 `json:"earned"`
 	}
 
-	leaderboard := make([]result, 0, 256)
+	leaderboard := make([]result, 0, len(users))
 
 	for _, user := range users {
 		if user.Get("sys.banned") != nil || user.Get("private") == true {
@@ -205,9 +212,8 @@ func getMostGained(c *gin.Context) {
 
 		var earned float64
 
-		for i := len(txs) - 1; i >= 0; i-- {
-			tx := txs[i]
-
+		start := findSinceMonth(txs, monthAgo)
+		for _, tx := range txs[start:] {
 			t, ok := tx["time"].(float64)
 			if !ok || int64(t) < monthAgo {
 				continue
@@ -239,7 +245,11 @@ func getMostGained(c *gin.Context) {
 		return leaderboard[i].Earned > leaderboard[j].Earned
 	})
 
-	c.JSON(200, leaderboard[:maxInt])
+	if len(leaderboard) > maxInt {
+		leaderboard = leaderboard[:maxInt]
+	}
+
+	c.JSON(200, leaderboard)
 }
 
 func getSystemStats(c *gin.Context) {
@@ -282,44 +292,39 @@ func getFollowersStats(c *gin.Context) {
 		max = 100
 	}
 
-	followersMutex.RLock()
-	usersMutex.RLock()
-	defer followersMutex.RUnlock()
-	defer usersMutex.RUnlock()
-
 	type followerStats struct {
 		Username      string `json:"username"`
 		FollowerCount int    `json:"follower_count"`
 	}
 
-	followersList := make([]followerStats, 0)
+	followersList := make([]followerStats, 0, max*2)
 
-	// Create a map to check if users are banned or private
-	userStatusMap := make(map[string]bool) // true = valid user
+	userStatusMap := make(map[string]bool)
+	usersMutex.RLock()
 	for _, user := range users {
-		if user.Get("sys.banned") == nil && user.Get("private") != true {
-			if username := user.Get("username"); username != nil {
-				userStatusMap[strings.ToLower(username.(string))] = true
-			}
+		if user.Get("sys.banned") != nil || user.Get("private") == true {
+			continue
+		}
+		if username, ok := user.Get("username").(string); ok {
+			userStatusMap[strings.ToLower(username)] = true
 		}
 	}
+	usersMutex.RUnlock()
 
-	// Iterate through followersData to get follower counts
+	followersMutex.RLock()
 	for username, data := range followersData {
-		// Only include users who are not banned and not private
-		if userStatusMap[username] {
+		if userStatusMap[strings.ToLower(username)] {
 			followersList = append(followersList, followerStats{
 				Username:      username,
 				FollowerCount: len(data.Followers),
 			})
 		}
 	}
+	followersMutex.RUnlock()
 
-	// Sort followersList by follower count in descending order
 	sort.Slice(followersList, func(i, j int) bool {
 		return followersList[i].FollowerCount > followersList[j].FollowerCount
 	})
-
 	if len(followersList) > max {
 		followersList = followersList[:max]
 	}

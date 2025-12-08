@@ -927,8 +927,8 @@ func deleteUserKey(c *gin.Context) {
 // Handles tax, transaction logging, and safety rules.
 // Returns an error if the transfer cannot be completed.
 func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note string) error {
-	const totalTax = 1.0
-	const taxRecipientShare = 0.5
+	const totalTax = 0.0
+	const taxRecipientShare = 0.25
 
 	// normalize + validate amount
 	nAmount, ok := normalizeEscrowAmount(amount)
@@ -976,10 +976,10 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 	}
 	note = mkNote(note)
 
-	// Tax handling
-	if fromUsername != "rotur" {
+	// Send credits when rotur is the sender
+	if fromUsername == "rotur" {
 		taxRecipient := "mist"
-		fromSystem := fromUser.Get("system")
+		fromSystem := toUser.Get("system")
 		if fromSystem != nil {
 			systemsMutex.RLock()
 			if sys, ok := systems[fromSystem.(string)]; ok {
@@ -991,15 +991,15 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 		// Apply tax to taxRecipient if exists
 		if idx := getIdxOfAccountBy("username", taxRecipient); idx != -1 {
 			taxUser, _ := getUserByIdx(idx)
-			curr := taxUser.GetCredits()
-			taxUser.SetBalance(roundVal(curr + taxRecipientShare))
+			newBalance := roundVal(taxUser.GetCredits() + taxRecipientShare)
+			taxUser.SetBalance(newBalance)
 			taxUser.addTransaction(map[string]any{
-				"note":      "transfer tax",
-				"user":      fromUser.GetUsername(),
+				"note":      "daily credit",
+				"user":      toUser.GetUsername(),
 				"time":      now,
 				"amount":    taxRecipientShare,
 				"type":      "tax",
-				"new_total": curr + taxRecipientShare,
+				"new_total": newBalance,
 			})
 		}
 	}
@@ -1090,7 +1090,7 @@ func transferCredits(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Transfer successful", "from": user.GetUsername(), "to": toUsername, "amount": nAmount, "debited": nAmount + 1.0})
+	c.JSON(200, gin.H{"message": "Transfer successful", "from": user.GetUsername(), "to": toUsername, "amount": nAmount, "debited": nAmount})
 }
 
 func deleteUser(c *gin.Context) {
@@ -1164,7 +1164,7 @@ func transferCreditsAdmin(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(200, gin.H{"message": "Transfer successful", "from": fromUsername, "to": toUsername, "amount": amountNum, "debited": amountNum + 1.0})
+	c.JSON(200, gin.H{"message": "Transfer successful", "from": fromUsername, "to": toUsername, "amount": amountNum, "debited": amountNum})
 }
 
 func removeUserDirectory(path string) error {
@@ -1412,9 +1412,7 @@ func claimDaily(c *gin.Context) {
 	claimsData[username] = currentTime
 	saveDailyClaims(claimsData)
 
-	curr := user.GetCredits()
-	newCurrency := roundVal(curr + 1.00)
-	user.SetBalance(newCurrency)
+	PerformCreditTransfer("rotur", username, 1.0, "Daily credit")
 	go saveUsers()
 
 	c.JSON(200, gin.H{"message": "Daily claim successful"})
