@@ -989,7 +989,7 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 		}
 
 		// Apply tax to taxRecipient if exists
-		if idx := getIdxOfAccountBy("username", taxRecipient); idx != -1 {
+		if idx := getIdxOfAccountBy("username", taxRecipient); taxRecipient != toUser.GetUsername() && idx != -1 {
 			taxUser, _ := getUserByIdx(idx)
 			newBalance := roundVal(taxUser.GetCredits() + taxRecipientShare)
 			taxUser.SetBalance(newBalance)
@@ -1412,8 +1412,9 @@ func claimDaily(c *gin.Context) {
 	saveDailyClaims(claimsData)
 	usersMutex.Unlock()
 
-	PerformCreditTransfer("rotur", username, 1.0, "Daily credit")
 	go saveUsers()
+
+	PerformCreditTransfer("rotur", username, 1.0, "Daily credit")
 
 	c.JSON(200, gin.H{"message": "Daily claim successful"})
 }
