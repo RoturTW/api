@@ -333,6 +333,25 @@ func getProfile(c *gin.Context) {
 	c.JSON(200, profileData)
 }
 
+func getExists(c *gin.Context) {
+	username := c.Query("username")
+	if username == "" {
+		c.JSON(400, gin.H{"error": "Username is required"})
+		return
+	}
+
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
+	for _, user := range users {
+		if strings.EqualFold(user.GetUsername(), username) {
+			c.JSON(200, gin.H{"exists": true})
+			return
+		}
+	}
+	c.JSON(200, gin.H{"exists": false})
+}
+
 func getSupporters(c *gin.Context) {
 	// anyone who isnt a free user is considered a supporter
 
