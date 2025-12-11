@@ -592,7 +592,7 @@ func (s *System) Set(key string, value any) (string, error) {
 // SystemOwner represents the owner of a system
 type SystemOwner struct {
 	Name      string `json:"name"`
-	DiscordID int64  `json:"discord_id"`
+	DiscordID string `json:"discord_id"`
 }
 
 type Transaction struct {

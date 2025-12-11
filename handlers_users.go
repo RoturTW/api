@@ -994,7 +994,7 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 			newBalance := roundVal(taxUser.GetCredits() + taxRecipientShare)
 			taxUser.SetBalance(newBalance)
 			taxUser.addTransaction(map[string]any{
-				"note":      "daily credit",
+				"note":      "Daily credit",
 				"user":      toUser.GetUsername(),
 				"time":      now,
 				"amount":    taxRecipientShare,
@@ -1414,7 +1414,7 @@ func claimDaily(c *gin.Context) {
 
 	go saveUsers()
 
-	PerformCreditTransfer("rotur", username, 1.0, "Daily credit")
+	PerformCreditTransfer("rotur", username, 1.0, "Daily credit (/claim_daily)")
 
 	c.JSON(200, gin.H{"message": "Daily claim successful"})
 }

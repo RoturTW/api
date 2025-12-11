@@ -114,11 +114,13 @@ func setSystem(systemName string, key string, value any) error {
 			return nil
 		}
 	case "owner_discord_id":
-		if v, ok := value.(int64); ok {
-			system.Owner.DiscordID = v
-			systems[systemName] = system
-			return nil
+		v := getStringOrEmpty(value)
+		if v == "" {
+			return fmt.Errorf("invalid owner_discord_id value: %v", value)
 		}
+		system.Owner.DiscordID = v
+		systems[systemName] = system
+		return nil
 	case "wallpaper":
 		if v, ok := value.(string); ok {
 			system.Wallpaper = v
@@ -157,8 +159,9 @@ func reloadSystems() error {
 }
 
 func getSystems(c *gin.Context) {
-	allSystems := getAllSystems()
-	c.JSON(200, allSystems)
+	systemsMutex.RLock()
+	c.JSON(200, systems)
+	systemsMutex.RUnlock()
 }
 
 func getSystemUsers(c *gin.Context) {

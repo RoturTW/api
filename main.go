@@ -35,7 +35,7 @@ func main() {
 	r.Use(corsMiddleware())
 
 	// Posts endpoints
-	r.GET("/post", requiresAuth, createPost)
+	r.GET("/post", rateLimit("default"), requiresAuth, createPost)
 	r.GET("/limits", getLimits)
 	r.GET("/reply", rateLimit("default"), requiresAuth, replyToPost)
 	r.GET("/follow", rateLimit("follow"), requiresAuth, followUser)
@@ -49,10 +49,10 @@ func main() {
 	r.GET("/following_feed", rateLimit("default"), requiresAuth, getFollowingFeed)
 	r.GET("/delete", requiresAuth, deletePost)
 	r.GET("/rate", requiresAuth, ratePost)
-	r.GET("/repost", requiresAuth, repost)
+	r.GET("/repost", rateLimit("default"), requiresAuth, repost)
 	r.GET("/pin_post", requiresAuth, pinPost)
 	r.GET("/unpin_post", requiresAuth, unpinPost)
-	r.GET("/top_posts", getTopPosts)
+	r.GET("/top_posts", rateLimit("search"), getTopPosts)
 	r.GET("/search_posts", rateLimit("search"), searchPosts)
 
 	// Stats endpoints
