@@ -120,16 +120,16 @@ func handleKofiTransaction(c *gin.Context) {
 			})
 			switch item["direct_link_code"].(string) {
 			case "eebeb7269f":
-				// add 100 rotur credits to the user
+				// add 50 rotur credits to the user
 				now := time.Now().UnixMilli()
-				balance := float64(account.GetCredits()) + 30
+				balance := float64(account.GetCredits()) + 50
 				account.SetBalance(balance)
 				account.addTransaction(map[string]any{
-					"note":      "30 credit purchase",
+					"note":      "50 credit purchase",
 					"user":      "rotur",
 					"time":      now,
-					"amount":    30,
-					"type":      "tax",
+					"amount":    50,
+					"type":      "transfer",
 					"new_total": balance,
 				})
 				go saveUsers()
