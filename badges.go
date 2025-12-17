@@ -1,9 +1,69 @@
 package main
 
 import (
-	"slices"
+	"encoding/json"
+	"log"
+	"os"
 	"strings"
+	"sync"
+	"time"
 )
+
+const BADGES_FILE_PATH = "./rotur/badges.json"
+
+type JSONBadge struct {
+	Name        string   `json:"name"`
+	Icon        string   `json:"icon"`
+	Description string   `json:"description"`
+	Users       []string `json:"users"`
+}
+
+var (
+	jsonBadges      []JSONBadge
+	jsonBadgesMutex sync.RWMutex
+)
+
+func loadJSONBadges() error {
+	data, err := os.ReadFile(BADGES_FILE_PATH)
+	if err != nil {
+		return err
+	}
+
+	var badges []JSONBadge
+	if err := json.Unmarshal(data, &badges); err != nil {
+		log.Printf("Error parsing badges.json: %v", err)
+		log.Printf("Raw data: %s", string(data))
+		return err
+	}
+
+	jsonBadgesMutex.Lock()
+	jsonBadges = badges
+	jsonBadgesMutex.Unlock()
+
+	log.Printf("Successfully loaded %d badges from JSON", len(badges))
+	return nil
+}
+
+func watchBadgesFile() {
+	var lastMtime time.Time
+	if stat, err := os.Stat(BADGES_FILE_PATH); err == nil {
+		lastMtime = stat.ModTime()
+	}
+
+	for {
+		time.Sleep(500 * time.Millisecond)
+		if stat, err := os.Stat(BADGES_FILE_PATH); err == nil {
+			if stat.ModTime().After(lastMtime) {
+				time.Sleep(500 * time.Millisecond)
+				log.Println("Detected change in badges.json, reloading...")
+				if err := loadJSONBadges(); err != nil {
+					log.Printf("Error reloading badges: %v", err)
+				}
+				lastMtime = stat.ModTime()
+			}
+		}
+	}
+}
 
 func calculateUserBadges(user User) []Badge {
 	var badges []Badge
@@ -34,14 +94,12 @@ func calculateUserBadges(user User) []Badge {
 		})
 	}
 
-	if friends := user.Get("sys.friends"); friends != nil {
-		if friendsList, ok := friends.([]any); ok && len(friendsList) >= 10 {
-			badges = append(badges, Badge{
-				Name:        "friendly",
-				Icon:        "w 20 c #ffcc4d dot 0 0 c #ff7892 w 5 dot 5 0 dot -5 0 c #000 w 2.5 cutcircle 0 -1 4 18 60 cutcircle 4 2 2 0 50 cutcircle -4 2 2 0 50",
-				Description: "This user has over 10 friends on Rotur",
-			})
-		}
+	if len(user.GetFriends()) >= 10 {
+		badges = append(badges, Badge{
+			Name:        "friendly",
+			Icon:        "w 20 c #ffcc4d dot 0 0 c #ff7892 w 5 dot 5 0 dot -5 0 c #000 w 2.5 cutcircle 0 -1 4 18 60 cutcircle 4 2 2 0 50 cutcircle -4 2 2 0 50",
+			Description: "This user has over 10 friends on Rotur",
+		})
 	}
 
 	if discordID := user.Get("discord_id"); discordID != nil && discordID != "" {
@@ -57,31 +115,37 @@ func calculateUserBadges(user User) []Badge {
 			if status, ok := marriageMap["status"].(string); ok && status == "married" {
 				badges = append(badges, Badge{
 					Name:        "married",
-					Icon:        "c #f33 w 3 cutcircle -4.5 4 5 -3 90 cutcircle 4.5 4 5 3 90 line -8.5 1 0 -9 line 8.5 1 0 -9 w 9 line -4.5 4 0 -1 cont 4.5 4 dot 0 -2.5",
+					Icon:        "scale 0.9 c #f33 w 3 cutcircle -4.5 4 5 -3 90 cutcircle 4.5 4 5 3 90 line -8.5 1 0 -9 line 8.5 1 0 -9 w 9 line -4.5 4 0 -1 cont 4.5 4 dot 0 -2.5",
 					Description: "This user got married, how cute!",
 				})
 			}
 		}
 	}
 
-	devTeam := []string{"mist", "flufi", "iris", "mikedev", "b1j2754"}
-	username := strings.ToLower(user.GetUsername())
-	if slices.Contains(devTeam, username) {
-		badges = append(badges, Badge{
-			Name:        "dev",
-			Icon:        "c #3f2f3c w 22 dot 0 0 c #000 w 19 dot 0 0 c #fff w 1 ellipse 0 0 9 0.45 100 ellipse 0 0 9 0.45 160 ellipse 0 0 9 0.45 220",
-			Description: "This user is part of the Rotur dev team",
-		})
-	}
-
 	subscription := user.GetSubscription()
 	if subscription.Tier == "Pro" || subscription.Tier == "Max" {
 		badges = append(badges, Badge{
 			Name:        "pro",
-			Icon:        "c #8A2BE2 w 22 dot 0 0 c #4B0082 w 19 dot 0 0 c #FFF w 1 ellipse 0 0 9 0.45 100 ellipse 0 0 9 0.45 160 ellipse 0 0 9 0.45 220",
+			Icon:        "scale 1.16 w 3 c #edb210 tri -6 -4 6 -4 0 5 c #ffc50a square 0 -5 6 1 tri -6 -4 -2 -4 -7 4 tri 6 -4 2 -4 7 4 w 2 c #a7213a tri 0 1 -2 -2 2 -2 c #c0365a tri 0 -4 -2 -2 2 -2",
 			Description: "This user has a Rotur Pro subscription",
 		})
 	}
+
+	username := strings.ToLower(user.GetUsername())
+	jsonBadgesMutex.RLock()
+	for _, jsonBadge := range jsonBadges {
+		for _, badgeUser := range jsonBadge.Users {
+			if strings.ToLower(badgeUser) == username {
+				badges = append(badges, Badge{
+					Name:        jsonBadge.Name,
+					Icon:        jsonBadge.Icon,
+					Description: jsonBadge.Description,
+				})
+				break
+			}
+		}
+	}
+	jsonBadgesMutex.RUnlock()
 
 	return badges
 }

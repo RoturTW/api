@@ -23,9 +23,14 @@ func main() {
 	loadEventsHistory()
 	reconnectFriends()
 
+	if err := loadJSONBadges(); err != nil {
+		log.Printf("Warning: Failed to load badges.json: %v", err)
+	}
+
 	go cleanRateLimitStorage()
 	go checkSubscriptions()
 	go watchUsersFile()
+	go watchBadgesFile()
 	go cleanExpiredStatuses()
 	// go enactInactivityTax()
 
