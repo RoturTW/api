@@ -32,15 +32,19 @@ func blockUser(c *gin.Context) {
 		return
 	}
 
-	// No need for usersMutex - per-user operations use getUserMutex
-	blocked := user.GetBlocked()
+	// Acquire user mutex to protect the read-modify-write operation
+	mu := getUserMutex(user.GetUsername())
+	mu.Lock()
+	blocked := getStringSliceDirect(*user, "sys.blocked")
 	if slices.Contains(blocked, username) {
+		mu.Unlock()
 		c.JSON(400, gin.H{"error": "User already blocked"})
 		return
 	}
 
 	blocked = append(blocked, username)
-	user.SetBlocked(blocked)
+	setUserKeyDirectInternal(*user, "sys.blocked", blocked)
+	mu.Unlock()
 
 	go broadcastUserUpdate(user.GetUsername(), "sys.blocked", blocked)
 	go saveUsers()
@@ -57,8 +61,10 @@ func unblockUser(c *gin.Context) {
 		return
 	}
 
-	// No need for usersMutex - per-user operations use getUserMutex
-	blocked := user.GetBlocked()
+	// Acquire user mutex to protect the read-modify-write operation
+	mu := getUserMutex(user.GetUsername())
+	mu.Lock()
+	blocked := getStringSliceDirect(*user, "sys.blocked")
 	index := -1
 	for i, b := range blocked {
 		if b == username {
@@ -68,12 +74,14 @@ func unblockUser(c *gin.Context) {
 	}
 
 	if index == -1 {
+		mu.Unlock()
 		c.JSON(404, gin.H{"error": "User not blocked"})
 		return
 	}
 
 	blocked = append(blocked[:index], blocked[index+1:]...)
-	user.SetBlocked(blocked)
+	setUserKeyDirectInternal(*user, "sys.blocked", blocked)
+	mu.Unlock()
 
 	go broadcastUserUpdate(user.GetUsername(), "sys.blocked", blocked)
 	go saveUsers()
