@@ -94,7 +94,7 @@ func escrowTransfer(c *gin.Context) {
 
 	// Add transaction directly while holding lock
 	txs := getObjectSlice(*fromUser, "sys.transactions")
-	benefits := fromUser.GetSubscriptionBenefits()
+	benefits := getSubscriptionBenefitsDirect(*fromUser)
 	
 	tx := map[string]any{
 		"note":        note,
@@ -203,7 +203,7 @@ func escrowRelease(c *gin.Context) {
 
 	// Add transaction directly while holding lock
 	txs := getObjectSlice(*toUser, "sys.transactions")
-	benefits := toUser.GetSubscriptionBenefits()
+	benefits := getSubscriptionBenefitsDirect(*toUser)
 	
 	tx := map[string]any{
 		"note":        note,

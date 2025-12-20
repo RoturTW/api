@@ -348,6 +348,31 @@ func (u User) GetSubscriptionBenefits() sub_benefits {
 	return subs_benefits[strings.ToLower(tier)]
 }
 
+// getSubscriptionBenefitsDirect gets subscription benefits without acquiring mutex.
+// MUST be called while holding usersMutex or the appropriate user mutex.
+func getSubscriptionBenefitsDirect(u User) sub_benefits {
+	username := u.GetUsername()
+	if strings.EqualFold(username, "mist") {
+		return subs_benefits["max"]
+	}
+	usub := getKeyDirect(u, "sys.subscription")
+	tier := "Free"
+	
+	if usub != nil {
+		if sub, ok := usub.(map[string]any); ok {
+			tier = getStringOrDefault(sub["tier"], "Free")
+			nextBilling := int64(getIntOrDefault(sub["next_billing"], 0))
+			
+			// Check if subscription is still valid
+			if nextBilling > 0 && nextBilling < time.Now().UnixMilli() {
+				tier = "Free"
+			}
+		}
+	}
+	
+	return subs_benefits[strings.ToLower(tier)]
+}
+
 func (u User) GetBlockedIps() []string {
 	return getStringSlice(u, "blocked_ips")
 }

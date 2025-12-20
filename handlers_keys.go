@@ -645,7 +645,7 @@ func checkSubscriptions() {
 						
 						// Add transaction directly
 						txs := getObjectSlice(users[userIndex], "sys.transactions")
-						benefits := users[userIndex].GetSubscriptionBenefits()
+						benefits := getSubscriptionBenefitsDirect(users[userIndex])
 						tx := map[string]any{
 							"note":      "key purchase",
 							"key_id":    key.Key,
@@ -669,7 +669,7 @@ func checkSubscriptions() {
 						
 						// Add transaction for owner
 						ownerTxs := getObjectSlice(owner, "sys.transactions")
-						ownerBenefits := owner.GetSubscriptionBenefits()
+						ownerBenefits := getSubscriptionBenefitsDirect(owner)
 						ownerTx := map[string]any{
 							"note":      "key purchase",
 							"key_id":    key.Key,

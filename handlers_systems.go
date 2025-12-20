@@ -44,13 +44,17 @@ func renameSystem(systemName string, newName string) error {
 	system.Name = newName
 	systems[newName] = system
 
-	users, err := getAccountsBy("system", systemName, -1)
+	// Check if any users have this system before locking
+	_, err := getAccountsBy("system", systemName, -1)
 	if err != nil {
-		return nil
+		// No users found with this system, continue anyway
 	}
 	usersMutex.Lock()
+	// Iterate over global users slice and update matching users
 	for i := range users {
-		setUserKeyDirect(&users[i], "system", newName)
+		if strings.EqualFold(getStringDirect(users[i], "system"), systemName) {
+			setUserKeyDirect(&users[i], "system", newName)
+		}
 	}
 	usersMutex.Unlock()
 	go saveUsers()
