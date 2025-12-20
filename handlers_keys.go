@@ -640,8 +640,13 @@ func checkSubscriptions() {
 						}
 						currencyFloat -= float64(userData.Price)
 						usersMutex.Lock()
-						purchaser.SetBalance(currencyFloat)
-						purchaser.addTransaction(map[string]any{
+						// Use direct access since we hold usersMutex
+						setUserKeyDirect(&users[userIndex], "sys.currency", roundVal(currencyFloat))
+						
+						// Add transaction directly
+						txs := getObjectSlice(users[userIndex], "sys.transactions")
+						benefits := users[userIndex].GetSubscriptionBenefits()
+						tx := map[string]any{
 							"note":      "key purchase",
 							"key_id":    key.Key,
 							"key_name":  key.Name,
@@ -649,14 +654,23 @@ func checkSubscriptions() {
 							"amount":    float64(userData.Price),
 							"type":      "key_buy",
 							"new_total": currencyFloat,
-						})
+						}
+						txs = append([]map[string]any{tx}, txs...)
+						if len(txs) > benefits.Max_Transaction_History {
+							txs = txs[:benefits.Max_Transaction_History]
+						}
+						setUserKeyDirect(&users[userIndex], "sys.transactions", txs)
 
 						// 10% tax on purchase
 						value := float64(userData.Price) * 0.9
 						owner := users[ownerIndex]
 						newBal := owner.GetCredits() + value
-						owner.SetBalance(newBal)
-						owner.addTransaction(map[string]any{
+						setUserKeyDirect(&users[ownerIndex], "sys.currency", roundVal(newBal))
+						
+						// Add transaction for owner
+						ownerTxs := getObjectSlice(owner, "sys.transactions")
+						ownerBenefits := owner.GetSubscriptionBenefits()
+						ownerTx := map[string]any{
 							"note":      "key purchase",
 							"key_id":    key.Key,
 							"key_name":  key.Name,
@@ -664,7 +678,13 @@ func checkSubscriptions() {
 							"amount":    float64(userData.Price),
 							"type":      "key_sale",
 							"new_total": newBal,
-						})
+						}
+						ownerTxs = append([]map[string]any{ownerTx}, ownerTxs...)
+						if len(ownerTxs) > ownerBenefits.Max_Transaction_History {
+							ownerTxs = ownerTxs[:ownerBenefits.Max_Transaction_History]
+						}
+						setUserKeyDirect(&users[ownerIndex], "sys.transactions", ownerTxs)
+						
 						usersMutex.Unlock()
 						go saveUsers()
 

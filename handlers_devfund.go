@@ -53,6 +53,7 @@ func escrowTransfer(c *gin.Context) {
 		}
 	}
 	if fromUser == nil {
+		usersMutex.Unlock()
 		c.JSON(404, gin.H{"error": "Sender user not found"})
 		return
 	}
@@ -60,12 +61,14 @@ func escrowTransfer(c *gin.Context) {
 	// Check sender balance
 	fromCurrency := fromUser.GetCredits()
 	if fromCurrency == 0 {
+		usersMutex.Unlock()
 		c.JSON(400, gin.H{"error": "Sender user has no currency"})
 		return
 	}
 	fromCurrency = roundVal(fromCurrency)
 
 	if fromCurrency < nAmount {
+		usersMutex.Unlock()
 		c.JSON(400, gin.H{"error": "Insufficient funds", "required": nAmount, "available": fromCurrency})
 		return
 	}
@@ -75,12 +78,9 @@ func escrowTransfer(c *gin.Context) {
 	if newBal < 0 { // guard against tiny floating error
 		newBal = 0
 	}
-	usersMutex.Unlock()
-
-	fromUser.SetBalance(newBal)
-
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
+	
+	// Update balance directly while holding lock
+	setUserKeyDirect(fromUser, "sys.currency", roundVal(newBal))
 
 	// Add escrow transaction to sender
 	now := time.Now().UnixMilli()
@@ -92,7 +92,11 @@ func escrowTransfer(c *gin.Context) {
 		note = note[:50]
 	}
 
-	fromUser.addTransaction(map[string]any{
+	// Add transaction directly while holding lock
+	txs := getObjectSlice(*fromUser, "sys.transactions")
+	benefits := fromUser.GetSubscriptionBenefits()
+	
+	tx := map[string]any{
 		"note":        note,
 		"user":        "devfund-escrow",
 		"time":        now,
@@ -100,7 +104,15 @@ func escrowTransfer(c *gin.Context) {
 		"type":        "escrow_out",
 		"petition_id": req.PetitionID,
 		"new_total":   newBal,
-	})
+	}
+	
+	txs = append([]map[string]any{tx}, txs...)
+	if len(txs) > benefits.Max_Transaction_History {
+		txs = txs[:benefits.Max_Transaction_History]
+	}
+	setUserKeyDirect(fromUser, "sys.transactions", txs)
+	
+	usersMutex.Unlock()
 
 	go saveUsers()
 
@@ -164,24 +176,20 @@ func escrowRelease(c *gin.Context) {
 		}
 	}
 	if toUser == nil {
+		usersMutex.Unlock()
 		c.JSON(404, gin.H{"error": "Recipient user not found"})
 		return
 	}
 
-	usersMutex.Unlock()
 	// Get recipient balance
 	toCurrency := toUser.GetCredits()
 	if toCurrency == 0 {
-		toUser.SetBalance(float64(0))
 		toCurrency = float64(0)
 	}
 
 	// Add credits to recipient
 	newBal := roundVal(toCurrency + nAmount)
-	toUser.SetBalance(newBal)
-
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
+	setUserKeyDirect(toUser, "sys.currency", newBal)
 
 	// Add transaction to recipient
 	now := time.Now().UnixMilli()
@@ -193,8 +201,11 @@ func escrowRelease(c *gin.Context) {
 		note = note[:50]
 	}
 
-	// Helper to add transaction
-	toUser.addTransaction(map[string]any{
+	// Add transaction directly while holding lock
+	txs := getObjectSlice(*toUser, "sys.transactions")
+	benefits := toUser.GetSubscriptionBenefits()
+	
+	tx := map[string]any{
 		"note":        note,
 		"user":        "devfund-escrow",
 		"time":        now,
@@ -202,7 +213,15 @@ func escrowRelease(c *gin.Context) {
 		"type":        "escrow_in",
 		"petition_id": req.PetitionID,
 		"new_total":   newBal,
-	})
+	}
+	
+	txs = append([]map[string]any{tx}, txs...)
+	if len(txs) > benefits.Max_Transaction_History {
+		txs = txs[:benefits.Max_Transaction_History]
+	}
+	setUserKeyDirect(toUser, "sys.transactions", txs)
+
+	usersMutex.Unlock()
 
 	go saveUsers()
 

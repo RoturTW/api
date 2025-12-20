@@ -152,7 +152,8 @@ func rejectFriendRequest(c *gin.Context) {
 
 	usersMutex.Lock()
 
-	currentRequests := getStringSlice(*current, "sys.requests")
+	// Use direct access since we hold usersMutex
+	currentRequests := getStringSliceDirect(*current, "sys.requests")
 	found := false
 	newRequests := make([]string, 0, len(currentRequests))
 	for _, r := range currentRequests {

@@ -159,7 +159,8 @@ func buyItem(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
-	users[userIndex].SetBalance(userCurrency - float64(targetItem.Price))
+	// Use direct access since we hold usersMutex
+	setUserKeyDirect(&users[userIndex], "sys.currency", roundVal(userCurrency-float64(targetItem.Price)))
 	go saveUsers()
 
 	// Notify both users
