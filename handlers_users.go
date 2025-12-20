@@ -89,15 +89,17 @@ func getIdxOfAccountBy(key string, value string) int {
 
 // helper function to update user keys
 func setAccountKey(username, key string, value any) error {
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
 
-	i := getIdxOfAccountBy("username", username)
-
-	if i != -1 {
-		usersMutex.Lock()
-		defer usersMutex.Unlock()
-
-		users[i].Set(key, value)
-		return nil
+	// Find user while holding lock to avoid TOCTOU
+	username = strings.ToLower(username)
+	for i := range users {
+		if strings.EqualFold(users[i].GetUsername(), username) {
+			// Call setDirect to avoid nested locking
+			setUserKeyDirect(&users[i], key, value)
+			return nil
+		}
 	}
 	return fmt.Errorf("user not found: %s", username)
 }
@@ -168,9 +170,7 @@ func getUser(c *gin.Context) {
 	}
 
 	if foundUser != nil {
-		usersMutex.Lock()
-		defer usersMutex.Unlock()
-
+		// Don't hold usersMutex here - per-user operations use getUserMutex
 		banned := foundUser.Get("sys.banned")
 		if banned == "true" || banned == true {
 			c.JSON(403, gin.H{
@@ -284,9 +284,7 @@ func refreshToken(c *gin.Context) {
 
 	newToken := generateAccountToken()
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
-
+	// Don't need usersMutex here - user.Set uses getUserMutex
 	user.Set("key", newToken)
 	go saveUsers()
 
@@ -402,7 +400,8 @@ func registerUser(c *gin.Context) {
 			c.JSON(400, gin.H{"error": "Username already in use"})
 			return
 		}
-		if strings.EqualFold(getStringOrEmpty(user.Get("email")), email) {
+		// Use direct access since we hold usersMutex
+		if strings.EqualFold(getStringOrEmpty(getKeyDirect(user, "email")), email) {
 			c.JSON(400, gin.H{"error": "Email already in use"})
 			return
 		}
@@ -1191,7 +1190,8 @@ func reconnectFriends() {
 	friendMap := make(map[*User][]string, len(users))
 	for i := range users {
 		u := &users[i]
-		friends := u.GetFriends()
+		// Use direct access since we hold usersMutex
+		friends := getStringSliceDirect(*u, "sys.friends")
 		valid := make([]string, 0, len(friends))
 		for _, f := range friends {
 			if friendUser := findUser(f); friendUser != nil {
@@ -1224,7 +1224,8 @@ func reconnectFriends() {
 	}
 
 	for u, finalList := range friendMap {
-		u.SetFriends(finalList)
+		// Use direct access since we hold usersMutex
+		setUserKeyDirect(u, "sys.friends", finalList)
 	}
 }
 
@@ -1248,7 +1249,7 @@ func performUserDeletion(username string, isAdmin bool) error {
 	// set as banned
 	users[idx] = User{
 		"username":   username,
-		"email":      users[idx].Get("email"), // so that the same email cant be used by a banned user
+		"email":      getKeyDirect(users[idx], "email"), // so that the same email cant be used by a banned user
 		"private":    true,
 		"sys.banned": true,
 	}
@@ -1258,20 +1259,22 @@ func performUserDeletion(username string, isAdmin bool) error {
 	for i := range users {
 		target := &users[i]
 
-		friends := target.GetFriends()
+		// Use direct access since we hold usersMutex
+		friends := getStringSliceDirect(*target, "sys.friends")
 		for i, f := range friends {
 			if strings.EqualFold(f, usernameLower) {
 				friends = append(friends[:i], friends[i+1:]...)
-				target.SetFriends(friends)
+				setUserKeyDirect(target, "sys.friends", friends)
 				break
 			}
 		}
 
-		requests := target.GetRequests()
+		// Use direct access since we hold usersMutex
+		requests := getStringSliceDirect(*target, "sys.requests")
 		for i, r := range requests {
 			if strings.EqualFold(r, usernameLower) {
 				requests = append(requests[:i], requests[i+1:]...)
-				target.SetRequests(requests)
+				setUserKeyDirect(target, "sys.requests", requests)
 				break
 			}
 		}

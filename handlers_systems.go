@@ -49,8 +49,8 @@ func renameSystem(systemName string, newName string) error {
 		return nil
 	}
 	usersMutex.Lock()
-	for _, user := range users {
-		user.Set("system", newName)
+	for i := range users {
+		setUserKeyDirect(&users[i], "system", newName)
 	}
 	usersMutex.Unlock()
 	go saveUsers()

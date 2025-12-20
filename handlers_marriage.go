@@ -57,14 +57,14 @@ func proposeMarriage(c *gin.Context) {
 
 	usersMutex.Lock()
 	defer usersMutex.Unlock()
-	user.Set("sys.marriage", map[string]any{
+	setUserKeyDirect(user, "sys.marriage", map[string]any{
 		"status":    "proposed",
 		"partner":   targetUsername,
 		"timestamp": timestamp,
 		"proposer":  user.GetUsername(),
 	})
 
-	targetUser.Set("sys.marriage", map[string]any{
+	setUserKeyDirect(&targetUser, "sys.marriage", map[string]any{
 		"status":    "proposed",
 		"partner":   user.GetUsername(),
 		"timestamp": timestamp,
@@ -121,14 +121,14 @@ func acceptMarriage(c *gin.Context) {
 
 	usersMutex.Lock()
 	defer usersMutex.Unlock()
-	user.Set("sys.marriage", map[string]any{
+	setUserKeyDirect(user, "sys.marriage", map[string]any{
 		"status":    "married",
 		"partner":   partnerUsername,
 		"timestamp": timestamp,
 		"proposer":  proposerUsername,
 	})
 
-	users[partnerIndex].Set("sys.marriage", map[string]any{
+	setUserKeyDirect(&users[partnerIndex], "sys.marriage", map[string]any{
 		"status":    "married",
 		"partner":   user.GetUsername(),
 		"timestamp": timestamp,
@@ -188,8 +188,8 @@ func rejectMarriage(c *gin.Context) {
 	// Remove marriage data entirely for both users
 	usersMutex.Lock()
 	defer usersMutex.Unlock()
-	user.DelKey("sys.marriage")
-	users[partnerIndex].DelKey("sys.marriage")
+	delKeyDirect(*user, "sys.marriage")
+	delKeyDirect(users[partnerIndex], "sys.marriage")
 
 	go saveUsers()
 
@@ -235,8 +235,8 @@ func divorceMarriage(c *gin.Context) {
 	// Remove marriage data entirely
 	usersMutex.Lock()
 	defer usersMutex.Unlock()
-	user.DelKey("sys.marriage")
-	users[partnerIndex].DelKey("sys.marriage")
+	delKeyDirect(*user, "sys.marriage")
+	delKeyDirect(users[partnerIndex], "sys.marriage")
 
 	go saveUsers()
 
@@ -292,8 +292,8 @@ func cancelMarriage(c *gin.Context) {
 	// Remove marriage data entirely for both users
 	usersMutex.Lock()
 	defer usersMutex.Unlock()
-	user.DelKey("sys.marriage")
-	users[partnerIndex].DelKey("sys.marriage")
+	delKeyDirect(*user, "sys.marriage")
+	delKeyDirect(users[partnerIndex], "sys.marriage")
 
 	go saveUsers()
 

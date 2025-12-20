@@ -49,6 +49,12 @@ func getStringSlice(u User, key string) []string {
 	mu := getUserMutex(u.GetUsername())
 	mu.Lock()
 	defer mu.Unlock()
+	return getStringSliceDirect(u, key)
+}
+
+// getStringSliceDirect gets a string slice without acquiring the user mutex.
+// MUST be called while holding usersMutex or the appropriate user mutex.
+func getStringSliceDirect(u User, key string) []string {
 	if v, ok := u[key]; ok {
 		switch s := v.(type) {
 		case []string:

@@ -428,6 +428,12 @@ func (u User) Has(key string) bool {
 	mu := getUserMutex(u.GetUsername())
 	mu.Lock()
 	defer mu.Unlock()
+	return hasKeyDirect(u, key)
+}
+
+// hasKeyDirect checks if a key exists without acquiring the user mutex.
+// MUST be called while holding usersMutex or the appropriate user mutex.
+func hasKeyDirect(u User, key string) bool {
 	_, ok := u[key]
 	return ok
 }
@@ -436,6 +442,12 @@ func (u User) Get(key string) any {
 	mu := getUserMutex(u.GetUsername())
 	mu.Lock()
 	defer mu.Unlock()
+	return getKeyDirect(u, key)
+}
+
+// getKeyDirect gets a value without acquiring the user mutex.
+// MUST be called while holding usersMutex or the appropriate user mutex.
+func getKeyDirect(u User, key string) any {
 	value, ok := u[key]
 	if ok {
 		return value
@@ -447,6 +459,12 @@ func (u User) GetString(key string) string {
 	mu := getUserMutex(u.GetUsername())
 	mu.Lock()
 	defer mu.Unlock()
+	return getStringDirect(u, key)
+}
+
+// getStringDirect gets a string value without acquiring the user mutex.
+// MUST be called while holding usersMutex or the appropriate user mutex.
+func getStringDirect(u User, key string) string {
 	value, ok := u[key]
 	if ok {
 		switch v := value.(type) {
@@ -465,6 +483,12 @@ func (u User) GetInt(key string) int {
 	mu := getUserMutex(u.GetUsername())
 	mu.Lock()
 	defer mu.Unlock()
+	return getIntDirect(u, key)
+}
+
+// getIntDirect gets an int value without acquiring the user mutex.
+// MUST be called while holding usersMutex or the appropriate user mutex.
+func getIntDirect(u User, key string) int {
 	value, ok := u[key]
 	if ok {
 		switch v := value.(type) {
@@ -487,18 +511,35 @@ func (u User) DelKey(key string) error {
 	mu := getUserMutex(u.GetUsername())
 	mu.Lock()
 	defer mu.Unlock()
+	delKeyDirect(u, key)
+	return nil
+}
+
+// delKeyDirect deletes a key without acquiring the user mutex.
+// MUST be called while holding usersMutex or the appropriate user mutex.
+func delKeyDirect(u User, key string) {
 	delete(u, key)
 	go notify("sys.delete", map[string]any{
 		"username": u.GetUsername(),
 		"key":      key,
 	})
-	return nil
 }
 
 func (u User) Set(key string, value any) {
 	mu := getUserMutex(u.GetUsername())
 	mu.Lock()
 	defer mu.Unlock()
+	setUserKeyDirectInternal(u, key, value)
+}
+
+// setUserKeyDirect sets a user key directly without acquiring the user mutex.
+// MUST be called while holding usersMutex or the appropriate user mutex.
+func setUserKeyDirect(u *User, key string, value any) {
+	setUserKeyDirectInternal(*u, key, value)
+}
+
+// Internal helper that does the actual setting without any locking
+func setUserKeyDirectInternal(u User, key string, value any) {
 	oldValue := u[key]
 	if reflect.DeepEqual(oldValue, value) {
 		return

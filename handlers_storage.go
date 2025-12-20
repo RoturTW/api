@@ -197,8 +197,8 @@ func saveFollowers() {
 		return
 	}
 
-	if err := os.WriteFile(FOLLOWERS_FILE_PATH, data, 0644); err != nil {
-		log.Printf("Error saving followers: %v", err)
+	if err := atomicWrite(FOLLOWERS_FILE_PATH, data, 0644); err != nil {
+		log.Printf("Error saving followers (atomic write failed): %v", err)
 	}
 }
 
@@ -234,8 +234,8 @@ func savePosts() {
 		return
 	}
 
-	if err := os.WriteFile(LOCAL_POSTS_PATH, data, 0644); err != nil {
-		log.Printf("Error saving posts: %v", err)
+	if err := atomicWrite(LOCAL_POSTS_PATH, data, 0644); err != nil {
+		log.Printf("Error saving posts (atomic write failed): %v", err)
 	}
 }
 
@@ -271,8 +271,8 @@ func saveItems() {
 		return
 	}
 
-	if err := os.WriteFile(ITEMS_FILE_PATH, data, 0644); err != nil {
-		log.Printf("Error saving items: %v", err)
+	if err := atomicWrite(ITEMS_FILE_PATH, data, 0644); err != nil {
+		log.Printf("Error saving items (atomic write failed): %v", err)
 	}
 }
 
@@ -308,8 +308,8 @@ func saveKeys() {
 		return
 	}
 
-	if err := os.WriteFile(KEYS_FILE_PATH, data, 0644); err != nil {
-		log.Printf("Error saving keys: %v", err)
+	if err := atomicWrite(KEYS_FILE_PATH, data, 0644); err != nil {
+		log.Printf("Error saving keys (atomic write failed): %v", err)
 	}
 }
 
@@ -381,8 +381,8 @@ func saveEventsHistory() {
 		return
 	}
 
-	if err := os.WriteFile(EVENTS_HISTORY_PATH, data, 0644); err != nil {
-		log.Printf("Error saving events history: %v", err)
+	if err := atomicWrite(EVENTS_HISTORY_PATH, data, 0644); err != nil {
+		log.Printf("Error saving events history (atomic write failed): %v", err)
 	}
 }
 

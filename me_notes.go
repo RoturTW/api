@@ -32,13 +32,12 @@ func noteUser(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
+	// No need for usersMutex - GetNotes and Set use getUserMutex
 	notes := user.GetNotes()
 
 	notes[username] = noteContent
 
 	user.Set("sys.notes", notes)
-	usersMutex.Unlock()
 
 	go saveUsers()
 
@@ -64,11 +63,10 @@ func deleteNote(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
+	// No need for usersMutex - GetNotes and Set use getUserMutex
 	notes := user.GetNotes()
 	delete(notes, username)
 	user.Set("sys.notes", notes)
-	usersMutex.Unlock()
 
 	go saveUsers()
 

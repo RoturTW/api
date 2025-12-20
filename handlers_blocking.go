@@ -32,9 +32,7 @@ func blockUser(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
-
+	// No need for usersMutex - per-user operations use getUserMutex
 	blocked := user.GetBlocked()
 	if slices.Contains(blocked, username) {
 		c.JSON(400, gin.H{"error": "User already blocked"})
@@ -59,9 +57,7 @@ func unblockUser(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
-
+	// No need for usersMutex - per-user operations use getUserMutex
 	blocked := user.GetBlocked()
 	index := -1
 	for i, b := range blocked {
