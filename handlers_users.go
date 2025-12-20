@@ -92,7 +92,7 @@ func setAccountKey(username, key string, value any) error {
 	usersMutex.Lock()
 	defer usersMutex.Unlock()
 
-	// Find user while holding lock to avoid TOCTOU
+	// Find user while holding lock to prevent race conditions where the user could be modified between finding and updating
 	username = strings.ToLower(username)
 	for i := range users {
 		if strings.EqualFold(users[i].GetUsername(), username) {

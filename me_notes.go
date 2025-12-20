@@ -63,10 +63,16 @@ func deleteNote(c *gin.Context) {
 		return
 	}
 
-	// No need for usersMutex - GetNotes and Set use getUserMutex
+	// GetNotes and Set use getUserMutex for safe concurrent access
 	notes := user.GetNotes()
-	delete(notes, username)
-	user.Set("sys.notes", notes)
+	// Create a new map to avoid modifying the returned map directly
+	updatedNotes := make(map[string]string, len(notes))
+	for k, v := range notes {
+		if k != username {
+			updatedNotes[k] = v
+		}
+	}
+	user.Set("sys.notes", updatedNotes)
 
 	go saveUsers()
 
