@@ -449,3 +449,13 @@ func sendDiscordWebhook(data []map[string]any) {
 		}
 	}()
 }
+
+func clamp(num int, low int, high int) int {
+	if num > high {
+		return high
+	}
+	if num < low {
+		return low
+	}
+	return num
+}

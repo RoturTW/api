@@ -299,15 +299,7 @@ func ratePost(c *gin.Context) {
 		return
 	}
 
-	postsMutex.Lock()
-	var targetPost *Post
-	for i := range posts {
-		if posts[i].ID == postID {
-			targetPost = &posts[i]
-			break
-		}
-	}
-	postsMutex.Unlock()
+	var targetPost *Post = getPostById(postID)
 
 	if targetPost == nil {
 		c.JSON(404, gin.H{"error": "Post not found"})
@@ -379,17 +371,9 @@ func repost(c *gin.Context) {
 	}
 
 	// Find the original post by ID
-	postsMutex.Lock()
-	var originalPost *Post
-	for i := range posts {
-		if posts[i].ID == postID {
-			originalPost = &posts[i]
-			break
-		}
-	}
+	var originalPost *Post = getPostById(postID)
 
 	if originalPost == nil {
-		postsMutex.Unlock()
 		c.JSON(404, gin.H{"error": "Original post not found"})
 		return
 	}
@@ -397,20 +381,17 @@ func repost(c *gin.Context) {
 	idx := getIdxOfAccountBy("username", originalPost.User)
 	originalUser, err := getUserByIdx(idx)
 	if isUserBlockedBy(*originalUser, user.GetUsername()) || err != nil {
-		postsMutex.Unlock()
 		c.JSON(400, gin.H{"error": "You cant repost this post"})
 		return
 	}
 
 	// Check if the original post is profile-only
 	if originalPost.ProfileOnly {
-		postsMutex.Unlock()
 		c.JSON(403, gin.H{"error": "Cannot repost a profile-only post"})
 		return
 	}
 
 	if originalPost.IsRepost {
-		postsMutex.Unlock()
 		c.JSON(403, gin.H{"error": "Cannot repost a repost"})
 		return
 	}
@@ -435,6 +416,7 @@ func repost(c *gin.Context) {
 		newRepost.OriginalPost.OS = originalPost.OS
 	}
 
+	postsMutex.Lock()
 	posts = append(posts, newRepost)
 	postsMutex.Unlock()
 
@@ -458,28 +440,20 @@ func pinPost(c *gin.Context) {
 		return
 	}
 
-	postsMutex.Lock()
-	var targetPost *Post
-	for i := range posts {
-		if posts[i].ID == postID {
-			targetPost = &posts[i]
-			break
-		}
-	}
+	var targetPost *Post = getPostById(postID)
 
 	if targetPost == nil {
-		postsMutex.Unlock()
 		c.JSON(404, gin.H{"error": "Post not found"})
 		return
 	}
 
 	// Check if the user is the owner of the post
 	if !strings.EqualFold(targetPost.User, user.GetUsername()) {
-		postsMutex.Unlock()
 		c.JSON(403, gin.H{"error": "You can only pin your own posts"})
 		return
 	}
 
+	postsMutex.Lock()
 	targetPost.Pinned = true
 	postsMutex.Unlock()
 
@@ -506,28 +480,20 @@ func unpinPost(c *gin.Context) {
 		return
 	}
 
-	postsMutex.Lock()
-	var targetPost *Post
-	for i := range posts {
-		if posts[i].ID == postID {
-			targetPost = &posts[i]
-			break
-		}
-	}
+	var targetPost *Post = getPostById(postID)
 
 	if targetPost == nil {
-		postsMutex.Unlock()
 		c.JSON(404, gin.H{"error": "Post not found"})
 		return
 	}
 
 	// Check if the user is the owner of the post
 	if !strings.EqualFold(targetPost.User, user.GetUsername()) {
-		postsMutex.Unlock()
 		c.JSON(403, gin.H{"error": "You can only unpin your own posts"})
 		return
 	}
 
+	postsMutex.Lock()
 	targetPost.Pinned = false
 	postsMutex.Unlock()
 
@@ -556,9 +522,8 @@ func searchPosts(c *gin.Context) {
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit <= 0 {
 		limit = 20
-	}
-	if limit > 50 {
-		limit = 50
+	} else {
+		limit = clamp(limit, 1, 20)
 	}
 
 	queryLower := strings.ToLower(query)
@@ -590,9 +555,8 @@ func getTopPosts(c *gin.Context) {
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit <= 0 {
 		limit = 50
-	}
-	if limit > 100 {
-		limit = 100
+	} else {
+		limit = clamp(limit, 1, 50)
 	}
 
 	timePeriodStr := c.DefaultQuery("time_period", "24")
@@ -659,9 +623,8 @@ func getFeed(c *gin.Context) {
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit <= 0 {
 		limit = 100
-	}
-	if limit > 100 {
-		limit = 100
+	} else {
+		limit = clamp(limit, 1, 100)
 	}
 
 	offsetStr := c.DefaultQuery("offset", "0")
