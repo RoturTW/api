@@ -97,74 +97,21 @@ func getUserStats(c *gin.Context) {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 
-	stats := gin.H{
+	stats := map[string]int{
 		"total_users":  len(users),
 		"banned_users": 0,
 		"active_users": 0,
 	}
 
 	for _, user := range users {
-		if user.Get("sys.banned") != nil {
-			stats["banned_users"] = stats["banned_users"].(int) + 1
+		if user.IsBanned() {
+			stats["banned_users"] += 1
 		} else {
-			stats["active_users"] = stats["active_users"].(int) + 1
+			stats["active_users"] += 1
 		}
 	}
 
 	c.JSON(200, stats)
-}
-
-func getRichList(c *gin.Context) {
-	maxNum := c.Query("max")
-	if maxNum == "" {
-		maxNum = "10"
-	}
-	max, err := strconv.Atoi(maxNum)
-	if err != nil || max <= 0 {
-		max = 10
-	}
-	if max > 100 {
-		max = 100
-	}
-	isAdmin := os.Getenv("ADMIN_TOKEN") == c.Query("admin_token")
-	usersMutex.RLock()
-	defer usersMutex.RUnlock()
-
-	richList := make([]gin.H, 0)
-	for _, user := range users {
-		// Safely check banned or private status without forcing a type assertion.
-		isBanned := user.Get("sys.banned") != nil
-		isPrivate := false
-		if p := user.Get("private"); p != nil {
-			switch v := p.(type) {
-			case bool:
-				isPrivate = v
-			case string:
-				isPrivate = strings.ToLower(v) == "true"
-			}
-		}
-		if (isBanned || isPrivate) && !isAdmin {
-			continue
-		}
-		currency := user.GetCredits()
-		if currency <= 0 {
-			continue
-		}
-		richList = append(richList, gin.H{
-			"username": user.Get("username"),
-			"wealth":   currency,
-		})
-	}
-
-	// Sort richList by wealth in descending order
-	sort.Slice(richList, func(i, j int) bool {
-		return richList[i]["wealth"].(float64) > richList[j]["wealth"].(float64)
-	})
-	if len(richList) > max {
-		richList = richList[:max]
-	}
-
-	c.JSON(200, richList)
 }
 
 func findSinceMonth(txs []map[string]any, cutoff int64) int {
@@ -201,7 +148,7 @@ func getMostGained(c *gin.Context) {
 	leaderboard := make([]result, 0, len(users))
 
 	for _, user := range users {
-		if user.Get("sys.banned") != nil || user.Get("private") == true {
+		if user.IsBanned() || user.IsPrivate() {
 			continue
 		}
 
@@ -258,15 +205,10 @@ func getSystemStats(c *gin.Context) {
 
 	systems := make(map[string]int)
 	for _, user := range users {
-		if user.Get("sys.banned") != nil || user.Get("private") == true {
+		if user.IsBanned() || user.IsPrivate() {
 			continue
 		}
-		if system := user.Get("system"); system != nil {
-			switch v := system.(type) {
-			case string:
-				systems[v]++
-			}
-		}
+		systems[user.GetSystem()]++
 	}
 
 	if len(systems) == 0 {
@@ -302,12 +244,11 @@ func getFollowersStats(c *gin.Context) {
 	userStatusMap := make(map[string]bool)
 	usersMutex.RLock()
 	for _, user := range users {
-		if user.Get("sys.banned") != nil || user.Get("private") == true {
+		if user.IsBanned() || user.IsPrivate() {
 			continue
 		}
-		if username, ok := user.Get("username").(string); ok {
-			userStatusMap[strings.ToLower(username)] = true
-		}
+		username := user.GetUsername()
+		userStatusMap[strings.ToLower(username)] = true
 	}
 	usersMutex.RUnlock()
 

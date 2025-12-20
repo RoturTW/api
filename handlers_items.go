@@ -145,21 +145,7 @@ func buyItem(c *gin.Context) {
 
 	go saveItems()
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
-	// Deduct currency from the buyer
-	userIndex := -1
-	for i, u := range users {
-		if strings.EqualFold(u.GetUsername(), user.GetUsername()) {
-			userIndex = i
-			break
-		}
-	}
-	if userIndex == -1 {
-		c.JSON(404, gin.H{"error": "User not found"})
-		return
-	}
-	users[userIndex].SetBalance(userCurrency - float64(targetItem.Price))
+	user.SetBalance(userCurrency - float64(targetItem.Price))
 	go saveUsers()
 
 	// Notify both users

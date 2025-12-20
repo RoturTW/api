@@ -74,12 +74,12 @@ func validateToken(c *gin.Context) {
 	encryptedData := parts[1]
 
 	// Find the user in the users list
-	idx := getIdxOfAccountBy("username", username)
-	foundUser, err := getUserByIdx(idx)
+	foundUsers, err := getAccountsBy("username", username, 1)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
+	foundUser := foundUsers[0]
 	// Get the user's key (token)
 	userKey := foundUser.GetKey()
 	if userKey == "" {

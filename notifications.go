@@ -191,16 +191,6 @@ func broadcastUserUpdate(username, key string, value any) bool {
 	return success
 }
 
-func broadcastUserRemove(username, key string) bool {
-	payload := createEventPayload("user_account_removekey", map[string]any{
-		"username": username,
-		"key":      key,
-	})
-
-	success := makeHTTPRequest("POST", EVENT_SERVER_URL, payload, 2*time.Second, "UserRemove", 200)
-	return success
-}
-
 func addUserEvent(username, eventType string, data map[string]any) Event {
 	eventsHistoryMutex.Lock()
 	defer eventsHistoryMutex.Unlock()

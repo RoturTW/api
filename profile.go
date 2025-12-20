@@ -121,42 +121,27 @@ func getProfile(c *gin.Context) {
 	// Convert the name to lowercase for case-insensitive comparison
 	nameLower := strings.ToLower(name)
 	// Find user with case-insensitive matching
-	usersMutex.RLock()
 	var foundUser *User
 	var userIndex int
 	if discord_id != "" {
-		for i, user := range users {
-			if user.Get("discord_id") == discord_id {
-				foundUser = &user
-				userIndex = i
-				break
-			}
-		}
-		if foundUser == nil {
+		foundUsers, err := getAccountsBy("discord_id", discord_id, 1)
+		if err != nil {
 			c.JSON(404, gin.H{"error": "User not found"})
-			usersMutex.RUnlock()
 			return
 		}
+		foundUser = foundUsers[0]
 		name = foundUser.GetUsername()
 		nameLower = strings.ToLower(name)
 	} else {
-		for i, user := range users {
-			if strings.ToLower(user.GetUsername()) == nameLower {
-				foundUser = &user
-				userIndex = i
-				break
-			}
+		foundUsers, err := getAccountsBy("username", name, 1)
+		if err != nil {
+			c.JSON(404, gin.H{"error": "User not found"})
+			return
 		}
-	}
-	usersMutex.RUnlock()
-
-	if foundUser == nil {
-		c.JSON(404, gin.H{"error": "User not found"})
-		return
+		foundUser = foundUsers[0]
 	}
 
-	banned := foundUser.Get("sys.banned")
-	if banned == "true" || banned == true {
+	if foundUser.IsBanned() {
 		c.JSON(200, gin.H{
 			"username":   ".banned_user",
 			"badges":     []any{},
@@ -258,7 +243,7 @@ func getProfile(c *gin.Context) {
 	sub := foundUser.GetSubscription().Tier
 
 	// Calculate dynamic badges
-	calculatedBadges := calculateUserBadges(*foundUser)
+	calculatedBadges := calculateUserBadges(foundUser)
 
 	st, err := loadUserStatus(foundUser.GetUsername())
 	if err != nil {
@@ -271,7 +256,7 @@ func getProfile(c *gin.Context) {
 		"followers":    followerCount,
 		"following":    followingCount,
 		"pronouns":     getStringOrEmpty(foundUser.Get("pronouns")),
-		"system":       getStringOrEmpty(foundUser.Get("system")),
+		"system":       foundUser.GetSystem(),
 		"created":      foundUser.GetCreated(),
 		"badges":       calculatedBadges,
 		"subscription": sub,
@@ -279,7 +264,7 @@ func getProfile(c *gin.Context) {
 		"max_size":     maxSizeStr,
 		"currency":     foundUser.GetCredits(),
 		"index":        userIndex + 1,
-		"private":      strings.ToLower(getStringOrEmpty(foundUser.Get("private"))) == "true",
+		"private":      foundUser.IsPrivate(),
 		"status":       st,
 	}
 

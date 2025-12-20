@@ -55,8 +55,6 @@ func proposeMarriage(c *gin.Context) {
 
 	timestamp := time.Now().UnixMilli()
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
 	user.Set("sys.marriage", map[string]any{
 		"status":    "proposed",
 		"partner":   targetUsername,
@@ -110,17 +108,16 @@ func acceptMarriage(c *gin.Context) {
 		return
 	}
 
-	partnerIndex := getIdxOfAccountBy("username", partnerUsername)
-	if partnerIndex == -1 {
+	partners, err := getAccountsBy("username", partnerUsername, 1)
+	if err != nil {
 		c.JSON(404, gin.H{"error": "Partner not found"})
 		return
 	}
+	partner := partners[0]
 
 	// Update marriage status for both users
 	timestamp := time.Now().UnixMilli()
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
 	user.Set("sys.marriage", map[string]any{
 		"status":    "married",
 		"partner":   partnerUsername,
@@ -128,7 +125,7 @@ func acceptMarriage(c *gin.Context) {
 		"proposer":  proposerUsername,
 	})
 
-	users[partnerIndex].Set("sys.marriage", map[string]any{
+	partner.Set("sys.marriage", map[string]any{
 		"status":    "married",
 		"partner":   user.GetUsername(),
 		"timestamp": timestamp,
@@ -178,18 +175,17 @@ func rejectMarriage(c *gin.Context) {
 	}
 
 	// Find partner
-	partnerIndex := getIdxOfAccountBy("username", partnerUsername)
+	partners, err := getAccountsBy("username", partnerUsername, 1)
 
-	if partnerIndex == -1 {
+	if err != nil {
 		c.JSON(404, gin.H{"error": "Partner not found"})
 		return
 	}
+	partner := partners[0]
 
 	// Remove marriage data entirely for both users
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
 	user.DelKey("sys.marriage")
-	users[partnerIndex].DelKey("sys.marriage")
+	partner.DelKey("sys.marriage")
 
 	go saveUsers()
 
@@ -225,18 +221,17 @@ func divorceMarriage(c *gin.Context) {
 	}
 
 	// Find partner
-	partnerIndex := getIdxOfAccountBy("username", partnerUsername)
+	partners, err := getAccountsBy("username", partnerUsername, 1)
 
-	if partnerIndex == -1 {
+	if err != nil {
 		c.JSON(404, gin.H{"error": "Partner not found"})
 		return
 	}
+	partner := partners[0]
 
 	// Remove marriage data entirely
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
 	user.DelKey("sys.marriage")
-	users[partnerIndex].DelKey("sys.marriage")
+	partner.DelKey("sys.marriage")
 
 	go saveUsers()
 
@@ -282,18 +277,17 @@ func cancelMarriage(c *gin.Context) {
 	}
 
 	// Find partner
-	partnerIndex := getIdxOfAccountBy("username", partnerUsername)
+	partners, err := getAccountsBy("username", partnerUsername, 1)
 
-	if partnerIndex == -1 {
+	if err != nil {
 		c.JSON(404, gin.H{"error": "Partner not found"})
 		return
 	}
+	partner := partners[0]
 
 	// Remove marriage data entirely for both users
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
 	user.DelKey("sys.marriage")
-	users[partnerIndex].DelKey("sys.marriage")
+	partner.DelKey("sys.marriage")
 
 	go saveUsers()
 

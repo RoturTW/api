@@ -622,12 +622,14 @@ func checkSubscriptions() {
 
 						usersMutex.RLock()
 						purchaser := users[userIndex]
+						owner := users[ownerIndex]
+						usersMutex.RUnlock()
 
 						var currencyFloat float64 = purchaser.GetCredits()
-						usersMutex.RUnlock()
-						if currencyFloat < float64(userData.Price) {
+						price := float64(userData.Price)
+						if currencyFloat < price {
 							log.Printf("User %s does not have enough currency for key %s (needed: %.2f, available: %.2f)",
-								username, key.Key, float64(userData.Price), currencyFloat)
+								username, key.Key, price, currencyFloat)
 
 							// send an event
 							go notify("sys.key_lost", map[string]any{
@@ -638,22 +640,20 @@ func checkSubscriptions() {
 							usersToRemove = append(usersToRemove, username)
 							continue
 						}
-						currencyFloat -= float64(userData.Price)
-						usersMutex.Lock()
+						currencyFloat -= price
 						purchaser.SetBalance(currencyFloat)
 						purchaser.addTransaction(map[string]any{
 							"note":      "key purchase",
 							"key_id":    key.Key,
 							"key_name":  key.Name,
 							"user":      key.Creator,
-							"amount":    float64(userData.Price),
+							"amount":    price,
 							"type":      "key_buy",
 							"new_total": currencyFloat,
 						})
 
 						// 10% tax on purchase
-						value := float64(userData.Price) * 0.9
-						owner := users[ownerIndex]
+						value := price * 0.9
 						newBal := owner.GetCredits() + value
 						owner.SetBalance(newBal)
 						owner.addTransaction(map[string]any{
@@ -661,11 +661,10 @@ func checkSubscriptions() {
 							"key_id":    key.Key,
 							"key_name":  key.Name,
 							"user":      username,
-							"amount":    float64(userData.Price),
+							"amount":    value,
 							"type":      "key_sale",
 							"new_total": newBal,
 						})
-						usersMutex.Unlock()
 						go saveUsers()
 
 						// Update total income for the key

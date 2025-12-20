@@ -20,16 +20,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func getAccountsBy(key string, value string, max int) ([]User, error) {
+func getAccountsBy(key string, value string, max int) ([]*User, error) {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 
-	var matches []User
+	var matches []*User
 	if key == "username" {
 		valueLower := strings.ToLower(value)
 		for _, user := range users {
 			if strings.ToLower(user.GetUsername()) == valueLower {
-				matches = append(matches, user)
+				matches = append(matches, &user)
 				if max != -1 && len(matches) >= max {
 					return matches, nil
 				}
@@ -38,7 +38,7 @@ func getAccountsBy(key string, value string, max int) ([]User, error) {
 	} else {
 		for _, user := range users {
 			if fmt.Sprintf("%v", user.Get(key)) == value {
-				matches = append(matches, user)
+				matches = append(matches, &user)
 				if max != -1 && len(matches) >= max {
 					return matches, nil
 				}
@@ -52,14 +52,14 @@ func getAccountsBy(key string, value string, max int) ([]User, error) {
 	return matches, nil
 }
 
-func findAccountByLogin(username string, password string) (User, error) {
+func findAccountByLogin(username string, password string) (*User, error) {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 
 	username = strings.ToLower(username)
 	for _, user := range users {
 		if strings.ToLower(user.GetUsername()) == username && user.GetPassword() == password {
-			return user, nil
+			return &user, nil
 		}
 	}
 
@@ -132,7 +132,7 @@ func getUserBy(c *gin.Context) {
 		return
 	}
 
-	copy := copyUser(foundUsers[0])
+	copy := copyUser(*foundUsers[0])
 	delete(copy, "password")
 
 	c.JSON(200, copy)
@@ -141,7 +141,7 @@ func getUserBy(c *gin.Context) {
 func getUser(c *gin.Context) {
 	authKey := c.Query("auth")
 
-	var foundUser User
+	var foundUser *User
 
 	if authKey != "" {
 		foundUsers, _ := getAccountsBy("key", authKey, 1)
@@ -161,7 +161,7 @@ func getUser(c *gin.Context) {
 		var err error = nil
 		foundUser, err = findAccountByLogin(username, password)
 		if err != nil && foundUser != nil {
-			addLogin(c, &foundUser, "Failed login")
+			addLogin(c, foundUser, "Failed login")
 			c.JSON(403, gin.H{"error": "Invalid authentication credentials"})
 			return
 		}
@@ -171,8 +171,7 @@ func getUser(c *gin.Context) {
 		usersMutex.Lock()
 		defer usersMutex.Unlock()
 
-		banned := foundUser.Get("sys.banned")
-		if banned == "true" || banned == true {
+		if foundUser.IsBanned() {
 			c.JSON(403, gin.H{
 				"error":    "User is banned",
 				"username": foundUser.GetUsername(),
@@ -192,7 +191,7 @@ func getUser(c *gin.Context) {
 		ip := c.ClientIP()
 		blocked_ips := foundUser.GetBlockedIps()
 		if slices.Contains(blocked_ips, ip) {
-			addLogin(c, &foundUser, "Blocked ip attempted login")
+			addLogin(c, foundUser, "Blocked ip attempted login")
 			c.JSON(403, gin.H{"error": "Unable to login to this account"})
 			return
 		}
@@ -205,16 +204,16 @@ func getUser(c *gin.Context) {
 		header := c.GetHeader("CF-IPCountry")
 		if header == "T1" {
 			// block tor
-			addLogin(c, &foundUser, "Tor login attempted")
+			addLogin(c, foundUser, "Tor login attempted")
 			c.JSON(403, gin.H{"error": "Tor is not allowed"})
 			return
 		}
 
-		addLogin(c, &foundUser, "Successful Login")
+		addLogin(c, foundUser, "Successful Login")
 		foundUser.SetSubscription(foundUser.GetSubscription())
 
 		go saveUsers()
-		userCopy := copyUser(foundUser)
+		userCopy := copyUser(*foundUser)
 		delete(userCopy, "password")
 		c.JSON(200, userCopy)
 		return
@@ -402,7 +401,7 @@ func registerUser(c *gin.Context) {
 			c.JSON(400, gin.H{"error": "Username already in use"})
 			return
 		}
-		if strings.EqualFold(getStringOrEmpty(user.Get("email")), email) {
+		if strings.EqualFold(user.GetEmail(), email) {
 			c.JSON(400, gin.H{"error": "Email already in use"})
 			return
 		}
@@ -691,7 +690,7 @@ func updateUser(c *gin.Context) {
 	if key == "email" {
 		usersMutex.RLock()
 		for _, user := range users {
-			if strings.EqualFold(getStringOrEmpty(user.Get("email")), stringValue) {
+			if strings.EqualFold(user.GetEmail(), stringValue) {
 				c.JSON(400, gin.H{"error": "Email already in use"})
 				usersMutex.RUnlock()
 				return
@@ -979,14 +978,12 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 	// Send credits when rotur is the sender
 	if fromUsername == "rotur" {
 		taxRecipient := "mist"
-		fromSystem := toUser.Get("system")
-		if fromSystem != nil {
-			systemsMutex.RLock()
-			if sys, ok := systems[fromSystem.(string)]; ok {
-				taxRecipient = sys.Owner.Name
-			}
-			systemsMutex.RUnlock()
+		fromSystem := toUser.GetSystem()
+		systemsMutex.RLock()
+		if sys, ok := systems[fromSystem]; ok {
+			taxRecipient = sys.Owner.Name
 		}
+		systemsMutex.RUnlock()
 
 		// Apply tax to taxRecipient if exists
 		if idx := getIdxOfAccountBy("username", taxRecipient); taxRecipient != toUser.GetUsername() && idx != -1 {
@@ -1210,13 +1207,7 @@ func reconnectFriends() {
 			}
 
 			friendList := friendMap[friendUser]
-			hasFriend := false
-			for _, ff := range friendList {
-				if ff == uName {
-					hasFriend = true
-					break
-				}
-			}
+			hasFriend := slices.Contains(friendList, uName)
 			if !hasFriend {
 				friendMap[friendUser] = append(friendList, uName)
 			}
@@ -1248,7 +1239,7 @@ func performUserDeletion(username string, isAdmin bool) error {
 	// set as banned
 	users[idx] = User{
 		"username":   username,
-		"email":      users[idx].Get("email"), // so that the same email cant be used by a banned user
+		"email":      users[idx].GetEmail(), // so that the same email cant be used by a banned user
 		"private":    true,
 		"sys.banned": true,
 	}
@@ -1489,7 +1480,7 @@ func getBadges(c *gin.Context) {
 	// Find user in users slice to get updated data
 	for _, u := range users {
 		if u.GetUsername() == user.GetUsername() {
-			badgeNames := calculateUserBadges(u)
+			badgeNames := calculateUserBadges(&u)
 
 			c.JSON(200, gin.H{
 				"badge_names": badgeNames,

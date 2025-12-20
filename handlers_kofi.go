@@ -34,8 +34,8 @@ func handleKofiTransaction(c *gin.Context) {
 	email := getStringOrEmpty(parsedData["email"])
 
 	foundBy := "None"
-	accounts := []User{}
-	var account User = nil
+	accounts := []*User{}
+	var account *User = nil
 
 	discord_id := getStringOrEmpty(parsedData["discord_id"])
 	if discord_id != "" {

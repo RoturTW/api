@@ -35,36 +35,23 @@ func sendFriendRequest(c *gin.Context) {
 		return
 	}
 
-	senderFriends := sender.GetFriends()
-	targetFriends := target.GetFriends()
-	targetRequests := target.GetRequests()
-
-	for _, f := range senderFriends {
-		if strings.ToLower(f) == targetLower {
-			c.JSON(400, gin.H{"error": "Already Friends"})
-			return
-		}
+	for sender.IsFriend(targetUsername) {
+		c.JSON(400, gin.H{"error": "Already Friends"})
+		return
 	}
-	for _, f := range targetFriends {
 		// if we find the sender in the target's friends list,
 		// we add them automatically because they arent friends with each other
-		if strings.ToLower(f) == senderName {
-			targetFriends = append(targetFriends, senderName)
-			target.SetFriends(targetFriends)
-			c.JSON(400, gin.H{"error": "Already Friends"})
-			return
-		}
+	if target.IsFriend(senderName) {
+		sender.AddFriend(targetUsername)
+		c.JSON(400, gin.H{"error": "Already Friends"})
+		return
 	}
-	for _, r := range targetRequests {
-		if strings.ToLower(r) == senderName {
-			c.JSON(400, gin.H{"error": "Already Requested"})
-			return
-		}
+	if target.HasRequest(senderName) {
+		c.JSON(400, gin.H{"error": "Already Requested"})
+		return
 	}
 
-	targetRequests = append(targetRequests, senderName)
-	target.SetRequests(targetRequests)
-	sender.SetFriends(senderFriends)
+	target.AddRequest(senderName)
 
 	go saveUsers()
 
@@ -93,48 +80,14 @@ func acceptFriendRequest(c *gin.Context) {
 	}
 
 	requester := foundUsers[0]
-	currentRequests := current.GetRequests()
-	found := false
-	newRequests := make([]string, 0, len(currentRequests))
-	for _, r := range currentRequests {
-		if strings.ToLower(r) == requesterName {
-			found = true
-			continue
-		}
-		newRequests = append(newRequests, r)
-	}
+	found := current.RemoveRequest(requesterName)
 	if !found {
 		c.JSON(400, gin.H{"error": "No Pending Request"})
 		return
 	}
 
-	currentFriends := current.GetFriends()
-	alreadyFriends := false
-	for _, f := range currentFriends {
-		if strings.ToLower(f) == requesterName {
-			alreadyFriends = true
-			break
-		}
-	}
-	if !alreadyFriends {
-		currentFriends = append(currentFriends, requesterName)
-	}
-
-	requesterFriends := requester.GetFriends()
-	requesterAlreadyHas := false
-	for _, f := range requesterFriends {
-		if strings.ToLower(f) == currentName {
-			requesterAlreadyHas = true
-			break
-		}
-	}
-	if !requesterAlreadyHas {
-		requesterFriends = append(requesterFriends, currentName)
-	}
-
-	current.SetRequests(newRequests)
-	current.SetFriends(currentFriends)
-	requester.SetFriends(requesterFriends)
+	current.AddFriend(requesterName)
+	requester.AddFriend(currentName)
 
 	go saveUsers()
 
@@ -150,31 +103,13 @@ func rejectFriendRequest(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-
-	currentRequests := getStringSlice(*current, "sys.requests")
-	found := false
-	newRequests := make([]string, 0, len(currentRequests))
-	for _, r := range currentRequests {
-		if strings.ToLower(r) == requesterName {
-			found = true
-			continue
-		}
-		newRequests = append(newRequests, r)
-	}
+	found := current.RemoveRequest(requesterName)
 	if !found {
-		usersMutex.Unlock()
 		c.JSON(400, gin.H{"error": "No Pending Request"})
 		return
 	}
 
-	setStringSlice(*current, "sys.requests", newRequests)
-
-	usersMutex.Unlock()
 	go saveUsers()
-
-	// Broadcast the user account update for the current user
-	go broadcastUserUpdate(strings.ToLower(current.GetUsername()), "sys.requests", newRequests)
 
 	c.JSON(200, gin.H{"message": "Friend request rejected"})
 }
@@ -194,45 +129,20 @@ func removeFriend(c *gin.Context) {
 		return
 	}
 
-	idx := getIdxOfAccountBy("username", otherName)
-	if idx == -1 {
+	foundUsers, err := getAccountsBy("username", otherName, 1)
+	if err != nil {
 		c.JSON(404, gin.H{"error": "Account Does Not Exist"})
 		return
 	}
-	usersMutex.RLock()
-	defer usersMutex.RUnlock()
-	var other User = users[idx]
+	other := foundUsers[0]
 
-	currentFriends := current.GetFriends()
-	otherFriends := other.GetFriends()
-
-	isFriend := false
-	for _, f := range currentFriends {
-		if strings.ToLower(f) == otherName {
-			isFriend = true
-			break
-		}
-	}
-	if !isFriend {
+	if !current.IsFriend(otherName) {
 		c.JSON(400, gin.H{"error": "Not Friends"})
 		return
 	}
 
-	newCurrentFriends := make([]string, 0, len(currentFriends))
-	for _, f := range currentFriends {
-		if strings.ToLower(f) != otherName {
-			newCurrentFriends = append(newCurrentFriends, f)
-		}
-	}
-	newOtherFriends := make([]string, 0, len(otherFriends))
-	for _, f := range otherFriends {
-		if strings.ToLower(f) != currentName {
-			newOtherFriends = append(newOtherFriends, f)
-		}
-	}
-
-	current.Set("sys.friends", newCurrentFriends)
-	other.Set("sys.friends", newOtherFriends)
+	current.RemoveFriend(otherName)
+	other.RemoveFriend(currentName)
 
 	go saveUsers()
 
@@ -243,9 +153,5 @@ func removeFriend(c *gin.Context) {
 func getFriends(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	usersMutex.RLock()
-	defer usersMutex.RUnlock()
-
-	friends := user.GetFriends()
-	c.JSON(200, gin.H{"friends": friends})
+	c.JSON(200, gin.H{"friends": user.GetFriends()})
 }

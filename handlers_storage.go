@@ -9,22 +9,6 @@ import (
 	"time"
 )
 
-// System Management Functions
-//
-// The system loading functionality has been made modular to provide:
-// 1. Centralized system management through storage.go
-// 2. Thread-safe access with proper mutex locking
-// 3. Helper functions for validation and retrieval
-// 4. Administrative endpoints for system management
-// 5. Integration with user registration process
-//
-// Usage:
-// - Systems are automatically loaded on startup
-// - Use isValidSystem(username) to check if a username is valid
-// - Use validateSystemUsername(username) for detailed validation
-// - Use getSystems endpoint to retrieve all systems
-// - Use reloadSystems endpoint (admin only) to reload from file
-
 // File operations
 func loadUsers() {
 	usersMutex.Lock()
@@ -189,17 +173,8 @@ func loadFollowers() {
 
 func saveFollowers() {
 	followersMutex.RLock()
-	data, err := json.MarshalIndent(followersData, "", "  ")
-	followersMutex.RUnlock()
-
-	if err != nil {
-		log.Printf("Error marshaling followers: %v", err)
-		return
-	}
-
-	if err := os.WriteFile(FOLLOWERS_FILE_PATH, data, 0644); err != nil {
-		log.Printf("Error saving followers: %v", err)
-	}
+	defer followersMutex.RUnlock()
+	saveJsonFile(FOLLOWERS_FILE_PATH, followersData)
 }
 
 func loadPosts() {
@@ -226,17 +201,8 @@ func loadPosts() {
 
 func savePosts() {
 	postsMutex.RLock()
-	data, err := json.MarshalIndent(posts, "", "  ")
-	postsMutex.RUnlock()
-
-	if err != nil {
-		log.Printf("Error marshaling posts: %v", err)
-		return
-	}
-
-	if err := os.WriteFile(LOCAL_POSTS_PATH, data, 0644); err != nil {
-		log.Printf("Error saving posts: %v", err)
-	}
+	defer postsMutex.RUnlock()
+	saveJsonFile(LOCAL_POSTS_PATH, posts)
 }
 
 func loadItems() {
@@ -263,17 +229,8 @@ func loadItems() {
 
 func saveItems() {
 	itemsMutex.RLock()
-	data, err := json.MarshalIndent(items, "", "  ")
-	itemsMutex.RUnlock()
-
-	if err != nil {
-		log.Printf("Error marshaling items: %v", err)
-		return
-	}
-
-	if err := os.WriteFile(ITEMS_FILE_PATH, data, 0644); err != nil {
-		log.Printf("Error saving items: %v", err)
-	}
+	defer itemsMutex.RUnlock()
+	saveJsonFile(ITEMS_FILE_PATH, items)
 }
 
 func loadKeys() {
@@ -300,17 +257,8 @@ func loadKeys() {
 
 func saveKeys() {
 	keysMutex.RLock()
-	data, err := json.MarshalIndent(keys, "", "  ")
-	keysMutex.RUnlock()
-
-	if err != nil {
-		log.Printf("Error marshaling keys: %v", err)
-		return
-	}
-
-	if err := os.WriteFile(KEYS_FILE_PATH, data, 0644); err != nil {
-		log.Printf("Error saving keys: %v", err)
-	}
+	defer keysMutex.RUnlock()
+	saveJsonFile(KEYS_FILE_PATH, keys)
 }
 
 func loadSystems() {
@@ -338,15 +286,7 @@ func loadSystems() {
 func saveSystems() {
 	systemsMutex.Lock()
 	defer systemsMutex.Unlock()
-	data, err := json.MarshalIndent(systems, "", "  ")
-	if err != nil {
-		log.Printf("Error marshaling systems: %v", err)
-		return
-	}
-
-	if err := os.WriteFile(SYSTEMS_FILE_PATH, data, 0644); err != nil {
-		log.Printf("Error saving systems: %v", err)
-	}
+	saveJsonFile(SYSTEMS_FILE_PATH, systems)
 }
 
 func loadEventsHistory() {
@@ -373,17 +313,22 @@ func loadEventsHistory() {
 
 func saveEventsHistory() {
 	eventsHistoryMutex.RLock()
-	data, err := json.MarshalIndent(eventsHistory, "", "  ")
-	eventsHistoryMutex.RUnlock()
+	defer eventsHistoryMutex.RUnlock()
+	saveJsonFile(EVENTS_HISTORY_PATH, eventsHistory)
+}
 
+func saveJsonFile(path string, v any) bool {
+	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
-		log.Printf("Error marshaling events history: %v", err)
-		return
+		log.Printf("Error marshaling JSON: %v", err)
+		return false
 	}
 
-	if err := os.WriteFile(EVENTS_HISTORY_PATH, data, 0644); err != nil {
-		log.Printf("Error saving events history: %v", err)
+	if err := atomicWrite(path, data, 0644); err != nil {
+		log.Printf("Error saving JSON file: %v", err)
+		return false
 	}
+	return true
 }
 
 func watchUsersFile() {

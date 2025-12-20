@@ -230,12 +230,7 @@ func isValidMimeType(url string, allowedTypes []string) bool {
 	defer resp.Body.Close()
 
 	contentType := resp.Header.Get("Content-Type")
-	for _, allowedType := range allowedTypes {
-		if contentType == allowedType {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(allowedTypes, contentType)
 }
 
 // Rate limiting functions
@@ -354,11 +349,11 @@ func requiresAuth(c *gin.Context) {
 		return
 	}
 
-	user.GetSubscription()
-	banned := user.Get("sys.banned")
-	if banned == "true" || banned == true {
+	if user.IsBanned() {
 		c.JSON(403, gin.H{"error": "User is banned"})
+		return
 	}
+	user.GetSubscription()
 
 	c.Set("user", user)
 	c.Next()

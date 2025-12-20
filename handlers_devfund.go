@@ -42,20 +42,13 @@ func escrowTransfer(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-
 	// Find sender user
-	var fromUser *User
-	for i := range users {
-		if strings.EqualFold(users[i].GetUsername(), user.GetUsername()) {
-			fromUser = &users[i]
-			break
-		}
-	}
-	if fromUser == nil {
+	foundUsers, err := getAccountsBy("username", user.GetUsername(), 1)
+	if err != nil {
 		c.JSON(404, gin.H{"error": "Sender user not found"})
 		return
 	}
+	fromUser := foundUsers[0]
 
 	// Check sender balance
 	fromCurrency := fromUser.GetCredits()
@@ -75,12 +68,8 @@ func escrowTransfer(c *gin.Context) {
 	if newBal < 0 { // guard against tiny floating error
 		newBal = 0
 	}
-	usersMutex.Unlock()
 
 	fromUser.SetBalance(newBal)
-
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
 
 	// Add escrow transaction to sender
 	now := time.Now().UnixMilli()
@@ -153,35 +142,22 @@ func escrowRelease(c *gin.Context) {
 
 	toUsername := strings.ToLower(req.ToUsername)
 
-	usersMutex.Lock()
-
-	// Find recipient user
-	var toUser *User
-	for i := range users {
-		if strings.EqualFold(users[i].GetUsername(), toUsername) {
-			toUser = &users[i]
-			break
-		}
-	}
-	if toUser == nil {
+	toUsers, err := getAccountsBy("username", toUsername, 1)
+	if err != nil {
 		c.JSON(404, gin.H{"error": "Recipient user not found"})
 		return
 	}
+	toUser := toUsers[0]
 
-	usersMutex.Unlock()
 	// Get recipient balance
 	toCurrency := toUser.GetCredits()
 	if toCurrency == 0 {
-		toUser.SetBalance(float64(0))
 		toCurrency = float64(0)
 	}
 
 	// Add credits to recipient
 	newBal := roundVal(toCurrency + nAmount)
 	toUser.SetBalance(newBal)
-
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
 
 	// Add transaction to recipient
 	now := time.Now().UnixMilli()

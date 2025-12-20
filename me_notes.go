@@ -27,18 +27,11 @@ func noteUser(c *gin.Context) {
 		return
 	}
 
-	if len(noteContent) > 300 {
-		c.JSON(400, gin.H{"error": "Note content is too long"})
+	err := user.SetNote(username, noteContent)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-
-	usersMutex.Lock()
-	notes := user.GetNotes()
-
-	notes[username] = noteContent
-
-	user.Set("sys.notes", notes)
-	usersMutex.Unlock()
 
 	go saveUsers()
 
@@ -64,11 +57,7 @@ func deleteNote(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-	notes := user.GetNotes()
-	delete(notes, username)
-	user.Set("sys.notes", notes)
-	usersMutex.Unlock()
+	user.RemoveNote(username)
 
 	go saveUsers()
 

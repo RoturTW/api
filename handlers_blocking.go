@@ -32,19 +32,14 @@ func blockUser(c *gin.Context) {
 		return
 	}
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
-
 	blocked := user.GetBlocked()
 	if slices.Contains(blocked, username) {
 		c.JSON(400, gin.H{"error": "User already blocked"})
 		return
 	}
 
-	blocked = append(blocked, username)
-	user.SetBlocked(blocked)
+	user.AddBlocked(username)
 
-	go broadcastUserUpdate(user.GetUsername(), "sys.blocked", blocked)
 	go saveUsers()
 
 	c.JSON(200, gin.H{"message": "User blocked"})
@@ -58,9 +53,6 @@ func unblockUser(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "Username is required"})
 		return
 	}
-
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
 
 	blocked := user.GetBlocked()
 	index := -1
@@ -76,10 +68,8 @@ func unblockUser(c *gin.Context) {
 		return
 	}
 
-	blocked = append(blocked[:index], blocked[index+1:]...)
-	user.SetBlocked(blocked)
+	user.RemoveBlocked(username)
 
-	go broadcastUserUpdate(user.GetUsername(), "sys.blocked", blocked)
 	go saveUsers()
 
 	c.JSON(200, gin.H{"message": "User unblocked"})

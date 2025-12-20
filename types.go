@@ -142,6 +142,14 @@ func (u User) GetPassword() string {
 	return ""
 }
 
+func (u User) GetSystem() string {
+	return getStringOrDefault(u.Get("system"), "rotur")
+}
+
+func (u User) GetEmail() string {
+	return getStringOrEmpty(u.Get("email"))
+}
+
 func (u User) SetBlocked(blocked []string) {
 	u.Set("sys.blocked", blocked)
 }
@@ -150,12 +158,136 @@ func (u User) GetBlocked() []string {
 	return getStringSlice(u, "sys.blocked")
 }
 
+func (u User) AddBlocked(username string) {
+	if u.HasBlocked(username) {
+		return
+	}
+	blocked := u.GetBlocked()
+	mu := getUserMutex(u.GetUsername())
+	mu.Lock()
+	blocked = append(blocked, username)
+	mu.Unlock()
+	u.SetBlocked(blocked)
+}
+
+func (u User) RemoveBlocked(username string) {
+	if !u.HasBlocked(username) {
+		return
+	}
+	blocked := u.GetBlocked()
+	mu := getUserMutex(u.GetUsername())
+	mu.Lock()
+	newBlocked := make([]string, 0, len(blocked)-1)
+	for _, b := range blocked {
+		if b != username {
+			newBlocked = append(newBlocked, b)
+		}
+	}
+	mu.Unlock()
+	u.SetBlocked(newBlocked)
+}
+
+func (u User) HasBlocked(username string) bool {
+	username = strings.ToLower(username)
+	blocked := u.GetBlocked()
+	for _, b := range blocked {
+		if strings.ToLower(b) == username {
+			return true
+		}
+	}
+	return false
+}
+
+func (u User) IsBanned() bool {
+	banned := u.Get("sys.banned")
+	return banned == true || banned == "true"
+}
+
+func (u User) IsPrivate() bool {
+	private := u.Get("private")
+	return private == true
+}
+
 func (u User) SetFriends(friends []string) {
 	u.Set("sys.friends", friends)
 }
 
 func (u User) SetRequests(requests []string) {
 	u.Set("sys.requests", requests)
+}
+
+func (u User) AddRequest(username string) bool {
+	if u.HasRequest(username) {
+		return false
+	}
+	requests := u.GetRequests()
+	mu := getUserMutex(u.GetUsername())
+	mu.Lock()
+	requests = append(requests, username)
+	mu.Unlock()
+	u.SetRequests(requests)
+	return true
+}
+
+func (u User) RemoveRequest(username string) bool {
+	if !u.HasRequest(username) {
+		return false
+	}
+	requests := u.GetRequests()
+	mu := getUserMutex(u.GetUsername())
+	mu.Lock()
+	requests = make([]string, 0, len(requests)-1)
+	for _, r := range requests {
+		if r != username {
+			requests = append(requests, r)
+		}
+	}
+	mu.Unlock()
+	u.SetRequests(requests)
+	return true
+}
+
+func (u User) HasRequest(username string) bool {
+	requests := u.GetRequests()
+	for _, r := range requests {
+		if strings.EqualFold(r, username) {
+			return true
+		}
+	}
+	return false
+}
+
+func (u User) AddFriend(username string) bool {
+	friends := u.GetFriends()
+	if u.IsFriend(username) {
+		return false
+	}
+	mu := getUserMutex(u.GetUsername())
+	mu.Lock()
+	friends = append(friends, username)
+	mu.Unlock()
+	u.SetFriends(friends)
+
+	return true
+}
+
+func (u User) RemoveFriend(username string) bool {
+	friends := u.GetFriends()
+	if !u.IsFriend(username) {
+		return false
+	}
+	mu := getUserMutex(u.GetUsername())
+	mu.Lock()
+	newFriends := make([]string, 0, len(friends)-1)
+	for _, f := range friends {
+		if f != username {
+			newFriends = append(newFriends, f)
+		}
+	}
+	mu.Unlock()
+	u.SetFriends(newFriends)
+
+	return true
 }
 
 func (u User) IsFriend(username string) bool {
@@ -204,6 +336,28 @@ func (u User) GetNotes() map[string]string {
 		}
 	}
 	return out
+}
+
+func (u User) SetNote(username string, note string) error {
+	if len(note) > 300 {
+		return fmt.Errorf("note content is too long")
+	}
+	notes := u.GetNotes()
+	mu := getUserMutex(u.GetUsername())
+	mu.Lock()
+	notes[username] = note
+	mu.Unlock()
+	u.Set("sys.notes", notes)
+	return nil
+}
+
+func (u User) RemoveNote(username string) {
+	notes := u.GetNotes()
+	mu := getUserMutex(u.GetUsername())
+	mu.Lock()
+	delete(notes, username)
+	mu.Unlock()
+	u.Set("sys.notes", notes)
 }
 
 func (u User) GetCredits() float64 {

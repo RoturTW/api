@@ -44,15 +44,13 @@ func renameSystem(systemName string, newName string) error {
 	system.Name = newName
 	systems[newName] = system
 
-	users, err := getAccountsBy("system", systemName, -1)
+	foundUsers, err := getAccountsBy("system", systemName, -1)
 	if err != nil {
 		return nil
 	}
-	usersMutex.Lock()
-	for _, user := range users {
+	for _, user := range foundUsers {
 		user.Set("system", newName)
 	}
-	usersMutex.Unlock()
 	go saveUsers()
 	return nil
 }
