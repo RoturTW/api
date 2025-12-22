@@ -1350,9 +1350,9 @@ func canClaimDaily(user *User) float64 {
 
 	currentTime := float64(time.Now().Unix())
 
-	timeDiff := currentTime - nextClaimTime
-	if timeDiff < 86400 {
-		return timeDiff
+	elapsed := currentTime - nextClaimTime
+	if elapsed < 86400 {
+		return 86400 - elapsed
 	}
 
 	return 0
@@ -1373,9 +1373,9 @@ func timeUntilNextClaim(c *gin.Context) {
 
 	currentTime := float64(time.Now().Unix())
 
-	timeDiff := currentTime - nextClaimTime
-	if timeDiff < 86400 {
-		waitTime := 86400 - timeDiff
+	elapsed := currentTime - nextClaimTime
+	if elapsed < 86400 {
+		waitTime := 86400 - elapsed
 		c.JSON(200, gin.H{"wait_time": waitTime})
 		return
 	}
@@ -1387,13 +1387,17 @@ func claimDaily(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
 	username := strings.ToLower(user.GetUsername())
-	usersMutex.Lock()
+	mu := getUserMutex(username)
+	mu.Lock()
+	defer mu.Unlock()
+
 	waitTime := canClaimDaily(user)
 	if waitTime > 0 {
-		c.JSON(400, gin.H{"error": "Daily claim already made, please wait " +
-			strings.TrimSuffix(strings.TrimSuffix(
-				fmt.Sprintf("%.1f", 24-(waitTime/3600)), "0"), ".") + " hours"})
-		usersMutex.Unlock()
+		c.JSON(429, gin.H{
+			"error":      "Daily claim already made",
+			"wait_time":  waitTime,
+			"wait_hours": strings.TrimSuffix(strings.TrimSuffix(fmt.Sprintf("%.1f", waitTime/3600), "0"), "."),
+		})
 		return
 	}
 
@@ -1401,7 +1405,6 @@ func claimDaily(c *gin.Context) {
 	currentTime := float64(time.Now().Unix())
 	claimsData[username] = currentTime
 	saveDailyClaims(claimsData)
-	usersMutex.Unlock()
 
 	go saveUsers()
 

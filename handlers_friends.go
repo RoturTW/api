@@ -39,8 +39,8 @@ func sendFriendRequest(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "Already Friends"})
 		return
 	}
-		// if we find the sender in the target's friends list,
-		// we add them automatically because they arent friends with each other
+	// if we find the sender in the target's friends list,
+	// we add them automatically because they arent friends with each other
 	if target.IsFriend(senderName) {
 		sender.AddFriend(targetUsername)
 		c.JSON(400, gin.H{"error": "Already Friends"})
