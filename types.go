@@ -28,6 +28,7 @@ type sub_benefits struct {
 	Has_Free_Banner_Uploads bool `json:"free_banner_uploads"`
 	Has_Bio_templating      bool `json:"bio_templating"`
 	Has_Profile_notes       bool `json:"profile_notes"`
+	Daily_Credit_Multipler  int  `json:"daily_credit_multiplier"`
 }
 
 var userMutexesLock sync.Mutex
@@ -61,6 +62,7 @@ func tierFree() sub_benefits {
 		FileSystem_Size:         5_000_000,
 		Bio_Length:              300,
 		Max_Transaction_History: 20,
+		Daily_Credit_Multipler:  1,
 	}
 	return benefits
 }
@@ -88,6 +90,7 @@ func tierDrive() sub_benefits {
 	b.Bio_Length = 500
 	b.Has_Animated_Pfp = true
 	b.Max_Transaction_History = 100
+	b.Daily_Credit_Multipler = 2
 	return b
 }
 
@@ -100,6 +103,7 @@ func tierPro() sub_benefits {
 	b.Has_Animated_Banner = true
 	b.Has_Free_Banner_Uploads = true
 	b.Max_Transaction_History = 500
+	b.Daily_Credit_Multipler = 3
 	return b
 }
 

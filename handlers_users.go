@@ -1404,7 +1404,9 @@ func claimDaily(c *gin.Context) {
 
 	go saveUsers()
 
-	PerformCreditTransfer("rotur", username, 1.0, "Daily credit (/claim_daily)")
+	benefits := user.GetSubscriptionBenefits()
+
+	PerformCreditTransfer("rotur", username, float64(benefits.Daily_Credit_Multipler), "Daily claim")
 
 	c.JSON(200, gin.H{"message": "Daily claim successful"})
 }
