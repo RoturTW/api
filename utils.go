@@ -175,20 +175,6 @@ func containsDerogatory(text string) bool {
 	return false
 }
 
-func accountIndex(username string) int {
-	usersMutex.RLock()
-	defer usersMutex.RUnlock()
-
-	for i, user := range users {
-		if strings.EqualFold(user.GetUsername(), username) {
-			return i
-		}
-	}
-
-	// If not found, return -1
-	return 0
-}
-
 func accountExists(username string) bool {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()

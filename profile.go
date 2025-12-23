@@ -139,7 +139,7 @@ func getProfile(c *gin.Context) {
 		}
 		foundUser = foundUsers[0]
 	}
-	userIndex := accountIndex(nameLower)
+	userIndex := getIdxOfAccountBy("username", nameLower)
 
 	if foundUser.IsBanned() {
 		c.JSON(200, gin.H{

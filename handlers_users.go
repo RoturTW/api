@@ -794,10 +794,6 @@ func updateUserAdmin(c *gin.Context) {
 					c.JSON(400, gin.H{"error": fmt.Sprintf("Key '%s' length exceeds 50 characters", key)})
 					return
 				}
-				if strVal, ok := value.(string); ok && len(strVal) > 5000 {
-					c.JSON(400, gin.H{"error": fmt.Sprintf("Value for key '%s' length exceeds 5000 characters", key)})
-					return
-				}
 			}
 
 			// Ensure sys.currency stays a float64 when updated via admin endpoint
