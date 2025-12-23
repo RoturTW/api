@@ -43,6 +43,8 @@ func createKey(c *gin.Context) {
 		period = "month"
 	}
 
+	max_keys := user.GetSubscriptionBenefits().Max_Keys
+
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
@@ -54,7 +56,6 @@ func createKey(c *gin.Context) {
 			total_keys++
 		}
 	}
-	max_keys := user.GetSubscriptionBenefits().Max_Keys
 	if total_keys > max_keys {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("You can only have up to %d free keys", max_keys)})
 		return

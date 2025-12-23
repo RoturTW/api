@@ -67,37 +67,61 @@ func makeHTTPRequest(method, url string, payload any, timeout time.Duration, log
 		return false
 	}
 
-	client := &http.Client{Timeout: timeout}
-
-	var resp *http.Response
-	switch method {
-	case "POST":
-		resp, err = client.Post(url, "application/json", bytes.NewBuffer(jsonData))
-	case "PATCH":
-		req, reqErr := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
-		if reqErr != nil {
-			log.Printf("[%s] Error creating %s request: %v", logPrefix, method, reqErr)
+	isRetryableNetErr := func(e error) bool {
+		if e == nil {
 			return false
 		}
-		req.Header.Set("Content-Type", "application/json")
-		resp, err = client.Do(req)
-	default:
-		log.Printf("[%s] Unsupported HTTP method: %s", logPrefix, method)
-		return false
+		s := strings.ToLower(e.Error())
+		return strings.Contains(s, "connection reset") ||
+			strings.Contains(s, "connection refused") ||
+			strings.Contains(s, "server closed idle connection") ||
+			strings.Contains(s, "broken pipe") ||
+			strings.Contains(s, "eof")
 	}
 
-	if err != nil {
-		log.Printf("[%s] Error sending %s request: %v", logPrefix, method, err)
-		return false
-	}
-	defer resp.Body.Close()
+	maxAttempts := 4 // initial try + 3 retries
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		client := &http.Client{Timeout: timeout}
 
-	if resp.StatusCode == expectedStatusCode {
-		return true
-	} else {
+		var resp *http.Response
+		switch method {
+		case "POST":
+			resp, err = client.Post(url, "application/json", bytes.NewBuffer(jsonData))
+		case "PATCH":
+			req, reqErr := http.NewRequest("PATCH", url, bytes.NewBuffer(jsonData))
+			if reqErr != nil {
+				log.Printf("[%s] Error creating %s request: %v", logPrefix, method, reqErr)
+				return false
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err = client.Do(req)
+		default:
+			log.Printf("[%s] Unsupported HTTP method: %s", logPrefix, method)
+			return false
+		}
+
+		if err != nil {
+			if attempt < maxAttempts && isRetryableNetErr(err) {
+				// Backoff: 200ms, 400ms, 800ms
+				backoff := time.Duration(200*(1<<(attempt-1))) * time.Millisecond
+				time.Sleep(backoff)
+				continue
+			}
+			log.Printf("[%s] Error sending %s request after %d attempt(s): %v", logPrefix, method, attempt, err)
+			return false
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == expectedStatusCode {
+			return true
+		}
+
+		// Status-code failures generally aren't transient; don't spam retries.
 		log.Printf("[%s] Request failed with status: %d", logPrefix, resp.StatusCode)
 		return false
 	}
+
+	return false
 }
 
 func createEventPayload(eventType string, data any) map[string]any {
@@ -191,25 +215,50 @@ func broadcastUserUpdate(username, key string, value any) bool {
 	return success
 }
 
-func addUserEvent(username, eventType string, data map[string]any) Event {
-	eventsHistoryMutex.Lock()
-	defer eventsHistoryMutex.Unlock()
+func getPostRepliesSnapshot(postID string) []Reply {
+	postsMutex.RLock()
+	defer postsMutex.RUnlock()
+	for i := range posts {
+		if posts[i].ID == postID {
+			if posts[i].Replies == nil {
+				return nil
+			}
+			out := make([]Reply, len(posts[i].Replies))
+			copy(out, posts[i].Replies)
+			return out
+		}
+	}
+	return nil
+}
 
+func addUserEvent(username, eventType string, data map[string]any) Event {
 	switch eventType {
 	case "follow":
+		followersCount := 0
+		switch v := data["followers"].(type) {
+		case []string:
+			followersCount = len(v)
+		case []any:
+			followersCount = len(v)
+		}
 		go broadcastClawEvent("followers", map[string]any{
 			"username":  username,
-			"followers": len(data["followers"].([]string)),
+			"followers": followersCount,
 		})
 	case "reply":
-		post_id := data["post_id"].(string)
-		post := getPostById(post_id)
-		go broadcastClawEvent("update_post", map[string]any{
-			"id":   post_id,
-			"key":  "replies",
-			"data": post.Replies,
-		})
+		postID, _ := data["post_id"].(string)
+		if postID != "" {
+			replies := getPostRepliesSnapshot(postID)
+			go broadcastClawEvent("update_post", map[string]any{
+				"id":   postID,
+				"key":  "replies",
+				"data": replies,
+			})
+		}
 	}
+
+	eventsHistoryMutex.Lock()
+	defer eventsHistoryMutex.Unlock()
 
 	username = strings.ToLower(username)
 

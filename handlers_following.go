@@ -117,6 +117,7 @@ func unfollowUser(c *gin.Context) {
 	})
 
 	// Remove follow notification from target user's events history
+	shouldSave := false
 	eventsHistoryMutex.Lock()
 	if userEvents, exists := eventsHistory[targetUsername]; exists {
 		newEvents := make([]Event, 0)
@@ -128,9 +129,12 @@ func unfollowUser(c *gin.Context) {
 			}
 		}
 		eventsHistory[targetUsername] = newEvents
-		go saveEventsHistory()
+		shouldSave = true
 	}
 	eventsHistoryMutex.Unlock()
+	if shouldSave {
+		go saveEventsHistory()
+	}
 
 	c.JSON(200, gin.H{"message": "You have unfollowed " + targetUsername})
 }

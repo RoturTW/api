@@ -122,7 +122,6 @@ func getProfile(c *gin.Context) {
 	nameLower := strings.ToLower(name)
 	// Find user with case-insensitive matching
 	var foundUser *User
-	var userIndex int
 	if discord_id != "" {
 		foundUsers, err := getAccountsBy("discord_id", discord_id, 1)
 		if err != nil {
@@ -140,6 +139,7 @@ func getProfile(c *gin.Context) {
 		}
 		foundUser = foundUsers[0]
 	}
+	userIndex := accountIndex(nameLower)
 
 	if foundUser.IsBanned() {
 		c.JSON(200, gin.H{
