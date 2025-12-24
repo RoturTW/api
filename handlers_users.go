@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -1334,6 +1335,8 @@ func deleteUserAvatar(username string) error {
 	return nil
 }
 
+var dailyClaimMutex sync.Mutex
+
 func canClaimDaily(user *User) float64 {
 	username := strings.ToLower(user.GetUsername())
 
@@ -1383,9 +1386,6 @@ func claimDaily(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
 	username := strings.ToLower(user.GetUsername())
-	mu := getUserMutex(username)
-	mu.Lock()
-	defer mu.Unlock()
 
 	waitTime := canClaimDaily(user)
 	if waitTime > 0 {
@@ -1413,6 +1413,8 @@ func claimDaily(c *gin.Context) {
 
 // loadDailyClaims loads daily claims data from rotur_daily.json
 func loadDailyClaims() map[string]float64 {
+	dailyClaimMutex.Lock()
+	defer dailyClaimMutex.Unlock()
 	data, err := os.ReadFile(DAILY_CLAIMS_FILE_PATH)
 	if err != nil {
 		// If file doesn't exist, return empty map
@@ -1430,12 +1432,14 @@ func loadDailyClaims() map[string]float64 {
 
 // saveDailyClaims saves daily claims data to rotur_daily.json
 func saveDailyClaims(claimsData map[string]float64) {
+	dailyClaimMutex.Lock()
+	defer dailyClaimMutex.Unlock()
 	data, err := json.MarshalIndent(claimsData, "", "  ")
 	if err != nil {
 		return
 	}
 
-	os.WriteFile(DAILY_CLAIMS_FILE_PATH, data, 0644)
+	atomicWrite(DAILY_CLAIMS_FILE_PATH, data, 0644)
 }
 
 func acceptTos(c *gin.Context) {

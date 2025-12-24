@@ -555,6 +555,33 @@ func debugSubscriptionsEndpoint(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "Subscription debug info logged to console"})
 }
 
+func computeNextBilling(subscription *Subscription) time.Time {
+	frequency := subscription.Frequency
+	if frequency == 0 {
+		frequency = 1
+	}
+	period := subscription.Period
+	if period == "" {
+		period = "month"
+	}
+
+	currentTime := time.Now()
+	var nextBillingTime time.Time
+	switch strings.ToLower(period) {
+	case "day":
+		nextBillingTime = currentTime.AddDate(0, 0, frequency)
+	case "week":
+		nextBillingTime = currentTime.AddDate(0, 0, frequency*7)
+	case "month":
+		nextBillingTime = currentTime.AddDate(0, frequency, 0)
+	case "year":
+		nextBillingTime = currentTime.AddDate(frequency, 0, 0)
+	default:
+		nextBillingTime = currentTime.AddDate(0, frequency, 0)
+	}
+	return nextBillingTime
+}
+
 func checkSubscriptions() {
 	ticker := time.NewTicker(time.Duration(SUBSCRIPTION_CHECK_INTERVAL) * time.Second)
 	defer ticker.Stop()
@@ -565,6 +592,8 @@ func checkSubscriptions() {
 		keysMutex.Lock()
 		subscriptionsProcessed := 0
 		chargesProcessed := 0
+
+		usersDirty := false
 
 		for keyIndex := range keys {
 			key := &keys[keyIndex]
@@ -618,6 +647,9 @@ func checkSubscriptions() {
 						}
 
 						if userIndex == ownerIndex {
+							nextBillingTime := computeNextBilling(key.Subscription)
+							userData.NextBilling = nextBillingTime.UnixMilli()
+							key.Users[username] = userData
 							continue
 						}
 
@@ -666,34 +698,12 @@ func checkSubscriptions() {
 							"type":      "key_sale",
 							"new_total": newBal,
 						})
-						go saveUsers()
+						usersDirty = true
 
 						// Update total income for the key
 						key.TotalIncome += userData.Price
 
-						frequency := key.Subscription.Frequency
-						if frequency == 0 {
-							frequency = 1
-						}
-						period := key.Subscription.Period
-						if period == "" {
-							period = "month"
-						}
-
-						currentTime := time.Now()
-						var nextBillingTime time.Time
-						switch strings.ToLower(period) {
-						case "day":
-							nextBillingTime = currentTime.AddDate(0, 0, frequency)
-						case "week":
-							nextBillingTime = currentTime.AddDate(0, 0, frequency*7)
-						case "month":
-							nextBillingTime = currentTime.AddDate(0, frequency, 0)
-						case "year":
-							nextBillingTime = currentTime.AddDate(frequency, 0, 0)
-						default:
-							nextBillingTime = currentTime.AddDate(0, frequency, 0)
-						}
+						nextBillingTime := computeNextBilling(key.Subscription)
 
 						newNextBilling := nextBillingTime.UnixMilli()
 						userData.NextBilling = newNextBilling
@@ -724,11 +734,15 @@ func checkSubscriptions() {
 			}
 		}
 
+		if usersDirty {
+			go saveUsers()
+		}
+
 		log.Printf("Subscription check completed: %d keys with subscriptions checked, %d charges processed", subscriptionsProcessed, chargesProcessed)
 		keysMutex.Unlock()
 
 		if len(keys) > 0 {
-			go saveKeys()
+			saveKeys()
 		}
 	}
 }
