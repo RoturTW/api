@@ -36,16 +36,19 @@ func renderBioRegex(bio string, profile *User, otherKeys map[string]any) string 
 		safeProfile[k] = fmt.Sprintf("%v", v)
 	}
 
-	re := regexp.MustCompile(`{{\s*([a-zA-Z0-9_]+)\s+([:\/?&\-a-zA-Z0-9_.%]+)\s*}}`)
+	re := regexp.MustCompile(`{{\s*([a-zA-Z0-9_]+)(?:\s+([^}]+?))?\s*}}`)
 
 	result := re.ReplaceAllStringFunc(bio, func(match string) string {
 		sub := re.FindStringSubmatch(match)
-		if len(sub) != 3 {
+		if len(sub) < 2 {
 			return ""
 		}
 
 		prefix := sub[1]
-		key := sub[2]
+		key := ""
+		if len(sub) >= 3 {
+			key = sub[2]
+		}
 
 		switch prefix {
 		case "user":
@@ -53,6 +56,26 @@ func renderBioRegex(bio string, profile *User, otherKeys map[string]any) string 
 				return val
 			}
 			return ""
+		case "time":
+			tier := profile.GetSubscription().Tier
+			if !hasTierOrHigher(tier, "drive") {
+				return "{{ Error, time only available to Drive users }}"
+			}
+
+			format := strings.TrimSpace(key)
+			if format == "" {
+				format = "15:04"
+			}
+			format = normalizeUserTimeLayout(format)
+
+			tzStr := getStringOrEmpty(profile.Get("timezone"))
+			offsetHours, ok := parseUTCOffsetHours(tzStr)
+			if !ok {
+				offsetHours = 0
+			}
+
+			loc := time.FixedZone(fmt.Sprintf("UTC%+d", offsetHours), offsetHours*60*60)
+			return time.Now().UTC().In(loc).Format(format)
 		case "url":
 			tier := profile.GetSubscription().Tier
 			if !hasTierOrHigher(tier, "Pro") {
