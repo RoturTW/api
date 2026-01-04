@@ -46,8 +46,10 @@ func getKeyNextBilling(username string, key string) int64 {
 
 	username = strings.ToLower(username)
 
-	keysMutex.RLock()
-	defer keysMutex.RUnlock()
+	var success bool = keysMutex.TryRLock()
+	if success {
+		defer keysMutex.RUnlock()
+	}
 
 	for _, userKey := range keys {
 		if userKey.Key == key {
