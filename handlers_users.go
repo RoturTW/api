@@ -348,6 +348,10 @@ func registerUser(c *gin.Context) {
 	}
 
 	usernameLower := strings.ToLower(username)
+	if len(usernameLower) < 3 || len(usernameLower) > 20 {
+		c.JSON(400, gin.H{"error": "Username must be between 3 and 20 characters"})
+		return
+	}
 
 	re := regexp.MustCompile("[^a-z0-9_ ]")
 	if re.FindStringIndex(usernameLower) != nil {
