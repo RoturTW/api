@@ -453,3 +453,18 @@ func clamp(num int, low int, high int) int {
 	}
 	return num
 }
+
+func deleteAccountAtIndexFast(idx int) error {
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
+
+	if idx < 0 || idx >= len(users) {
+		return fmt.Errorf("index out of range")
+	}
+
+	users[idx] = users[len(users)-1]
+	users = users[:len(users)-1]
+
+	go saveUsers()
+	return nil
+}

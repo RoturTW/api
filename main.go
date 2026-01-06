@@ -125,6 +125,7 @@ func main() {
 		admin.GET("/get_user_by", getUserBy)
 		admin.POST("/update_user", updateUserAdmin)
 		admin.POST("/delete_user", deleteUserAdmin)
+		admin.POST("/ban_user", banUserAdmin)
 		admin.POST("/transfer_credits", transferCreditsAdmin)
 		admin.POST("/kofi", handleKofiTransaction)
 		admin.POST("/set_sub", setSubscription)
@@ -136,6 +137,11 @@ func main() {
 	r.GET("/get_user_new", rateLimit("profile"), getUser)
 
 	r.POST("/create_user", rateLimit("register"), registerUser)
+	auth := r.Group("/auth")
+	{
+		auth.POST("/rotur", rateLimit("register"), registerUser)
+		auth.POST("/google", rateLimit("profile"), handleUserGoogle)
+	}
 
 	me := r.Group("/me")
 	{

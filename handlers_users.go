@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/md5"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -348,54 +346,14 @@ func registerUser(c *gin.Context) {
 	}
 
 	usernameLower := strings.ToLower(username)
-	if len(usernameLower) < 3 || len(usernameLower) > 20 {
-		c.JSON(400, gin.H{"error": "Username must be between 3 and 20 characters"})
+	if ok, msg := ValidateUsername(username); !ok {
+		c.JSON(400, gin.H{"error": msg})
 		return
 	}
 
-	re := regexp.MustCompile("[^a-z0-9_ ]")
-	if re.FindStringIndex(usernameLower) != nil {
-		c.JSON(400, gin.H{"error": "Username contains invalid characters"})
+	if IsIpInBannedList(ip) {
+		c.JSON(400, gin.H{"error": "IP address is banned"})
 		return
-	}
-	if strings.Contains(usernameLower, " ") {
-		c.JSON(400, gin.H{"error": "Username cannot contain spaces"})
-		return
-	}
-
-	file, err := os.Open("./banned_words.json")
-	if err != nil {
-		fmt.Println("Error opening banned_words.json:", err)
-		return
-	}
-	defer file.Close()
-
-	var bannedWords []string
-	if err := json.NewDecoder(file).Decode(&bannedWords); err == nil {
-		for _, banned := range bannedWords {
-			// check leetspeek
-			u := strings.ReplaceAll(username, "1", "l")
-			u = strings.ReplaceAll(u, "3", "e")
-			u = strings.ReplaceAll(u, "5", "s")
-			u = strings.ReplaceAll(u, "7", "t")
-			u = strings.ReplaceAll(u, "9", "i")
-			u = strings.ReplaceAll(u, "0", "o")
-			u = strings.ReplaceAll(u, "8", "b")
-			u = strings.ReplaceAll(u, "@", "a")
-
-			if strings.Contains(strings.ToLower(u), strings.ToLower(banned)) {
-				c.JSON(400, gin.H{"error": "Username contains a banned word"})
-				return
-			}
-		}
-	}
-
-	ips := strings.SplitSeq(os.Getenv("BANNED_IPS"), ",")
-	for ipAddr := range ips {
-		if strings.EqualFold(ipAddr, ip) {
-			c.JSON(400, gin.H{"error": "IP address is banned"})
-			return
-		}
 	}
 
 	usersMutex.Lock()
@@ -412,13 +370,8 @@ func registerUser(c *gin.Context) {
 		}
 	}
 
-	if len(password) != 32 {
-		c.JSON(400, gin.H{"error": "Invalid password hash"})
-		return
-	}
-
-	if password == "d41d8cd98f00b204e9800998ecf8427e" {
-		c.JSON(400, gin.H{"error": "Password cannot be empty"})
+	if ok, msg := ValidatePasswordHash(password); !ok {
+		c.JSON(400, gin.H{"error": msg})
 		return
 	}
 
@@ -429,59 +382,27 @@ func registerUser(c *gin.Context) {
 		return
 	}
 
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(c.ClientIP())))
-
-	go sendDiscordWebhook([]map[string]any{
-		{
-			"title": "New Account Registered",
-			"description": fmt.Sprintf("**Username:** %s\n**Email:** %s\n**System:** %s\n**IP:** %s\n**Host:** %s",
-				username, email, matchedSystem.Name, hash, from_url),
-			"color":     0x57cdac,
-			"timestamp": time.Now().Format(time.RFC3339),
-		},
+	newUser, err := createAccount(AccountCreateInput{
+		Username:      username,
+		Password:      password,
+		Email:         email,
+		System:        matchedSystem,
+		Provider:      "rotur",
+		RequestIP:     ip,
+		RequestOrigin: from_url,
 	})
-
-	newUser := User{
-		"username":         username,
-		"pfp":              "https://avatars.rotur.dev/" + usernameLower,
-		"password":         password,
-		"email":            email,
-		"key":              generateAccountToken(),
-		"system":           matchedSystem.Name,
-		"max_size":         5000000,
-		"sys.last_login":   time.Now().UnixMilli(),
-		"sys.total_logins": 0,
-		"sys.friends":      []string{},
-		"sys.requests":     []string{},
-		"sys.links":        []map[string]any{},
-		"sys.currency":     float64(0),
-		"sys.transactions": []any{},
-		"sys.items":        []any{},
-		"sys.badges":       []string{},
-		"sys.purchases":    []any{},
-		"private":          false,
-		"id":               strconv.FormatInt(time.Now().UnixNano(), 10),
-		"theme": map[string]any{
-			"primary":    "#222",
-			"secondary":  "#555",
-			"tertiary":   "#777",
-			"text":       "#fff",
-			"background": "#050505",
-			"accent":     "#57cdac",
-		},
-		"onboot": []string{
-			"Origin/(A) System/System Apps/originWM.osl",
-			"Origin/(A) System/System Apps/Desktop.osl",
-			"Origin/(A) System/Docks/Dock.osl",
-			"Origin/(A) System/System Apps/Quick_Settings.osl",
-		},
-		"created":          time.Now().UnixMilli(),
-		"wallpaper":        matchedSystem.Wallpaper,
-		"sys.tos_accepted": false,
+	if err != nil {
+		if strings.Contains(err.Error(), "username already") {
+			c.JSON(400, gin.H{"error": "Username already in use"})
+			return
+		}
+		if strings.Contains(err.Error(), "email already") {
+			c.JSON(400, gin.H{"error": "Email already in use"})
+			return
+		}
+		c.JSON(500, gin.H{"error": "Failed to create account"})
+		return
 	}
-
-	users = append(users, newUser)
-	go saveUsers()
 	userCopy := copyUser(newUser)
 	delete(userCopy, "password")
 	c.JSON(201, userCopy)
@@ -1107,7 +1028,7 @@ func deleteUser(c *gin.Context) {
 		return
 	}
 
-	if err := performUserDeletion(username, false); err != nil {
+	if err := performUserDeletion(username, false, false); err != nil {
 		c.JSON(404, gin.H{"error": err.Error()})
 		return
 	}
@@ -1134,12 +1055,39 @@ func deleteUserAdmin(c *gin.Context) {
 		return
 	}
 
-	if err := performUserDeletion(username, true); err != nil {
+	if err := performUserDeletion(username, true, false); err != nil {
 		c.JSON(404, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(200, gin.H{"message": "User deleted successfully"})
+}
+
+func banUserAdmin(c *gin.Context) {
+	if !authenticateAdmin(c) {
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	username := req.Username
+	if username == "" {
+		c.JSON(400, gin.H{"error": "Username is required"})
+		return
+	}
+
+	if err := performUserDeletion(username, true, true); err != nil {
+		c.JSON(404, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "User banned successfully"})
 }
 
 func transferCreditsAdmin(c *gin.Context) {
@@ -1220,7 +1168,7 @@ func reconnectFriends() {
 	}
 }
 
-func performUserDeletion(username string, isAdmin bool) error {
+func performUserDeletion(username string, isAdmin bool, ban bool) error {
 	usernameLower := strings.ToLower(username)
 
 	idx := getIdxOfAccountBy("username", usernameLower)
@@ -1234,18 +1182,24 @@ func performUserDeletion(username string, isAdmin bool) error {
 	}
 	log.Printf("%s %s", logPrefix, usernameLower)
 
-	usersMutex.Lock()
-	defer usersMutex.Unlock()
-
-	// set as banned
-	users[idx] = User{
-		"username":   username,
-		"email":      users[idx].GetEmail(), // so that the same email cant be used by a banned user
-		"private":    true,
-		"sys.banned": true,
+	if ban {
+		usersMutex.Lock()
+		// set as banned
+		users[idx] = User{
+			"username":   username,
+			"email":      users[idx].GetEmail(), // so that the same email cant be used by a banned user
+			"private":    true,
+			"sys.banned": true,
+		}
+		usersMutex.Unlock()
+	} else {
+		deleteAccountAtIndexFast(idx)
 	}
 
 	go broadcastUserUpdate(usernameLower, "sys._deleted", true)
+
+	usersMutex.Lock()
+	defer usersMutex.Unlock()
 
 	for i := range users {
 		target := &users[i]
