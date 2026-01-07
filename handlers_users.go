@@ -357,18 +357,19 @@ func registerUser(c *gin.Context) {
 	}
 
 	usersMutex.Lock()
-	defer usersMutex.Unlock()
-
 	for _, user := range users {
 		if strings.EqualFold(user.GetUsername(), usernameLower) {
 			c.JSON(400, gin.H{"error": "Username already in use"})
+			usersMutex.Unlock()
 			return
 		}
 		if strings.EqualFold(user.GetEmail(), email) {
 			c.JSON(400, gin.H{"error": "Email already in use"})
+			usersMutex.Unlock()
 			return
 		}
 	}
+	usersMutex.Unlock()
 
 	if ok, msg := ValidatePasswordHash(password); !ok {
 		c.JSON(400, gin.H{"error": msg})

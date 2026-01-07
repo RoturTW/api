@@ -528,15 +528,64 @@ func cancelKey(c *gin.Context) {
 	id := c.Param("id")
 	user := c.MustGet("user").(*User)
 
-	// remove the user from the key
+	username := strings.ToLower(user.GetUsername())
+
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
 	for i := range keys {
-		if keys[i].Key == id {
-			delete(keys[i].Users, user.GetUsername())
-			c.JSON(200, gin.H{"status": "Successfully cancelled"})
+		if keys[i].Key != id {
+			continue
 		}
+
+		userData, ok := keys[i].Users[username]
+		if !ok {
+			c.JSON(404, gin.H{"error": "You don't have this key"})
+			return
+		}
+
+		// Subscription keys: keep access until next billing date, then remove.
+		if keys[i].Subscription != nil {
+			if userData.NextBilling == nil {
+				c.JSON(400, gin.H{"error": "This subscription has no next_billing date"})
+				return
+			}
+
+			var nextBilling int64
+			switch v := userData.NextBilling.(type) {
+			case float64:
+				nextBilling = int64(v)
+			case int64:
+				nextBilling = v
+			case int:
+				nextBilling = int64(v)
+			default:
+				c.JSON(400, gin.H{"error": "Invalid next_billing type"})
+				return
+			}
+
+			// We always store cancel_at as unix ms to match other per-user billing fields.
+			if nextBilling < 10_000_000_000 {
+				// looks like seconds; convert to ms
+				nextBilling = nextBilling * 1000
+			}
+
+			userData.CancelAt = nextBilling
+			keys[i].Users[username] = userData
+			go saveKeys()
+
+			c.JSON(200, gin.H{
+				"status":    "Cancellation scheduled",
+				"cancel_at": nextBilling,
+			})
+			return
+		}
+
+		// Non-subscription keys: cancel immediately.
+		delete(keys[i].Users, username)
+		go saveKeys()
+		c.JSON(200, gin.H{"status": "Cancelled"})
+		return
 	}
 
 	c.JSON(404, gin.H{"error": "Key not found"})
@@ -612,6 +661,28 @@ func checkSubscriptions() {
 			for username, userData := range key.Users {
 				if userData.NextBilling == nil {
 					continue
+				}
+
+				// If user scheduled cancellation and we've reached that time, remove them now.
+				if userData.CancelAt != nil {
+					var cancelAt int64
+					switch v := userData.CancelAt.(type) {
+					case float64:
+						cancelAt = int64(v)
+					case int64:
+						cancelAt = v
+					case int:
+						cancelAt = int64(v)
+					}
+					if cancelAt > 0 {
+						if cancelAt < 10_000_000_000 {
+							cancelAt = cancelAt * 1000
+						}
+						if time.Now().UnixMilli() >= cancelAt {
+							usersToRemove = append(usersToRemove, username)
+							continue
+						}
+					}
 				}
 
 				var nextBilling int64
@@ -722,8 +793,6 @@ func checkSubscriptions() {
 						log.Printf("Successfully billed user %s for key %s. Next billing: %s",
 							username, key.Key, nextBillingTime.Format("2006-01-02 15:04:05"))
 						chargesProcessed++
-					} else {
-						usersToRemove = append(usersToRemove, username)
 					}
 				}
 			}

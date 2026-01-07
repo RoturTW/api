@@ -901,6 +901,7 @@ type KeyUserData struct {
 	Time        float64 `json:"time"`
 	Price       int     `json:"price,omitempty"`
 	NextBilling any     `json:"next_billing,omitempty"`
+	CancelAt    any     `json:"cancel_at,omitempty"` // unix ms; when reached, user should be removed from key
 }
 
 // Subscription represents subscription information
