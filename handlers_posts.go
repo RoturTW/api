@@ -20,7 +20,7 @@ var postLimits = map[string]int{
 	"attachment_length":      200,
 }
 
-var lockedKeys = []string{"username", "last_login", "max_size", "key", "created", "system", "id"}
+var lockedKeys = []string{"username", "last_login", "max_size", "key", "created", "system", "id", "discord_id"}
 
 func getLimits(c *gin.Context) {
 	c.JSON(200, postLimits)
