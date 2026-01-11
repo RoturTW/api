@@ -60,7 +60,7 @@ func tierFree() sub_benefits {
 		Max_Login_History:       10,
 		Max_Rmails:              100,
 		FileSystem_Size:         5_000_000,
-		Bio_Length:              300,
+		Bio_Length:              200,
 		Max_Transaction_History: 20,
 		Daily_Credit_Multipler:  1,
 	}
