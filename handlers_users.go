@@ -1361,11 +1361,11 @@ func claimDaily(c *gin.Context) {
 	claimsData[username] = currentTime
 	saveDailyClaims(claimsData)
 
-	go saveUsers()
-
 	benefits := user.GetSubscriptionBenefits()
 
 	PerformCreditTransfer("rotur", username, float64(benefits.Daily_Credit_Multipler), "Daily claim")
+
+	saveUsers()
 
 	c.JSON(200, gin.H{"message": "Daily claim successful"})
 }
