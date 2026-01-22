@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -24,6 +25,17 @@ type GetFilesRequest struct {
 type FileMetadata struct {
 	Entry FileEntry `json:"entry"`
 	Index int       `json:"index"`
+}
+
+type GetFileSizesRequest struct {
+	UUIDs []string `json:"uuids" binding:"required"`
+}
+
+type FileStat struct {
+	UUID    string    `json:"uuid"`
+	Size    int64     `json:"size,omitempty"`
+	ModTime time.Time `json:"mtime,omitempty"`
+	Ok      bool      `json:"ok"`
 }
 
 var fs *FileSystem = NewFileSystem()
@@ -146,6 +158,25 @@ func getFilesAll(c *gin.Context) {
 	c.Data(http.StatusOK, "application/octet-stream", jsonData)
 }
 
+func getFileSizes(c *gin.Context) {
+	user := c.MustGet("user").(*User)
+	username := user.GetUsername()
+
+	var req GetFileSizesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	stats, err := fs.GetFileStats(username, req.UUIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"stats": stats})
+}
+
 func getFileByUUID(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
@@ -176,6 +207,63 @@ func getFileByUUID(c *gin.Context) {
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Cache-Control", "no-cache, max-age=0")
 	c.Data(http.StatusOK, "application/octet-stream", jsonData)
+}
+
+func getFileByPath(c *gin.Context) {
+	user := c.MustGet("user").(*User)
+	username := user.GetUsername()
+
+	path := c.Param("path")
+	if path == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Path is required"})
+		return
+	}
+
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	index, err := fs.loadPathIndex(username)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load path index"})
+		return
+	}
+
+	uuid, ok := index[path]
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+		return
+	}
+
+	entry, err := fs.GetFileByUUID(username, uuid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize file"})
+		return
+	}
+
+	c.Header("Content-Length", fmt.Sprintf("%d", len(data)))
+	c.Header("Content-Type", "application/octet-stream")
+	c.Header("Cache-Control", "no-cache, max-age=0")
+	c.Data(http.StatusOK, "application/octet-stream", data)
+}
+
+func getPathIndex(c *gin.Context) {
+	user := c.MustGet("user").(*User)
+	username := user.GetUsername()
+
+	index, err := fs.loadPathIndex(username)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load path index"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"index": index})
 }
 
 const (
@@ -257,74 +345,228 @@ func (fs *FileSystem) HandleOFSFUpdate(username string, updates []UpdateChange, 
 	}
 }
 
+func extractIndex(v any) int {
+	switch x := v.(type) {
+	case float64:
+		return int(x) - 1
+	case int:
+		return x - 1
+	case string:
+		var i int
+		fmt.Sscanf(x, "%d", &i)
+		return i - 1
+	default:
+		return 0
+	}
+}
+
 func (fs *FileSystem) handleAdd(username string, change UpdateChange) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
 	path := filepath.Join(fileDir, username, change.UUID+".json")
 
 	if _, err := os.Stat(path); err == nil {
-		fmt.Printf("\033[91m[-] OFSF Error\033[0m | File %s already exists\n", change.UUID)
 		return
 	}
 
-	fmt.Printf("\033[92m[+] OFSF\033[0m | Adding file %s\n", change.UUID)
-	dta := []any{}
-	if dta, ok := change.Dta.([]any); !ok || len(dta) > fileEntrySize {
-		fmt.Printf("\033[91m[-] OFSF Error\033[0m | Invalid file data\n")
+	dta, ok := change.Dta.([]any)
+	if !ok || len(dta) > fileEntrySize {
 		return
 	}
-	data, _ := json.Marshal(FileMetadata{
+
+	meta := FileMetadata{
 		Entry: dta,
 		Index: 0,
-	})
-
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		fmt.Printf("\033[91m[-] OFSF Error\033[0m | Failed to write file %s: %v\n", change.UUID, err)
-		return
 	}
+
+	data, _ := json.Marshal(meta)
+	os.WriteFile(path, data, 0644)
+
+	idx, _ := fs.loadPathIndex(username)
+	idx[entryToPath(dta)] = change.UUID
+	fs.savePathIndex(username, idx)
 }
 
 func (fs *FileSystem) handleReplace(username string, change UpdateChange) {
-	path := filepath.Join(fileDir, username, change.UUID+".json")
-
-	if _, err := os.Stat(path); err != nil {
-		fmt.Printf("\033[91m[-] OFSF Error\033[0m | File %s does not exist\n", change.UUID)
-		return
-	}
-
 	entry, err := fs.GetFileByUUID(username, change.UUID)
 	if err != nil {
-		fmt.Printf("\033[91m[-] OFSF Error\033[0m | Failed to read file %s: %v\n", change.UUID, err)
 		return
 	}
 
-	idx := 0
-	switch v := change.Idx.(type) {
-	case float64:
-		idx = int(v)
-	case int:
-		idx = v
-	case string:
-		fmt.Sscanf(v, "%d", &idx)
-	}
+	oldPath := entryToPath(entry)
 
-	if idx > 0 {
-		idx--
-	}
-
+	idx := extractIndex(change.Idx)
 	if idx >= 0 && idx < len(entry) {
 		entry[idx] = change.Dta
 	}
+
+	newPath := entryToPath(entry)
+
 	fs.SetFileByUUID(username, change.UUID, entry)
 
+	if oldPath != newPath {
+		index, _ := fs.loadPathIndex(username)
+		delete(index, oldPath)
+		index[newPath] = change.UUID
+		fs.savePathIndex(username, index)
+	}
 }
 
 func (fs *FileSystem) handleDelete(username string, change UpdateChange) {
-	path := filepath.Join(fileDir, username, change.UUID+".json")
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
 
-	if _, err := os.Stat(path); err != nil {
-		return
+	filePath := filepath.Join(fileDir, username, change.UUID+".json")
+	os.Remove(filePath)
+
+	idx, _ := fs.loadPathIndex(username)
+	for path, uuid := range idx {
+		if uuid == change.UUID {
+			delete(idx, path)
+			break
+		}
 	}
 
-	os.Remove(path)
+	fs.savePathIndex(username, idx)
+}
+
+func userIndexPath(username string) string {
+	return filepath.Join(fileDir, username, ".index.json")
+}
+
+type PathIndex map[string]string
+
+func (fs *FileSystem) rebuildPathIndex(username string) (PathIndex, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	userDir := filepath.Join(fileDir, username)
+
+	idx := make(PathIndex)
+
+	entries, err := os.ReadDir(userDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			if err := fs.savePathIndex(username, idx); err != nil {
+				return nil, err
+			}
+			return idx, nil
+		}
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+
+		if entry.Name() == ".index.json" {
+			continue
+		}
+
+		filePath := filepath.Join(userDir, entry.Name())
+
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			continue
+		}
+
+		var meta FileMetadata
+		if err := json.Unmarshal(data, &meta); err != nil || meta.Entry == nil {
+			continue
+		}
+
+		path := entryToPath(meta.Entry)
+		uuid := strings.TrimSuffix(entry.Name(), ".json")
+
+		idx[path] = uuid
+	}
+
+	if err := fs.savePathIndex(username, idx); err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("\033[93m[~] OFSF\033[0m | Rebuilt path index for %s (%d entries)\n",
+		username, len(idx))
+
+	return idx, nil
+}
+
+func (fs *FileSystem) loadPathIndex(username string) (PathIndex, error) {
+	path := userIndexPath(username)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fs.rebuildPathIndex(username)
+		}
+		return nil, err
+	}
+
+	var idx PathIndex
+	if err := json.Unmarshal(data, &idx); err != nil {
+		return fs.rebuildPathIndex(username)
+	}
+
+	return idx, nil
+}
+
+func (fs *FileSystem) savePathIndex(username string, idx PathIndex) error {
+	path := userIndexPath(username)
+
+	tmp := path + ".tmp"
+	data, err := json.Marshal(idx)
+	if err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+
+	return os.Rename(tmp, path) // atomic on POSIX
+}
+
+func entryToPath(entry FileEntry) string {
+	return getStringOrEmpty(entry[2]) +
+		getStringOrEmpty(entry[1]) +
+		"/" +
+		getStringOrEmpty(entry[0])
+}
+
+func (fs *FileSystem) GetFileStats(username string, uuids []string) ([]FileStat, error) {
+	if err := fs.migrateFromLegacy(username); err != nil {
+		return nil, err
+	}
+
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	userDir := filepath.Join(fileDir, username)
+	stats := make([]FileStat, 0, len(uuids))
+
+	for _, uuid := range uuids {
+		path := filepath.Join(userDir, uuid+".json")
+
+		info, err := os.Stat(path)
+		if err != nil {
+			stats = append(stats, FileStat{
+				UUID: uuid,
+				Ok:   false,
+			})
+			continue
+		}
+
+		stats = append(stats, FileStat{
+			UUID:    uuid,
+			Size:    info.Size(),
+			ModTime: info.ModTime().UTC(),
+			Ok:      true,
+		})
+	}
+
+	return stats, nil
 }
 
 func (fs *FileSystem) migrateFromLegacy(username string) error {
@@ -359,6 +601,8 @@ func (fs *FileSystem) migrateFromLegacy(username string) error {
 		return err
 	}
 
+	pathIndex := PathIndex{}
+
 	index := 0
 	for i := 0; i+fileEntrySize <= len(filesList); i += fileEntrySize {
 		entry := filesList[i : i+fileEntrySize]
@@ -367,11 +611,19 @@ func (fs *FileSystem) migrateFromLegacy(username string) error {
 				Entry: entry,
 				Index: index,
 			}
+			internalPath := entryToPath(entry)
+			pathIndex[internalPath] = uuid
 			entryData, _ := json.Marshal(metadata)
 			filePath := filepath.Join(userDir, uuid+".json")
 			os.WriteFile(filePath, entryData, 0644)
 			index++
 		}
+	}
+
+	filePath := filepath.Join(userDir, "index.json")
+	data, err = json.Marshal(pathIndex)
+	if err == nil {
+		os.WriteFile(filePath, data, 0644)
 	}
 
 	os.Remove(legacyPath)

@@ -169,13 +169,19 @@ func main() {
 
 	files := r.Group("/files")
 	{
-		files.POST("/update", requiresAuth, updateFiles)
-		files.GET("/size", requiresAuth, getUserFileSize)
-		files.DELETE("/all", requiresAuth, deleteAllUserFiles)
+		files.POST("/", requiresAuth, updateFiles)
+		files.DELETE("/", requiresAuth, deleteAllUserFiles)
+
+		files.GET("/usage", requiresAuth, getUserFileSize)
 		files.GET("/index", requiresAuth, getFilesIndex)
-		files.GET("/all", requiresAuth, getFilesAll)
-		files.GET("/get_files", requiresAuth, getFilesByUUIDs)
-		files.GET("/get_file", requiresAuth, getFileByUUID)
+		files.GET("/entries", requiresAuth, getFilesAll)
+
+		files.POST("/by-uuid", requiresAuth, getFilesByUUIDs)
+		files.GET("/by-uuid", requiresAuth, getFileByUUID)
+		files.GET("/by-path/*path", requiresAuth, getFileByPath)
+
+		files.POST("/stats", requiresAuth, getFileSizes)
+		files.GET("/path-index", requiresAuth, getPathIndex)
 	}
 
 	r.GET("/read-files", requiresAuth, getFilesAll)
