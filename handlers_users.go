@@ -221,6 +221,25 @@ func getUser(c *gin.Context) {
 	c.JSON(403, gin.H{"error": "Invalid authentication credentials"})
 }
 
+func checkAuth(c *gin.Context) {
+	auth := c.Query("auth")
+	if auth == "" {
+		c.JSON(400, gin.H{"error": "auth is required"})
+		return
+	}
+
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
+	for _, user := range users {
+		if user.GetKey() == auth {
+			c.JSON(200, gin.H{"auth": true, "username": user.GetUsername()})
+			return
+		}
+	}
+	c.JSON(200, gin.H{"auth": false, "username": ""})
+}
+
 func addLogin(c *gin.Context, user *User, message string) {
 	if user == nil {
 		return

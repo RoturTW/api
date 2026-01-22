@@ -136,6 +136,8 @@ func main() {
 	r.GET("/get_user", rateLimit("profile"), getUser)
 	r.GET("/get_user_new", rateLimit("profile"), getUser)
 
+	r.GET("/check_auth", requiresAuth, checkAuth)
+
 	r.POST("/create_user", rateLimit("register"), registerUser)
 	auth := r.Group("/auth")
 	{
