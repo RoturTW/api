@@ -170,11 +170,11 @@ func main() {
 	files := r.Group("/files")
 	{
 		files.POST("/update", requiresAuth, updateFiles)
-		files.POST("/get", requiresAuth, getFilesByUUIDs)
 		files.GET("/size", requiresAuth, getUserFileSize)
 		files.DELETE("/all", requiresAuth, deleteAllUserFiles)
 		files.GET("/index", requiresAuth, getFilesIndex)
 		files.GET("/all", requiresAuth, getFilesAll)
+		files.GET("/get_files", requiresAuth, getFilesByUUIDs)
 		files.GET("/get_file", requiresAuth, getFileByUUID)
 	}
 
