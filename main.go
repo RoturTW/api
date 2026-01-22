@@ -167,6 +167,21 @@ func main() {
 	r.DELETE("/users", deleteUserKey)
 	r.DELETE("/users/:username", requiresAuth, deleteUser)
 
+	files := r.Group("/files")
+	{
+		files.POST("/update", requiresAuth, updateFiles)
+		files.POST("/get", requiresAuth, getFilesByUUIDs)
+		files.GET("/size", requiresAuth, getUserFileSize)
+		files.DELETE("/all", requiresAuth, deleteAllUserFiles)
+		files.GET("/index", requiresAuth, getFilesIndex)
+		files.GET("/all", requiresAuth, getFilesAll)
+		files.GET("/get_file", requiresAuth, getFileByUUID)
+	}
+
+	r.GET("/read-files", requiresAuth, getFilesAll)
+	r.GET("/read-file", requiresAuth, getFileByUUID)
+	r.GET("/read-index", requiresAuth, getFilesIndex)
+
 	// Friends endpoints
 	friends := r.Group("/friends")
 	{
