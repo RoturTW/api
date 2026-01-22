@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -43,8 +46,18 @@ var fs *FileSystem = NewFileSystem()
 func updateFiles(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read request body"})
+		return
+	}
+
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
 	var req UpdateFileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Println("Raw body:", string(bodyBytes))
+
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -784,16 +797,16 @@ func (fs *FileSystem) GetFilesIndexWithThreshold(username string, sizeThreshold 
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 
-	result := make([]any, 0)
 	userDir := filepath.Join(fileDir, username)
-
 	entries, err := os.ReadDir(userDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return result, nil
+			return nil, nil
 		}
 		return nil, err
 	}
+
+	var allEntries []FileMetadata
 
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
@@ -801,7 +814,6 @@ func (fs *FileSystem) GetFilesIndexWithThreshold(username string, sizeThreshold 
 		}
 
 		filePath := filepath.Join(userDir, entry.Name())
-
 		data, err := os.ReadFile(filePath)
 		if err != nil {
 			continue
@@ -809,19 +821,28 @@ func (fs *FileSystem) GetFilesIndexWithThreshold(username string, sizeThreshold 
 
 		var metadata FileMetadata
 		if err := json.Unmarshal(data, &metadata); err == nil && metadata.Entry != nil {
-			entry := metadata.Entry
+			entryCopy := make(FileEntry, len(metadata.Entry))
+			copy(entryCopy, metadata.Entry)
 
-			if sizeThreshold > 0 && len(entry) > 3 {
-				if dataStr, ok := entry[3].(string); ok && len(dataStr) > sizeThreshold {
-					entryCopy := make(FileEntry, len(entry))
-					copy(entryCopy, entry)
+			if sizeThreshold > 0 && len(entryCopy) > 3 {
+				if entryCopy[0] == ".folder" {
+				} else if dataStr, ok := entryCopy[3].(string); ok && len(dataStr) > sizeThreshold {
 					entryCopy[3] = false
-					entry = entryCopy
 				}
 			}
 
-			result = append(result, entry...)
+			metadata.Entry = entryCopy
+			allEntries = append(allEntries, metadata)
 		}
+	}
+
+	sort.Slice(allEntries, func(i, j int) bool {
+		return allEntries[i].Index < allEntries[j].Index
+	})
+
+	result := make([]any, 0)
+	for _, meta := range allEntries {
+		result = append(result, meta.Entry...)
 	}
 
 	return result, nil
