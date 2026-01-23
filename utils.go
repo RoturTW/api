@@ -401,15 +401,15 @@ func JSONStringify(v any) string {
 	return string(data)
 }
 
-func dirExists(path string) (bool, error) {
+func dirExists(path string) bool {
 	info, err := os.Stat(path)
 	if err == nil {
-		return info.IsDir(), nil
+		return info.IsDir()
 	}
 	if os.IsNotExist(err) {
-		return false, nil
+		return false
 	}
-	return false, err
+	return false
 }
 
 func copyAndReplace(src, dst, old, new string) error {
@@ -421,6 +421,22 @@ func copyAndReplace(src, dst, old, new string) error {
 	updated := strings.ReplaceAll(string(data), old, new)
 
 	return os.WriteFile(dst, []byte(updated), 0644)
+}
+
+func removeUserPath(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // already gone, not an error
+		}
+		return err
+	}
+
+	if info.IsDir() {
+		return os.RemoveAll(path)
+	}
+
+	return os.Remove(path)
 }
 
 func sendWebhook(url string, data map[string]any) error {
