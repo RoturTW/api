@@ -282,6 +282,8 @@ func getPathIndex(c *gin.Context) {
 const (
 	fileEntrySize = 14
 	fileDir       = "./rotur/files"
+
+	defaultOFSF = "./rotur/base.ofsf"
 )
 
 type FileEntry []any
@@ -542,9 +544,8 @@ func (fs *FileSystem) savePathIndex(username string, idx PathIndex) error {
 }
 
 func entryToPath(entry FileEntry) string {
-	return getStringOrEmpty(entry[2]) +
+	return getStringOrEmpty(entry[2]) + "/" +
 		getStringOrEmpty(entry[1]) +
-		"/" +
 		getStringOrEmpty(entry[0])
 }
 
@@ -587,6 +588,13 @@ func (fs *FileSystem) migrateFromLegacy(username string) error {
 	defer fs.mu.Unlock()
 
 	legacyPath := filepath.Join(fileDir, username+".ofsf")
+
+	newPath := filepath.Join(fileDir, username)
+	if exists, err := dirExists(newPath); err != nil {
+		return err
+	} else if !exists {
+		copyAndReplace(defaultOFSF, legacyPath, "${USERNAME}", username)
+	}
 
 	if _, err := os.Stat(legacyPath); os.IsNotExist(err) {
 		return nil
