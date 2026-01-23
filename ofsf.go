@@ -377,8 +377,6 @@ func extractIndex(v any) int {
 
 func (fs *FileSystem) handleAdd(username string, change UpdateChange) {
 	fs.mu.Lock()
-	defer fs.mu.Unlock()
-
 	path := filepath.Join(fileDir, username, change.UUID+".json")
 
 	if _, err := os.Stat(path); err == nil {
@@ -397,10 +395,13 @@ func (fs *FileSystem) handleAdd(username string, change UpdateChange) {
 
 	data, _ := json.Marshal(meta)
 	os.WriteFile(path, data, 0644)
+	fs.mu.Unlock()
 
 	idx, _ := fs.loadPathIndex(username)
+	fs.mu.Lock()
 	idx[entryToPath(dta)] = change.UUID
 	fs.savePathIndex(username, idx)
+	fs.mu.Unlock()
 }
 
 func (fs *FileSystem) handleReplace(username string, change UpdateChange) {
@@ -641,7 +642,7 @@ func (fs *FileSystem) migrateFromLegacy(username string) error {
 		}
 	}
 
-	filePath := filepath.Join(userDir, "index.json")
+	filePath := filepath.Join(userDir, ".index.json")
 	data, err = json.Marshal(pathIndex)
 	if err == nil {
 		os.WriteFile(filePath, data, 0644)
