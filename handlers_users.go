@@ -1277,14 +1277,8 @@ func performUserDeletion(username string, isAdmin bool, ban bool) error {
 		}
 
 		// remove file system
-		userFile := "/Users/admin/Documents/rotur/files/" + target
-		if dirExists(userFile) {
-			os.RemoveAll(userFile)
-		} else {
-			userFile = "/Users/admin/Documents/rotur/files/" + target + ".ofsf"
-			if err := removeUserDirectory(userFile); err != nil {
-				log.Printf("Error removing user file %s: %v", userFile, err)
-			}
+		if err := fs.DeleteUserFileSystem(target); err != nil {
+			log.Printf("Error deleting user file system: %v", err)
 		}
 	}(usernameLower)
 	return nil
