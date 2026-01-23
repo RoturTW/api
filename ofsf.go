@@ -592,11 +592,10 @@ func (fs *FileSystem) migrateFromLegacy(username string) error {
 
 	newPath := filepath.Join(fileDir, username)
 	if dirExists(newPath) {
-		copyAndReplace(defaultOFSF, legacyPath, "${USERNAME}", username)
-	}
-
-	if _, err := os.Stat(legacyPath); os.IsNotExist(err) {
 		return nil
+	}
+	if !fileExists(legacyPath) {
+		copyAndReplace(defaultOFSF, legacyPath, "${USERNAME}", username)
 	}
 
 	fmt.Printf("\033[93m[~] OFSF\033[0m | Migrating %s from legacy format\n", username)

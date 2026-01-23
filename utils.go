@@ -401,6 +401,11 @@ func JSONStringify(v any) string {
 	return string(data)
 }
 
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return !os.IsNotExist(err) && info.Mode().IsRegular()
+}
+
 func dirExists(path string) bool {
 	info, err := os.Stat(path)
 	if err == nil {
