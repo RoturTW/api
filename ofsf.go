@@ -30,6 +30,25 @@ type FileMetadata struct {
 	Index int       `json:"index"`
 }
 
+type FileEntry []any
+
+type FileEntryStruct struct {
+	Type          string   `json:"type"`
+	Name          string   `json:"name"`
+	Location      string   `json:"location"`
+	Data          any      `json:"data"`
+	DataSecondary any      `json:"data_secondary"`
+	X             int64    `json:"x"`
+	Y             int64    `json:"y"`
+	Id            any      `json:"id"`
+	Created       int64    `json:"created"`
+	Edited        int64    `json:"edited"`
+	Icon          string   `json:"icon"`
+	Size          int64    `json:"size"`
+	Permissions   []string `json:"permissions"`
+	UUID          string   `json:"uuid"`
+}
+
 type GetFileSizesRequest struct {
 	UUIDs []string `json:"uuids" binding:"required"`
 }
@@ -285,8 +304,6 @@ const (
 
 	defaultOFSF = "./rotur/base.ofsf"
 )
-
-type FileEntry []any
 
 type UpdateChange struct {
 	Command string `json:"command"`
