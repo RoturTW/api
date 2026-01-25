@@ -532,6 +532,9 @@ func (fs *FileSystem) loadPathIndexUnsafe(username string) (PathIndex, error) {
 
 // loadPathIndex is the public version that acquires the lock
 func (fs *FileSystem) loadPathIndex(username string) (PathIndex, error) {
+	if err := fs.migrateFromLegacy(username); err != nil {
+		fmt.Printf("\033[91m[-] OFSF Error\033[0m | Migration failed: %v\n", err)
+	}
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 	return fs.loadPathIndexUnsafe(username)
