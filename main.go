@@ -169,6 +169,7 @@ func main() {
 
 	files := r.Group("/files")
 	{
+		files.GET("", requiresAuth, getFileByUUID)
 		files.POST("", requiresAuth, updateFiles)
 		files.DELETE("", requiresAuth, deleteAllUserFiles)
 
