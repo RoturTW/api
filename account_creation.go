@@ -6,6 +6,8 @@ import (
 	"maps"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type AccountCreateInput struct {
@@ -82,7 +84,7 @@ func createAccount(in AccountCreateInput) (User, error) {
 		"sys.badges":       []string{},
 		"sys.purchases":    []any{},
 		"private":          false,
-		"id":               fmt.Sprintf("%d", time.Now().UnixNano()),
+		"sys.id":           uuid.New().String(),
 		"theme": map[string]any{
 			"primary":    "#222",
 			"secondary":  "#555",
