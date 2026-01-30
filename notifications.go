@@ -137,7 +137,7 @@ func broadcastClawEvent(eventType string, data any) bool {
 	return makeHTTPRequest("POST", WEBSOCKET_SERVER_URL, payload, 2*time.Second, "WebSocket", 200)
 }
 
-func sendPostToDiscord(postData Post) {
+func sendPostToDiscord(postData NetPost) {
 	username := postData.User
 	if username == "" {
 		username = "Unknown User"
@@ -249,10 +249,14 @@ func addUserEvent(userId UserId, eventType string, data map[string]any) Event {
 		postID, _ := data["post_id"].(string)
 		if postID != "" {
 			replies := getPostRepliesSnapshot(postID)
+			netReplies := make([]NetReply, 0)
+			for _, reply := range replies {
+				netReplies = append(netReplies, reply.ToNet())
+			}
 			go broadcastClawEvent("update_post", map[string]any{
 				"id":   postID,
 				"key":  "replies",
-				"data": replies,
+				"data": netReplies,
 			})
 		}
 	}

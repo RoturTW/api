@@ -162,19 +162,9 @@ func getFollowing(c *gin.Context) {
 
 	following := make([]Username, 0)
 
-	// Iterate through all followersData to find who this user is following
 	for _, data := range followersData {
-		for _, follower := range data.Followers {
-			if follower == targetId {
-				// This user (name) is following targetUser
-				for _, user := range users {
-					if user.GetId() == targetId {
-						following = append(following, user.GetUsername())
-						break
-					}
-				}
-				break
-			}
+		if slices.Contains(data.Followers, targetId) {
+			following = append(following, data.Username)
 		}
 	}
 
@@ -203,15 +193,13 @@ func getFollowers(c *gin.Context) {
 
 	followers := make([]Username, 0)
 
-	if data, exists := followersData[targetId]; exists {
-		for _, follower := range data.Followers {
-			for _, user := range users {
-				if user.GetId() == follower {
-					followers = append(followers, user.GetUsername())
-					break
-				}
-			}
-		}
+	data, exists := followersData[targetId]
+	if !exists {
+		c.JSON(404, gin.H{"error": "User not found"})
+		return
+	}
+	for _, follower := range data.Followers {
+		followers = append(followers, follower.User().GetUsername())
 	}
 
 	c.JSON(200, gin.H{"followers": followers})

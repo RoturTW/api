@@ -135,8 +135,9 @@ func createPost(c *gin.Context) {
 	// Send the new post to the WebSocket server only if it's not profile-only
 	if !profileOnly {
 		go func() {
-			broadcastClawEvent("new_post", newPost)
-			sendPostToDiscord(newPost)
+			netPost := newPost.ToNet()
+			broadcastClawEvent("new_post", netPost)
+			sendPostToDiscord(netPost)
 		}()
 	}
 
@@ -348,10 +349,14 @@ func ratePost(c *gin.Context) {
 
 	// Broadcast rating update for public posts
 	if !targetPost.ProfileOnly {
+		likes := make([]Username, 0)
+		for _, liker := range targetPost.Likes {
+			likes = append(likes, liker.User().GetUsername())
+		}
 		go broadcastClawEvent("update_post", map[string]any{
 			"id":   postID,
 			"key":  "likes",
-			"data": targetPost.Likes,
+			"data": likes,
 		})
 	}
 

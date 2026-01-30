@@ -835,6 +835,8 @@ func (u User) Set(key string, value any) {
 // FollowerData represents follower information
 type FollowerData struct {
 	Followers []UserId `json:"followers"`
+	Username  Username `json:"username"`
+	UserId    UserId   `json:"user_id"`
 }
 
 // Post represents a social media post
@@ -889,6 +891,7 @@ func (p Post) ToNet() NetPost {
 		Pinned:       p.Pinned,
 		IsRepost:     p.IsRepost,
 		OriginalPost: p.OriginalPost,
+		Timestamp:    p.Timestamp,
 	}
 }
 

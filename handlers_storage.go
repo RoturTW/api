@@ -175,7 +175,11 @@ func loadFollowers() {
 	for k, v := range tempData {
 		followers := make([]UserId, len(v.Followers))
 		copy(followers, v.Followers)
-		followersData[k] = FollowerData{Followers: followers}
+		followersData[k] = FollowerData{
+			Followers: followers,
+			Username:  getUserById(k).GetUsername(),
+			UserId:    k,
+		}
 	}
 
 	log.Printf("Loaded %d followers", len(followersData))
