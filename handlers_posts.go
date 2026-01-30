@@ -225,7 +225,7 @@ func replyToPost(c *gin.Context) {
 	addUserEvent(targetPost.User, "reply", map[string]any{
 		"post_id":  postID,
 		"reply_id": newReply.ID,
-		"user":     user.GetUsername(),
+		"user":     user.GetId(),
 		"content":  content,
 	})
 
@@ -429,7 +429,7 @@ func repost(c *gin.Context) {
 
 	addUserEvent(originalPost.User, "repost", map[string]any{
 		"repost_id":        newRepost.ID,
-		"user":             user.GetUsername(),
+		"user":             user.GetId(),
 		"original_post_id": originalPost.ID,
 	})
 

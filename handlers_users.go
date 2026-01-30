@@ -219,15 +219,12 @@ func getUser(c *gin.Context) {
 		if foundUser.GetMarriage().Status != "single" {
 			userCopy["sys.marriage"] = foundUser.GetMarriage().ToNet()
 		}
-		transactions := deepCopyValue(foundUser.GetTransactions()).([]map[string]any)
+		transactions := foundUser.GetTransactions()
+		netTransactions := make([]TransactionNet, len(transactions))
 		for i, transaction := range transactions {
-			val, ok := transaction["user"].(string)
-			if !ok {
-				continue
-			}
-			transactions[i]["user"] = getUserById(UserId(val)).GetUsername()
+			netTransactions[i] = transaction.ToNet()
 		}
-		userCopy["sys.transactions"] = transactions
+		userCopy["sys.transactions"] = netTransactions
 
 		delete(userCopy, "password")
 		c.JSON(200, userCopy)
@@ -754,7 +751,12 @@ func updateUser(c *gin.Context) {
 
 	go saveUsers()
 
-	c.JSON(200, gin.H{"message": "User key updated successfully", "username": username, "key": key, "value": value})
+	c.JSON(200, gin.H{
+		"message":  "User key updated successfully",
+		"username": username,
+		"key":      key,
+		"value":    value,
+	})
 }
 
 func updateUserAdmin(c *gin.Context) {
@@ -1003,13 +1005,13 @@ func PerformCreditTransfer(fromUsername, toUsername Username, amount float64, no
 			taxUser, _ := getUserByIdx(idx)
 			newBalance := roundVal(taxUser.GetCredits() + taxRecipientShare)
 			taxUser.SetBalance(newBalance)
-			taxUser.addTransaction(map[string]any{
-				"note":      "Daily credit",
-				"user":      toUser.GetUsername(),
-				"time":      now,
-				"amount":    taxRecipientShare,
-				"type":      "tax",
-				"new_total": newBalance,
+			taxUser.addTransaction(Transaction{
+				Note:      "Daily credit",
+				User:      toUser.GetId(),
+				Timestamp: now,
+				Amount:    taxRecipientShare,
+				Type:      "tax",
+				NewTotal:  newBalance,
 			})
 		}
 	}
@@ -1022,19 +1024,19 @@ func PerformCreditTransfer(fromUsername, toUsername Username, amount float64, no
 	}
 
 	// Log transactions
-	fromUser.addTransaction(map[string]any{
-		"note":      note,
-		"user":      toUser.GetUsername(),
-		"amount":    nAmount + totalTax,
-		"type":      "out",
-		"new_total": fromCurrency - nAmount - totalTax,
+	fromUser.addTransaction(Transaction{
+		Note:     note,
+		User:     toUser.GetId(),
+		Amount:   nAmount + totalTax,
+		Type:     "out",
+		NewTotal: fromCurrency - nAmount - totalTax,
 	})
-	toUser.addTransaction(map[string]any{
-		"note":      note,
-		"user":      fromUser.GetUsername(),
-		"amount":    nAmount,
-		"type":      "in",
-		"new_total": toCurrency + nAmount,
+	toUser.addTransaction(Transaction{
+		Note:     note,
+		User:     fromUser.GetId(),
+		Amount:   nAmount,
+		Type:     "in",
+		NewTotal: toCurrency + nAmount,
 	})
 
 	go saveUsers()

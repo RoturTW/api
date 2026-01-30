@@ -124,13 +124,13 @@ func handleKofiTransaction(c *gin.Context) {
 				now := time.Now().UnixMilli()
 				balance := float64(account.GetCredits()) + 50
 				account.SetBalance(balance)
-				account.addTransaction(map[string]any{
-					"note":      "50 credit purchase",
-					"user":      "rotur",
-					"time":      now,
-					"amount":    50,
-					"type":      "transfer",
-					"new_total": balance,
+				account.addTransaction(Transaction{
+					Note:      "50 credit purchase",
+					User:      Username("rotur").Id(),
+					Timestamp: now,
+					Amount:    50,
+					Type:      "transfer",
+					NewTotal:  balance,
 				})
 				go saveUsers()
 			}

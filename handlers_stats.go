@@ -113,10 +113,9 @@ func getUserStats(c *gin.Context) {
 	c.JSON(200, stats)
 }
 
-func findSinceMonth(txs []map[string]any, cutoff int64) int {
+func findSinceMonth(txs []Transaction, cutoff int64) int {
 	return sort.Search(len(txs), func(i int) bool {
-		t, _ := txs[i]["time"].(float64)
-		return int64(t) >= cutoff
+		return txs[i].Timestamp >= cutoff
 	})
 }
 
@@ -160,17 +159,17 @@ func getMostGained(c *gin.Context) {
 
 		start := findSinceMonth(txs, monthAgo)
 		for _, tx := range txs[start:] {
-			t, ok := tx["time"].(float64)
-			if !ok || int64(t) < monthAgo {
+			t := tx.Timestamp
+			if t < monthAgo {
 				continue
 			}
 
-			amt, ok := tx["amount"].(float64)
-			if !ok || amt <= 0 {
+			amt := tx.Amount
+			if amt <= 0 {
 				continue
 			}
 
-			typ, _ := tx["type"].(string)
+			typ := tx.Type
 			switch typ {
 			case "in", "key_sale", "tax":
 				earned += amt

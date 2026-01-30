@@ -77,7 +77,7 @@ func createKey(c *gin.Context) {
 		Key:         generateToken(),
 		Creator:     userId,
 		Users:       make(map[UserId]KeyUserData),
-		Name:        &name,
+		Name:        name,
 		Price:       price,
 		Type:        "standard",
 		TotalIncome: 0,
@@ -297,7 +297,7 @@ func setKeyName(c *gin.Context) {
 				return
 			}
 
-			keys[i].Name = &name
+			keys[i].Name = name
 
 			go saveKeys()
 
@@ -497,14 +497,15 @@ func buyKey(c *gin.Context) {
 				// Flexible extraction for sys.currency
 				newBal := user.GetCredits() - float64(keys[i].Price)
 				user.SetBalance(newBal)
-				user.addTransaction(map[string]any{
-					"note":      "key purchase",
-					"key_id":    keys[i].Key,
-					"key_name":  keys[i].Name,
-					"user":      user.GetUsername(),
-					"amount":    float64(keys[i].Price),
-					"type":      "key_buy",
-					"new_total": newBal,
+				user.addTransaction(Transaction{
+					Note:      "key purchase",
+					User:      user.GetId(),
+					Amount:    float64(keys[i].Price),
+					Type:      "key_buy",
+					NewTotal:  newBal,
+					Timestamp: time.Now().UnixMilli(),
+					KeyName:   keys[i].Name,
+					KeyId:     keys[i].Key,
 				})
 
 				// Pay the creator
@@ -515,14 +516,15 @@ func buyKey(c *gin.Context) {
 					value := float64(keys[i].Price) * 0.9
 					newBal := ownerCurrency + value
 					owner.SetBalance(newBal)
-					owner.addTransaction(map[string]any{
-						"note":      "key purchase",
-						"key_id":    keys[i].Key,
-						"key_name":  keys[i].Name,
-						"user":      user.GetUsername(),
-						"amount":    float64(keys[i].Price),
-						"type":      "key_sale",
-						"new_total": newBal,
+					owner.addTransaction(Transaction{
+						Note:      "key purchase",
+						User:      user.GetId(),
+						Amount:    float64(keys[i].Price),
+						Type:      "key_sale",
+						NewTotal:  newBal,
+						Timestamp: time.Now().UnixMilli(),
+						KeyName:   keys[i].Name,
+						KeyId:     keys[i].Key,
 					})
 				}
 
@@ -775,28 +777,30 @@ func checkSubscriptions() {
 						}
 						currencyFloat -= price
 						purchaser.SetBalance(currencyFloat)
-						purchaser.addTransaction(map[string]any{
-							"note":      "key purchase",
-							"key_id":    key.Key,
-							"key_name":  key.Name,
-							"user":      key.Creator,
-							"amount":    price,
-							"type":      "key_buy",
-							"new_total": currencyFloat,
+						purchaser.addTransaction(Transaction{
+							Note:      "key purchase",
+							User:      key.Creator,
+							Amount:    price,
+							Type:      "key_buy",
+							NewTotal:  currencyFloat,
+							Timestamp: time.Now().UnixMilli(),
+							KeyName:   key.Name,
+							KeyId:     key.Key,
 						})
 
 						// 10% tax on purchase
 						value := price * 0.9
 						newBal := owner.GetCredits() + value
 						owner.SetBalance(newBal)
-						owner.addTransaction(map[string]any{
-							"note":      "key purchase",
-							"key_id":    key.Key,
-							"key_name":  key.Name,
-							"user":      username,
-							"amount":    value,
-							"type":      "key_sale",
-							"new_total": newBal,
+						owner.addTransaction(Transaction{
+							Note:      "key purchase",
+							User:      username.Id(),
+							Amount:    value,
+							Type:      "key_sale",
+							NewTotal:  newBal,
+							Timestamp: time.Now().UnixMilli(),
+							KeyName:   key.Name,
+							KeyId:     key.Key,
 						})
 						usersDirty = true
 

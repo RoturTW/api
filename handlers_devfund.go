@@ -81,14 +81,14 @@ func escrowTransfer(c *gin.Context) {
 		note = note[:50]
 	}
 
-	fromUser.addTransaction(map[string]any{
-		"note":        note,
-		"user":        "devfund-escrow",
-		"time":        now,
-		"amount":      nAmount,
-		"type":        "escrow_out",
-		"petition_id": req.PetitionID,
-		"new_total":   newBal,
+	fromUser.addTransaction(Transaction{
+		Note:       note,
+		User:       Username("rotur").Id(),
+		Timestamp:  now,
+		Amount:     nAmount,
+		Type:       "escrow_out",
+		PetitionId: req.PetitionID,
+		NewTotal:   newBal,
 	})
 
 	go saveUsers()
@@ -170,14 +170,14 @@ func escrowRelease(c *gin.Context) {
 	}
 
 	// Helper to add transaction
-	toUser.addTransaction(map[string]any{
-		"note":        note,
-		"user":        "devfund-escrow",
-		"time":        now,
-		"amount":      nAmount,
-		"type":        "escrow_in",
-		"petition_id": req.PetitionID,
-		"new_total":   newBal,
+	toUser.addTransaction(Transaction{
+		Note:       note,
+		User:       Username("rotur").Id(),
+		Timestamp:  now,
+		Amount:     nAmount,
+		Type:       "escrow_in",
+		PetitionId: req.PetitionID,
+		NewTotal:   newBal,
 	})
 
 	go saveUsers()

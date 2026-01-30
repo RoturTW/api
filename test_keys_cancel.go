@@ -16,7 +16,7 @@ func TestCancelKey_DeferredUntilNextBilling(t *testing.T) {
 		Key:          "key1",
 		Creator:      "owner",
 		Users:        map[UserId]KeyUserData{},
-		Name:         ptr("sub key"),
+		Name:         "sub key",
 		Price:        10,
 		Type:         "subscription",
 		Webhook:      nil,

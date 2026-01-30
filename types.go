@@ -697,44 +697,42 @@ func (u User) GetMaxSize() string {
 	return amt
 }
 
-func (u User) GetTransactions() []map[string]any {
+func (u User) GetTransactions() []Transaction {
 	raw := u.Get("sys.transactions")
-
-	switch v := raw.(type) {
-	case []map[string]any:
-		return v
-	case []any:
-		txs := make([]map[string]any, 0)
-		for _, item := range v {
-			m, ok := item.(map[string]any)
-			if !ok {
-				continue
-			}
-			txs = append(txs, m)
-		}
-		return txs
-	default:
-		return []map[string]any{}
+	if raw == nil {
+		return nil
 	}
+
+	if txs, ok := raw.([]Transaction); ok {
+		return txs
+	}
+
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+
+	var txs []Transaction
+	if err := json.Unmarshal(b, &txs); err != nil {
+		return nil
+	}
+
+	return txs
 }
 
-func (u User) addTransaction(tx map[string]any) {
+func (u User) addTransaction(tx Transaction) {
 	txs := u.GetTransactions()
 	benefits := u.GetSubscriptionBenefits()
 
-	tx["time"] = time.Now().UnixMilli()
+	tx.Timestamp = time.Now().UnixMilli()
 
-	noteData, ok := tx["note"]
-	if !ok {
-		tx["note"] = ""
-	}
-	noteStr := strings.TrimSpace(getStringOrEmpty(noteData))
+	noteStr := strings.TrimSpace(tx.Note)
 	if len(noteStr) > 50 {
 		noteStr = noteStr[:50]
 	}
-	tx["note"] = noteStr
+	tx.Note = noteStr
 
-	txs = append([]map[string]any{tx}, txs...)
+	txs = append([]Transaction{tx}, txs...)
 	if len(txs) > benefits.Max_Transaction_History {
 		txs = txs[:benefits.Max_Transaction_History]
 	}
@@ -975,13 +973,46 @@ type SystemOwner struct {
 }
 
 type Transaction struct {
-	Type      string  `json:"type"`
-	From      string  `json:"from"`
-	To        string  `json:"to"`
-	Amount    float64 `json:"amount"`
-	Note      string  `json:"note"`
-	Timestamp int64   `json:"timestamp"`
-	New_total float64 `json:"new_total"`
+	Type       string  `json:"type"`
+	User       UserId  `json:"user"`
+	To         string  `json:"to"`
+	Amount     float64 `json:"amount"`
+	Note       string  `json:"note"`
+	Timestamp  int64   `json:"time"`
+	NewTotal   float64 `json:"new_total"`
+	PetitionId string  `json:"petition_id,omitempty"`
+	KeyName    string  `json:"key_name,omitempty"`
+	KeyId      string  `json:"key_id,omitempty"`
+}
+
+func (t Transaction) ToNet() TransactionNet {
+	name := t.User.User().GetUsername()
+	if name == "" {
+		name = Username(t.User)
+	}
+	return TransactionNet{
+		Type:       t.Type,
+		User:       name,
+		Amount:     t.Amount,
+		Note:       t.Note,
+		Timestamp:  t.Timestamp,
+		NewTotal:   t.NewTotal,
+		PetitionId: t.PetitionId,
+		KeyName:    t.KeyName,
+		KeyId:      t.KeyId,
+	}
+}
+
+type TransactionNet struct {
+	Type       string   `json:"type"`
+	User       Username `json:"user"`
+	Amount     float64  `json:"amount"`
+	Note       string   `json:"note"`
+	Timestamp  int64    `json:"time"`
+	NewTotal   float64  `json:"new_total"`
+	PetitionId string   `json:"petition_id,omitempty"`
+	KeyName    string   `json:"key_name,omitempty"`
+	KeyId      string   `json:"key_id,omitempty"`
 }
 
 // UnmarshalJSON custom unmarshaler to handle timestamp as string or number
@@ -1124,7 +1155,7 @@ type Key struct {
 	Key          string                 `json:"key"`
 	Creator      UserId                 `json:"creator"`
 	Users        map[UserId]KeyUserData `json:"users"`
-	Name         *string                `json:"name"`
+	Name         string                 `json:"name"`
 	Price        int                    `json:"price"`
 	Data         *string                `json:"data"`
 	Subscription *Subscription          `json:"subscription,omitempty"`
@@ -1153,7 +1184,7 @@ func (k *Key) ToNet() NetKey {
 
 type NetKey struct {
 	Key          string                   `json:"key"`
-	Name         *string                  `json:"name"`
+	Name         string                   `json:"name"`
 	Price        int                      `json:"price"`
 	Type         string                   `json:"type"`
 	TotalIncome  int                      `json:"total_income,omitempty"`
@@ -1168,7 +1199,7 @@ func (k *Key) setKey(key string, value any) {
 	switch key {
 	case "name":
 		if v, ok := value.(string); ok {
-			k.Name = &v
+			k.Name = v
 		}
 	case "price":
 		if v, ok := value.(int); ok {
