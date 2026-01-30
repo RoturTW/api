@@ -20,7 +20,7 @@ var postLimits = map[string]int{
 	"attachment_length":      200,
 }
 
-var lockedKeys = []string{"username", "last_login", "max_size", "key", "created", "system", "id", "discord_id"}
+var lockedKeys = []string{"last_login", "max_size", "key", "created", "system", "discord_id"}
 
 func getLimits(c *gin.Context) {
 	c.JSON(200, postLimits)
@@ -116,7 +116,7 @@ func createPost(c *gin.Context) {
 	newPost := Post{
 		ID:          generateToken(),
 		Content:     content,
-		User:        user.GetUsername(),
+		User:        user.GetId(),
 		Timestamp:   time.Now().UnixMilli(),
 		Attachment:  attachment,
 		ProfileOnly: profileOnly,
@@ -199,9 +199,9 @@ func replyToPost(c *gin.Context) {
 		return
 	}
 
-	idx := getIdxOfAccountBy("username", targetPost.User)
+	idx := getIdxOfAccountBy("username", targetPost.User.String())
 	targetUser, err := getUserByIdx(idx)
-	if isUserBlockedBy(*targetUser, user.GetUsername()) || err != nil {
+	if isUserBlockedBy(*targetUser, user.GetId()) || err != nil {
 		c.JSON(400, gin.H{"error": "You cant reply to this post"})
 		return
 	}
@@ -213,7 +213,7 @@ func replyToPost(c *gin.Context) {
 	newReply := Reply{
 		ID:        generateToken(),
 		Content:   content,
-		User:      strings.ToLower(user.GetUsername()),
+		User:      user.GetId(),
 		Timestamp: time.Now().UnixMilli(),
 	}
 
@@ -224,7 +224,7 @@ func replyToPost(c *gin.Context) {
 	addUserEvent(targetPost.User, "reply", map[string]any{
 		"post_id":  postID,
 		"reply_id": newReply.ID,
-		"user":     strings.ToLower(user.GetUsername()),
+		"user":     user.GetUsername(),
 		"content":  content,
 	})
 
@@ -248,9 +248,9 @@ func deletePost(c *gin.Context) {
 		if posts[i].ID == postID {
 			postToDelete = &posts[i]
 			// Check if the user can delete this post
-			if strings.ToLower(user.GetUsername()) != "mist" && !strings.EqualFold(user.GetUsername(), posts[i].User) {
+			if user.GetUsername().ToLower() != "mist" && user.GetId() != posts[i].User {
 				postsMutex.Unlock()
-				c.JSON(403, gin.H{"error": "You cannot delete this post"})
+				c.JSON(403, ErrorResponse{Error: "You cannot delete this post"})
 				return
 			}
 		} else {
@@ -260,7 +260,7 @@ func deletePost(c *gin.Context) {
 
 	if postToDelete == nil {
 		postsMutex.Unlock()
-		c.JSON(404, gin.H{"error": "Post not found"})
+		c.JSON(404, ErrorResponse{Error: "Post not found"})
 		return
 	}
 
@@ -307,13 +307,13 @@ func ratePost(c *gin.Context) {
 	}
 
 	if rating == 1 {
-		idx := getIdxOfAccountBy("username", targetPost.User)
+		idx := getIdxOfAccountBy("username", targetPost.User.String())
 		if idx == -1 {
 			c.JSON(400, gin.H{"error": "User does not exist"})
 			return
 		}
 		targetUser, err := getUserByIdx(idx)
-		if isUserBlockedBy(*targetUser, user.GetUsername()) || err != nil {
+		if isUserBlockedBy(*targetUser, user.GetId()) || err != nil {
 			c.JSON(400, gin.H{"error": "You cant like this post"})
 			return
 		}
@@ -321,23 +321,23 @@ func ratePost(c *gin.Context) {
 
 	// Ensure the 'likes' array exists
 	if targetPost.Likes == nil {
-		targetPost.Likes = make([]string, 0)
+		targetPost.Likes = make([]UserId, 0)
 	}
 
-	username := strings.ToLower(user.GetUsername())
+	userId := user.GetId()
 
 	// Like or unlike based on the rating
 	if rating == 1 {
 		// Check if user already liked
-		alreadyLiked := slices.Contains(targetPost.Likes, username)
+		alreadyLiked := slices.Contains(targetPost.Likes, userId)
 		if !alreadyLiked {
-			targetPost.Likes = append(targetPost.Likes, username)
+			targetPost.Likes = append(targetPost.Likes, userId)
 		}
 	} else {
 		// Remove like
-		newLikes := make([]string, 0)
+		newLikes := make([]UserId, 0)
 		for _, liker := range targetPost.Likes {
-			if liker != username {
+			if liker != userId {
 				newLikes = append(newLikes, liker)
 			}
 		}
@@ -378,9 +378,9 @@ func repost(c *gin.Context) {
 		return
 	}
 
-	idx := getIdxOfAccountBy("username", originalPost.User)
+	idx := getIdxOfAccountBy("username", originalPost.User.String())
 	originalUser, err := getUserByIdx(idx)
-	if isUserBlockedBy(*originalUser, user.GetUsername()) || err != nil {
+	if isUserBlockedBy(*originalUser, user.GetId()) || err != nil {
 		c.JSON(400, gin.H{"error": "You cant repost this post"})
 		return
 	}
@@ -399,7 +399,7 @@ func repost(c *gin.Context) {
 	// Create the repost
 	newRepost := Post{
 		ID:        generateToken(),
-		User:      user.GetUsername(),
+		User:      user.GetId(),
 		Timestamp: time.Now().UnixMilli(),
 		IsRepost:  true,
 		OriginalPost: &Post{
@@ -448,7 +448,7 @@ func pinPost(c *gin.Context) {
 	}
 
 	// Check if the user is the owner of the post
-	if !strings.EqualFold(targetPost.User, user.GetUsername()) {
+	if targetPost.User != user.GetId() {
 		c.JSON(403, gin.H{"error": "You can only pin your own posts"})
 		return
 	}
@@ -488,7 +488,7 @@ func unpinPost(c *gin.Context) {
 	}
 
 	// Check if the user is the owner of the post
-	if !strings.EqualFold(targetPost.User, user.GetUsername()) {
+	if targetPost.User != user.GetId() {
 		c.JSON(403, gin.H{"error": "You can only unpin your own posts"})
 		return
 	}
@@ -529,11 +529,11 @@ func searchPosts(c *gin.Context) {
 	queryLower := strings.ToLower(query)
 
 	// Search posts by content
-	searchResults := make([]Post, 0)
+	searchResults := make([]NetPost, 0)
 	postsMutex.RLock()
 	for _, post := range posts {
 		if strings.Contains(strings.ToLower(post.Content), queryLower) {
-			searchResults = append(searchResults, post)
+			searchResults = append(searchResults, post.ToNet())
 			if len(searchResults) >= limit {
 				break
 			}
@@ -568,12 +568,12 @@ func getTopPosts(c *gin.Context) {
 	// Filter posts within the time period, excluding profile-only posts
 	currentTime := time.Now().Unix()
 
-	postsWithinPeriod := make([]Post, 0)
+	postsWithinPeriod := make([]NetPost, 0)
 	postsMutex.RLock()
 	for _, post := range posts {
 		postTime := post.Timestamp / 1000 // Convert milliseconds to seconds
 		if (currentTime-postTime) <= int64(timePeriod*3600) && !post.ProfileOnly {
-			postsWithinPeriod = append(postsWithinPeriod, post)
+			postsWithinPeriod = append(postsWithinPeriod, post.ToNet())
 		}
 	}
 	postsMutex.RUnlock()
@@ -635,10 +635,10 @@ func getFeed(c *gin.Context) {
 
 	postsMutex.RLock()
 	// Filter out profile-only posts
-	publicPosts := make([]Post, 0)
+	publicPosts := make([]NetPost, 0)
 	for _, post := range posts {
 		if !post.ProfileOnly {
-			publicPosts = append(publicPosts, post)
+			publicPosts = append(publicPosts, post.ToNet())
 		}
 	}
 	postsMutex.RUnlock()
@@ -674,13 +674,13 @@ func getFollowingFeed(c *gin.Context) {
 
 	user := c.MustGet("user").(*User)
 
-	username := strings.ToLower(user.GetUsername())
+	userId := user.GetId()
 
 	// Get the list of users the authenticated user is following
-	following := make([]string, 0)
+	following := make([]UserId, 0)
 	followersMutex.RLock()
 	for targetUser, data := range followersData {
-		if slices.Contains(data.Followers, username) {
+		if slices.Contains(data.Followers, userId) {
 			following = append(following, targetUser)
 		}
 	}
@@ -688,11 +688,11 @@ func getFollowingFeed(c *gin.Context) {
 
 	// Get posts from followed users (excluding profile-only posts from other users)
 	postsMutex.RLock()
-	followingPosts := make([]Post, 0)
+	followingPosts := make([]NetPost, 0)
 	for _, post := range posts {
 		isFollowed := slices.Contains(following, post.User)
-		if isFollowed && !(post.ProfileOnly && post.User != username) {
-			followingPosts = append(followingPosts, post)
+		if isFollowed && !(post.ProfileOnly && post.User != userId) {
+			followingPosts = append(followingPosts, post.ToNet())
 		}
 	}
 	postsMutex.RUnlock()
@@ -703,7 +703,7 @@ func getFollowingFeed(c *gin.Context) {
 	})
 
 	// Apply limit - get last 'limit' posts and reverse
-	var result = make([]Post, 0)
+	var result = make([]NetPost, 0)
 	if len(followingPosts) > limit {
 		result = followingPosts[len(followingPosts)-limit:]
 	} else {

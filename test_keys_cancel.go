@@ -15,7 +15,7 @@ func TestCancelKey_DeferredUntilNextBilling(t *testing.T) {
 	k := Key{
 		Key:          "key1",
 		Creator:      "owner",
-		Users:        map[string]KeyUserData{},
+		Users:        map[UserId]KeyUserData{},
 		Name:         ptr("sub key"),
 		Price:        10,
 		Type:         "subscription",
@@ -24,7 +24,7 @@ func TestCancelKey_DeferredUntilNextBilling(t *testing.T) {
 		TotalIncome:  0,
 		Subscription: &Subscription{Active: true, Frequency: 1, Period: "month", NextBilling: cancelAtMs},
 	}
-	k.Users["alice"] = KeyUserData{Time: float64(now.Unix()), Price: 10, NextBilling: cancelAtMs}
+	k.Users["alice"] = KeyUserData{Time: now.Unix(), Price: 10, NextBilling: cancelAtMs}
 	keys = []Key{k}
 
 	// Simulate what /keys/cancel does: set CancelAt = nextBilling
@@ -43,7 +43,7 @@ func TestCancelKey_DeferredUntilNextBilling(t *testing.T) {
 	keys[0].Users["alice"] = ud
 
 	// run the relevant logic block: remove if time.Now >= cancelAt
-	usersToRemove := []string{}
+	usersToRemove := []UserId{}
 	if v, ok := keys[0].Users["alice"].CancelAt.(int64); ok {
 		if time.Now().UnixMilli() >= v {
 			usersToRemove = append(usersToRemove, "alice")

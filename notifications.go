@@ -29,14 +29,14 @@ func getNotifications(c *gin.Context) {
 		}
 	}
 
-	username := strings.ToLower(user.GetUsername())
+	userId := user.GetId()
 	currentTime := time.Now().UnixMilli()
 	cutoffTime := currentTime - int64(timePeriod*24*60*60*1000)
 
 	notifications := make([]map[string]any, 0)
 
 	eventsHistoryMutex.RLock()
-	userEvents, exists := eventsHistory[username]
+	userEvents, exists := eventsHistory[userId]
 	eventsHistoryMutex.RUnlock()
 
 	if exists {
@@ -165,12 +165,12 @@ func notify(eventType string, data any) bool {
 }
 
 // patchUserUpdate makes a PATCH request to /users endpoint for user updates
-func patchUserUpdate(username, key string, value any) bool {
+func patchUserUpdate(username Username, key string, value any) bool {
 	// Find the user's auth key
 	usersMutex.RLock()
 	var authKey string
 	for _, user := range users {
-		if strings.EqualFold(user.GetUsername(), username) {
+		if user.GetUsername().ToLower() == username {
 			authKey = user.GetKey()
 			break
 		}
@@ -200,7 +200,7 @@ func patchUserUpdate(username, key string, value any) bool {
 	return false
 }
 
-func broadcastUserUpdate(username, key string, value any) bool {
+func broadcastUserUpdate(username Username, key string, value any) bool {
 	mu := getUserMutex(username)
 	mu.Lock()
 	defer mu.Unlock()
@@ -231,7 +231,7 @@ func getPostRepliesSnapshot(postID string) []Reply {
 	return nil
 }
 
-func addUserEvent(username, eventType string, data map[string]any) Event {
+func addUserEvent(userId UserId, eventType string, data map[string]any) Event {
 	switch eventType {
 	case "follow":
 		followersCount := 0
@@ -242,7 +242,7 @@ func addUserEvent(username, eventType string, data map[string]any) Event {
 			followersCount = len(v)
 		}
 		go broadcastClawEvent("followers", map[string]any{
-			"username":  username,
+			"username":  userId.User().GetUsername(),
 			"followers": followersCount,
 		})
 	case "reply":
@@ -260,10 +260,8 @@ func addUserEvent(username, eventType string, data map[string]any) Event {
 	eventsHistoryMutex.Lock()
 	defer eventsHistoryMutex.Unlock()
 
-	username = strings.ToLower(username)
-
-	if eventsHistory[username] == nil {
-		eventsHistory[username] = make([]Event, 0)
+	if eventsHistory[userId] == nil {
+		eventsHistory[userId] = make([]Event, 0)
 	}
 
 	newEvent := Event{
@@ -273,10 +271,10 @@ func addUserEvent(username, eventType string, data map[string]any) Event {
 		ID:        generateShortToken(),
 	}
 
-	eventsHistory[username] = append(eventsHistory[username], newEvent)
+	eventsHistory[userId] = append(eventsHistory[userId], newEvent)
 
-	if len(eventsHistory[username]) > 100 {
-		eventsHistory[username] = eventsHistory[username][len(eventsHistory[username])-100:]
+	if len(eventsHistory[userId]) > 100 {
+		eventsHistory[userId] = eventsHistory[userId][len(eventsHistory[userId])-100:]
 	}
 
 	go saveEventsHistory()

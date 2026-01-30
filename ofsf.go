@@ -331,7 +331,7 @@ func NewFileSystem() *FileSystem {
 	return &FileSystem{}
 }
 
-func (fs *FileSystem) HandleOFSFUpdate(username string, updates []UpdateChange, maxSize int) UpdateResult {
+func (fs *FileSystem) HandleOFSFUpdate(username Username, updates []UpdateChange, maxSize int) UpdateResult {
 
 	fmt.Printf("\033[92m[+] OFSF\033[0m | %s processing %d file updates\n", username, len(updates))
 
@@ -396,11 +396,11 @@ func extractIndex(v any) int {
 }
 
 // handleAddUnsafe assumes the lock is already held
-func (fs *FileSystem) handleAddUnsafe(username string, change UpdateChange) {
+func (fs *FileSystem) handleAddUnsafe(username Username, change UpdateChange) {
 	if len(change.UUID) != 32 {
 		return
 	}
-	path := filepath.Join(fileDir, username, change.UUID+".json")
+	path := filepath.Join(fileDir, string(username), change.UUID+".json")
 
 	if _, err := os.Stat(path); err == nil {
 		return
@@ -426,7 +426,7 @@ func (fs *FileSystem) handleAddUnsafe(username string, change UpdateChange) {
 }
 
 // handleReplaceUnsafe assumes the lock is already held
-func (fs *FileSystem) handleReplaceUnsafe(username string, change UpdateChange) {
+func (fs *FileSystem) handleReplaceUnsafe(username Username, change UpdateChange) {
 	entry, err := fs.getFileByUUIDUnsafe(username, change.UUID)
 	if err != nil {
 		return
@@ -452,8 +452,8 @@ func (fs *FileSystem) handleReplaceUnsafe(username string, change UpdateChange) 
 }
 
 // handleDeleteUnsafe assumes the lock is already held
-func (fs *FileSystem) handleDeleteUnsafe(username string, change UpdateChange) {
-	filePath := filepath.Join(fileDir, username, change.UUID+".json")
+func (fs *FileSystem) handleDeleteUnsafe(username Username, change UpdateChange) {
+	filePath := filepath.Join(fileDir, string(username), change.UUID+".json")
 	os.Remove(filePath)
 
 	idx, _ := fs.loadPathIndexUnsafe(username)
@@ -467,15 +467,51 @@ func (fs *FileSystem) handleDeleteUnsafe(username string, change UpdateChange) {
 	fs.savePathIndexUnsafe(username, idx)
 }
 
-func userIndexPath(username string) string {
-	return filepath.Join(fileDir, username, ".index.json")
+func userIndexPath(username Username) string {
+	return filepath.Join(fileDir, string(username), ".index.json")
+}
+
+func (fs *FileSystem) RenameUserFileSystem(oldUsername Username, newUsername Username) {
+	index, err := fs.loadPathIndex(oldUsername)
+	if err != nil {
+		fmt.Printf("\033[91m[-] OFSF Error\033[0m | Failed to load path index: %v\n", err)
+		return
+	}
+
+	oldLocationPrefix := "origin/(c) users/" + oldUsername.String()
+	newLocationPrefix := "origin/(c) users/" + newUsername.String()
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	for path, uuid := range index {
+		cut, ok := strings.CutPrefix(strings.ToLower(path), oldLocationPrefix)
+		if !ok {
+			continue
+		}
+		newPath := newLocationPrefix + cut
+		index[newPath] = uuid
+		fs.handleReplaceUnsafe(oldUsername, UpdateChange{
+			Command: "UUIDr",
+			UUID:    uuid,
+			Dta:     []any{newPath},
+			Idx:     2,
+		})
+		delete(index, path)
+	}
+
+	fs.savePathIndexUnsafe(oldUsername, index)
+
+	oldUserDir := filepath.Join(fileDir, string(oldUsername))
+	newUserDir := filepath.Join(fileDir, string(newUsername))
+	if err := os.Rename(oldUserDir, newUserDir); err != nil {
+		fmt.Printf("\033[91m[-] OFSF Error\033[0m | Failed to rename user directory: %v\n", err)
+	}
 }
 
 type PathIndex map[string]string
 
 // rebuildPathIndexUnsafe assumes the lock is already held
-func (fs *FileSystem) rebuildPathIndexUnsafe(username string) (PathIndex, error) {
-	userDir := filepath.Join(fileDir, username)
+func (fs *FileSystem) rebuildPathIndexUnsafe(username Username) (PathIndex, error) {
+	userDir := filepath.Join(fileDir, string(username))
 
 	idx := make(PathIndex)
 
@@ -528,7 +564,7 @@ func (fs *FileSystem) rebuildPathIndexUnsafe(username string) (PathIndex, error)
 }
 
 // loadPathIndexUnsafe assumes the lock is already held
-func (fs *FileSystem) loadPathIndexUnsafe(username string) (PathIndex, error) {
+func (fs *FileSystem) loadPathIndexUnsafe(username Username) (PathIndex, error) {
 	path := userIndexPath(username)
 
 	data, err := os.ReadFile(path)
@@ -548,7 +584,7 @@ func (fs *FileSystem) loadPathIndexUnsafe(username string) (PathIndex, error) {
 }
 
 // loadPathIndex is the public version that acquires the lock
-func (fs *FileSystem) loadPathIndex(username string) (PathIndex, error) {
+func (fs *FileSystem) loadPathIndex(username Username) (PathIndex, error) {
 	if err := fs.migrateFromLegacy(username); err != nil {
 		fmt.Printf("\033[91m[-] OFSF Error\033[0m | Migration failed: %v\n", err)
 	}
@@ -558,7 +594,7 @@ func (fs *FileSystem) loadPathIndex(username string) (PathIndex, error) {
 }
 
 // savePathIndexUnsafe assumes the lock is already held
-func (fs *FileSystem) savePathIndexUnsafe(username string, idx PathIndex) error {
+func (fs *FileSystem) savePathIndexUnsafe(username Username, idx PathIndex) error {
 	path := userIndexPath(username)
 
 	tmp := path + ".tmp"
@@ -580,7 +616,7 @@ func entryToPath(entry FileEntry) string {
 		getStringOrEmpty(entry[0])
 }
 
-func (fs *FileSystem) GetFileStats(username string, uuids []string) ([]FileStat, error) {
+func (fs *FileSystem) GetFileStats(username Username, uuids []string) ([]FileStat, error) {
 	if err := fs.migrateFromLegacy(username); err != nil {
 		return nil, err
 	}
@@ -588,7 +624,7 @@ func (fs *FileSystem) GetFileStats(username string, uuids []string) ([]FileStat,
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 
-	userDir := filepath.Join(fileDir, username)
+	userDir := filepath.Join(fileDir, string(username))
 	stats := make([]FileStat, 0, len(uuids))
 
 	for _, uuid := range uuids {
@@ -614,18 +650,18 @@ func (fs *FileSystem) GetFileStats(username string, uuids []string) ([]FileStat,
 	return stats, nil
 }
 
-func (fs *FileSystem) migrateFromLegacy(username string) error {
+func (fs *FileSystem) migrateFromLegacy(username Username) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	legacyPath := filepath.Join(fileDir, username+".ofsf")
+	legacyPath := filepath.Join(fileDir, string(username)+".ofsf")
 
-	newPath := filepath.Join(fileDir, username)
+	newPath := filepath.Join(fileDir, string(username))
 	if dirExists(newPath) {
 		return nil
 	}
 	if !fileExists(legacyPath) {
-		copyAndReplace(defaultOFSF, legacyPath, "${USERNAME}", username)
+		copyAndReplace(defaultOFSF, legacyPath, "${USERNAME}", username.String())
 	}
 
 	fmt.Printf("\033[93m[~] OFSF\033[0m | Migrating %s from legacy format\n", username)
@@ -645,7 +681,7 @@ func (fs *FileSystem) migrateFromLegacy(username string) error {
 		return err
 	}
 
-	userDir := filepath.Join(fileDir, username)
+	userDir := filepath.Join(fileDir, username.String())
 	if err := os.MkdirAll(userDir, 0755); err != nil {
 		return err
 	}
@@ -682,8 +718,8 @@ func (fs *FileSystem) migrateFromLegacy(username string) error {
 }
 
 // getFileByUUIDUnsafe assumes the lock is already held
-func (fs *FileSystem) getFileByUUIDUnsafe(username string, uuid string) (FileEntry, error) {
-	userDir := filepath.Join(fileDir, username)
+func (fs *FileSystem) getFileByUUIDUnsafe(username Username, uuid string) (FileEntry, error) {
+	userDir := filepath.Join(fileDir, username.String())
 
 	filePath := filepath.Join(userDir, uuid+".json")
 
@@ -701,15 +737,15 @@ func (fs *FileSystem) getFileByUUIDUnsafe(username string, uuid string) (FileEnt
 }
 
 // GetFileByUUID is the public version that acquires the lock
-func (fs *FileSystem) GetFileByUUID(username string, uuid string) (FileEntry, error) {
+func (fs *FileSystem) GetFileByUUID(username Username, uuid string) (FileEntry, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 	return fs.getFileByUUIDUnsafe(username, uuid)
 }
 
 // setFileByUUIDUnsafe assumes the lock is already held
-func (fs *FileSystem) setFileByUUIDUnsafe(username string, uuid string, file FileEntry) error {
-	userDir := filepath.Join(fileDir, username)
+func (fs *FileSystem) setFileByUUIDUnsafe(username Username, uuid string, file FileEntry) error {
+	userDir := filepath.Join(fileDir, username.String())
 
 	filePath := filepath.Join(userDir, uuid+".json")
 
@@ -730,17 +766,17 @@ func (fs *FileSystem) setFileByUUIDUnsafe(username string, uuid string, file Fil
 }
 
 // SetFileByUUID is the public version that acquires the lock
-func (fs *FileSystem) SetFileByUUID(username string, uuid string, file FileEntry) error {
+func (fs *FileSystem) SetFileByUUID(username Username, uuid string, file FileEntry) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	return fs.setFileByUUIDUnsafe(username, uuid, file)
 }
 
-func (fs *FileSystem) calculateTotalSize(username string) (int, error) {
+func (fs *FileSystem) calculateTotalSize(username Username) (int, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 
-	userDir := filepath.Join(fileDir, username)
+	userDir := filepath.Join(fileDir, username.String())
 	totalSize := 0
 
 	entries, err := os.ReadDir(userDir)
@@ -767,7 +803,7 @@ func (fs *FileSystem) calculateTotalSize(username string) (int, error) {
 	return totalSize, nil
 }
 
-func (fs *FileSystem) GetFilesByUUIDs(username string, uuids []string) (map[string]FileEntry, error) {
+func (fs *FileSystem) GetFilesByUUIDs(username Username, uuids []string) (map[string]FileEntry, error) {
 	if err := fs.migrateFromLegacy(username); err != nil {
 		fmt.Printf("\033[91m[-] OFSF Error\033[0m | Migration failed: %v\n", err)
 	}
@@ -775,7 +811,7 @@ func (fs *FileSystem) GetFilesByUUIDs(username string, uuids []string) (map[stri
 	defer fs.mu.RUnlock()
 
 	result := make(map[string]FileEntry)
-	userDir := filepath.Join(fileDir, username)
+	userDir := filepath.Join(fileDir, username.String())
 
 	for _, uuid := range uuids {
 		filePath := filepath.Join(userDir, uuid+".json")
@@ -794,14 +830,14 @@ func (fs *FileSystem) GetFilesByUUIDs(username string, uuids []string) (map[stri
 	return result, nil
 }
 
-func (fs *FileSystem) DeleteUserFileSystem(username string) error {
+func (fs *FileSystem) DeleteUserFileSystem(username Username) error {
 	if err := fs.migrateFromLegacy(username); err != nil {
 		fmt.Printf("\033[91m[-] OFSF Error\033[0m | Migration failed: %v\n", err)
 	}
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	userDir := filepath.Join(fileDir, username)
+	userDir := filepath.Join(fileDir, username.String())
 
 	if err := os.RemoveAll(userDir); err != nil {
 		if os.IsNotExist(err) {
@@ -811,14 +847,14 @@ func (fs *FileSystem) DeleteUserFileSystem(username string) error {
 		return err
 	}
 
-	legacyPath := filepath.Join(fileDir, username+".ofsf")
+	legacyPath := filepath.Join(fileDir, username.String()+".ofsf")
 	os.Remove(legacyPath)
 
 	fmt.Printf("Successfully deleted files for user %s\n", username)
 	return nil
 }
 
-func (fs *FileSystem) GetUserFileSize(username string) (string, error) {
+func (fs *FileSystem) GetUserFileSize(username Username) (string, error) {
 	if err := fs.migrateFromLegacy(username); err != nil {
 		fmt.Printf("\033[91m[-] OFSF Error\033[0m | Migration failed: %v\n", err)
 	}
@@ -839,11 +875,11 @@ func (fs *FileSystem) GetUserFileSize(username string) (string, error) {
 	}
 }
 
-func (fs *FileSystem) GetFilesIndexWithThreshold(username string, sizeThreshold int) ([]any, error) {
+func (fs *FileSystem) GetFilesIndexWithThreshold(username Username, sizeThreshold int) ([]any, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 
-	userDir := filepath.Join(fileDir, username)
+	userDir := filepath.Join(fileDir, username.String())
 	entries, err := os.ReadDir(userDir)
 	if err != nil {
 		if os.IsNotExist(err) {

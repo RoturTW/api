@@ -43,7 +43,7 @@ func escrowTransfer(c *gin.Context) {
 	}
 
 	// Find sender user
-	foundUsers, err := getAccountsBy("username", user.GetUsername(), 1)
+	foundUsers, err := getAccountsBy("username", user.GetUsername().String(), 1)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "Sender user not found"})
 		return
@@ -107,7 +107,7 @@ func escrowRelease(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
 	// Only allow mist (admin) to release escrow
-	if strings.ToLower(user.GetUsername()) != "mist" {
+	if user.GetUsername().ToLower() != "mist" {
 		c.JSON(403, gin.H{"error": "Admin access required"})
 		return
 	}

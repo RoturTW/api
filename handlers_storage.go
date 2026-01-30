@@ -2,9 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
-	"strings"
 	"sync"
 	"time"
 )
@@ -34,6 +34,16 @@ func loadUsers() {
 		log.Printf("Error unmarshaling users (keeping existing %d users): %v", len(users), err)
 		return
 	}
+	usernameToIdInner := make(map[Username]UserId, len(loaded))
+	idToUserInner := make(map[UserId]User, len(loaded))
+	for _, u := range loaded {
+		id := u.GetId()
+		usernameToIdInner[u.GetUsername().ToLower()] = id
+		idToUserInner[id] = u
+	}
+	fmt.Println("Loaded", len(loaded), "users")
+	usernameToId = usernameToIdInner
+	idToUser = idToUserInner
 	users = loaded
 }
 
@@ -143,32 +153,32 @@ func loadFollowers() {
 	defer followersMutex.Unlock()
 
 	if _, err := os.Stat(FOLLOWERS_FILE_PATH); os.IsNotExist(err) {
-		followersData = make(map[string]FollowerData)
+		followersData = make(map[UserId]FollowerData)
 		return
 	}
 
 	data, err := os.ReadFile(FOLLOWERS_FILE_PATH)
 	if err != nil {
 		log.Printf("Error reading followers file: %v", err)
-		followersData = make(map[string]FollowerData)
+		followersData = make(map[UserId]FollowerData)
 		return
 	}
 
-	var tempData map[string]FollowerData
+	var tempData map[UserId]FollowerData
 	if err := json.Unmarshal(data, &tempData); err != nil {
 		log.Printf("Error unmarshaling followers: %v", err)
-		followersData = make(map[string]FollowerData)
+		followersData = make(map[UserId]FollowerData)
 		return
 	}
 
-	followersData = make(map[string]FollowerData)
+	followersData = make(map[UserId]FollowerData)
 	for k, v := range tempData {
-		followers := make([]string, len(v.Followers))
-		for i, follower := range v.Followers {
-			followers[i] = strings.ToLower(follower)
-		}
-		followersData[strings.ToLower(k)] = FollowerData{Followers: followers}
+		followers := make([]UserId, len(v.Followers))
+		copy(followers, v.Followers)
+		followersData[k] = FollowerData{Followers: followers}
 	}
+
+	log.Printf("Loaded %d followers", len(followersData))
 }
 
 func saveFollowers() {
@@ -197,6 +207,8 @@ func loadPosts() {
 		log.Printf("Error unmarshaling posts: %v", err)
 		posts = make([]Post, 0)
 	}
+
+	log.Printf("Loaded %d posts", len(posts))
 }
 
 func savePosts() {
@@ -225,6 +237,8 @@ func loadItems() {
 		log.Printf("Error unmarshaling items: %v", err)
 		items = make([]Item, 0)
 	}
+
+	log.Printf("Loaded %d items", len(items))
 }
 
 func saveItems() {
@@ -253,6 +267,8 @@ func loadKeys() {
 		log.Printf("Error unmarshaling keys: %v", err)
 		keys = make([]Key, 0)
 	}
+
+	log.Printf("Loaded %d keys", len(keys))
 }
 
 func saveKeys() {
@@ -281,6 +297,8 @@ func loadSystems() {
 		log.Printf("Error unmarshaling systems: %v", err)
 		systems = make(map[string]System)
 	}
+
+	log.Printf("Loaded %d systems", len(systems))
 }
 
 func saveSystems() {
@@ -294,21 +312,23 @@ func loadEventsHistory() {
 	defer eventsHistoryMutex.Unlock()
 
 	if _, err := os.Stat(EVENTS_HISTORY_PATH); os.IsNotExist(err) {
-		eventsHistory = make(map[string][]Event)
+		eventsHistory = make(map[UserId][]Event)
 		return
 	}
 
 	data, err := os.ReadFile(EVENTS_HISTORY_PATH)
 	if err != nil {
 		log.Printf("Error reading events history file: %v", err)
-		eventsHistory = make(map[string][]Event)
+		eventsHistory = make(map[UserId][]Event)
 		return
 	}
 
 	if err := json.Unmarshal(data, &eventsHistory); err != nil {
 		log.Printf("Error unmarshaling events history: %v", err)
-		eventsHistory = make(map[string][]Event)
+		eventsHistory = make(map[UserId][]Event)
 	}
+
+	log.Printf("Loaded %d events history", len(eventsHistory))
 }
 
 func saveEventsHistory() {

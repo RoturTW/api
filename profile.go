@@ -15,7 +15,37 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func renderBioRegex(bio string, profile *User, otherKeys map[string]any) string {
+type profileResp struct {
+	Username     Username       `json:"username"`
+	DiscordID    string         `json:"discord_id"`
+	Avatar       string         `json:"pfp"`
+	Banned       bool           `json:"sys.banned"`
+	Private      bool           `json:"private"`
+	Bio          string         `json:"bio"`
+	Banner       string         `json:"banner"`
+	Followers    int            `json:"followers"`
+	Following    int            `json:"following"`
+	Pronouns     string         `json:"pronouns"`
+	System       string         `json:"system"`
+	Created      int64          `json:"created"`
+	Badges       []Badge        `json:"badges"`
+	Subscription string         `json:"subscription"`
+	MaxSize      string         `json:"max_size"`
+	Currency     float64        `json:"currency"`
+	Index        int            `json:"index"`
+	PrivateData  any            `json:"private_data,omitempty"`
+	Balance      any            `json:"balance,omitempty"`
+	Blocked      []string       `json:"blocked,omitempty"`
+	Posts        []NetPost      `json:"posts,omitempty"`
+	Status       *UserStatus    `json:"status,omitempty"`
+	Theme        map[string]any `json:"theme,omitempty"`
+	Followed     bool           `json:"followed,omitempty"`
+	FollowsMe    bool           `json:"follows_me,omitempty"`
+	MarriedTo    Username       `json:"married_to,omitempty"`
+	Id           UserId         `json:"id"`
+}
+
+func renderBioRegex(bio string, profile *User, otherKeys profileResp) string {
 	safeProfile := map[string]string{}
 	for k, v := range *profile {
 		if k == "key" || k == "password" {
@@ -32,9 +62,9 @@ func renderBioRegex(bio string, profile *User, otherKeys map[string]any) string 
 			safeProfile[k] = strconv.FormatBool(val)
 		}
 	}
-	for k, v := range otherKeys {
-		safeProfile[k] = fmt.Sprintf("%v", v)
-	}
+	safeProfile["bio"] = otherKeys.Bio
+	safeProfile["followers"] = fmt.Sprint(otherKeys.Followers)
+	safeProfile["following"] = fmt.Sprint(otherKeys.Following)
 
 	re := regexp.MustCompile(`{{\s*([a-zA-Z0-9_]+)(?:\s+([^}]+?))?\s*}}`)
 
@@ -127,13 +157,13 @@ func renderBioRegex(bio string, profile *User, otherKeys map[string]any) string 
 }
 
 func getProfile(c *gin.Context) {
-	name := c.Query("username")
-	if name == "" {
-		name = c.Query("name")
+	nameRaw := c.Query("username")
+	if nameRaw == "" {
+		nameRaw = c.Query("name")
 	}
 
 	discord_id := c.Query("discord_id")
-	if name == "" && discord_id == "" {
+	if nameRaw == "" && discord_id == "" {
 		c.JSON(400, gin.H{"error": "Name or Discord ID is required"})
 		return
 	}
@@ -142,7 +172,8 @@ func getProfile(c *gin.Context) {
 	includePosts := c.DefaultQuery("include_posts", "1") == "1"
 
 	// Convert the name to lowercase for case-insensitive comparison
-	nameLower := strings.ToLower(name)
+	name := Username(nameRaw)
+	nameLower := name.ToLower()
 	// Find user with case-insensitive matching
 	var foundUser *User
 	if discord_id != "" {
@@ -153,52 +184,59 @@ func getProfile(c *gin.Context) {
 		}
 		foundUser = foundUsers[0]
 		name = foundUser.GetUsername()
-		nameLower = strings.ToLower(name)
+		nameLower = name.ToLower()
 	} else {
-		foundUsers, err := getAccountsBy("username", name, 1)
+		fmt.Println("Searching for", name.String())
+		foundUsers, err := getAccountsBy("username", name.String(), 1)
+		fmt.Println("Found", len(foundUsers), "users")
 		if err != nil {
+			fmt.Println("Error", err.Error())
 			c.JSON(404, gin.H{"error": "User not found"})
 			return
 		}
 		foundUser = foundUsers[0]
 	}
-	userIndex := getIdxOfAccountBy("username", nameLower)
+	userIndex := getIdxOfAccountBy("username", nameLower.String())
+
+	userId := foundUser.GetId()
 
 	if foundUser.IsBanned() {
-		c.JSON(200, gin.H{
-			"username":   ".banned_user",
-			"badges":     []any{},
-			"currency":   0,
-			"max_size":   "0",
-			"pfp":        "https://avatars.rotur.dev/.banned_user",
-			"bio":        "This user is banned.",
-			"banner":     "https://avatars.rotur.dev/.banners/.banned_user",
-			"index":      0,
-			"followers":  0,
-			"following":  0,
-			"posts":      []any{},
-			"created":    time.Now().UnixMilli(),
-			"private":    true,
-			"sys.banned": true,
+		c.JSON(200, profileResp{
+			Username:  foundUser.GetUsername(),
+			Badges:    []Badge{},
+			Currency:  0,
+			MaxSize:   "0",
+			Avatar:    "https://avatars.rotur.dev/.banned_user",
+			Bio:       "This user is banned.",
+			Banner:    "https://avatars.rotur.dev/.banners/.banned_user",
+			Index:     0,
+			Followers: 0,
+			Following: 0,
+			Posts:     []NetPost{},
+			Created:   time.Now().UnixMilli(),
+			Private:   true,
+			Banned:    true,
+			Id:        "",
 		})
 		return
 	}
-
 	// Get user posts
-	postsMutex.RLock()
-	pinnedPosts := make([]Post, 0)
-	regularPosts := make([]Post, 0)
+	pinnedPosts := make([]NetPost, 0)
+	regularPosts := make([]NetPost, 0)
 
-	for _, post := range posts {
-		if strings.ToLower(post.User) == nameLower {
-			if post.Pinned {
-				pinnedPosts = append(pinnedPosts, post)
-			} else {
-				regularPosts = append(regularPosts, post)
+	if includePosts {
+		postsMutex.RLock()
+		for _, post := range posts {
+			if post.User == userId {
+				if post.Pinned {
+					pinnedPosts = append(pinnedPosts, post.ToNet())
+				} else {
+					regularPosts = append(regularPosts, post.ToNet())
+				}
 			}
 		}
+		postsMutex.RUnlock()
 	}
-	postsMutex.RUnlock()
 
 	// Sort posts by timestamp (newest first)
 	sort.Slice(pinnedPosts, func(i, j int) bool {
@@ -211,14 +249,14 @@ func getProfile(c *gin.Context) {
 	// Get follower count
 	followersMutex.RLock()
 	followerCount := 0
-	if data, exists := followersData[nameLower]; exists {
+	if data, exists := followersData[userId]; exists {
 		followerCount = len(data.Followers)
 	}
 
 	// Get following count
 	followingCount := 0
 	for _, data := range followersData {
-		if slices.Contains(data.Followers, nameLower) {
+		if slices.Contains(data.Followers, userId) {
 			followingCount++
 		}
 	}
@@ -232,12 +270,12 @@ func getProfile(c *gin.Context) {
 		// Authenticate the user with the provided auth key
 		authenticatedUser := authenticateWithKey(authKey)
 		if authenticatedUser != nil {
-			authenticatedUsername := strings.ToLower(authenticatedUser.GetUsername())
+			authenticatedId := authenticatedUser.GetId()
 
 			// Check if the authenticated user is following the target user
 			followersMutex.RLock()
-			if data, exists := followersData[nameLower]; exists {
-				if slices.Contains(data.Followers, authenticatedUsername) {
+			if data, exists := followersData[userId]; exists {
+				if slices.Contains(data.Followers, authenticatedId) {
 					following := true
 					isFollowing = &following
 				}
@@ -248,8 +286,8 @@ func getProfile(c *gin.Context) {
 			}
 
 			// Check if the target user is following the authenticated user
-			if data, exists := followersData[authenticatedUsername]; exists {
-				if slices.Contains(data.Followers, nameLower) {
+			if data, exists := followersData[authenticatedId]; exists {
+				if slices.Contains(data.Followers, userId) {
 					followedBy := true
 					isFollowedBy = &followedBy
 				}
@@ -273,22 +311,23 @@ func getProfile(c *gin.Context) {
 		st = nil
 	}
 
-	profileData := map[string]any{
-		"username":     foundUser.GetUsername(),
-		"pfp":          "https://avatars.rotur.dev/" + foundUser.GetUsername(),
-		"followers":    followerCount,
-		"following":    followingCount,
-		"pronouns":     getStringOrEmpty(foundUser.Get("pronouns")),
-		"system":       foundUser.GetSystem(),
-		"created":      foundUser.GetCreated(),
-		"badges":       calculatedBadges,
-		"subscription": sub,
-		"theme":        foundUser.Get("theme"),
-		"max_size":     maxSizeStr,
-		"currency":     foundUser.GetCredits(),
-		"index":        userIndex + 1,
-		"private":      foundUser.IsPrivate(),
-		"status":       st,
+	profileData := profileResp{
+		Username:     foundUser.GetUsername(),
+		Avatar:       "https://avatars.rotur.dev/" + foundUser.GetUsername().String(),
+		Followers:    followerCount,
+		Following:    followingCount,
+		Pronouns:     getStringOrEmpty(foundUser.Get("pronouns")),
+		System:       foundUser.GetSystem(),
+		Created:      foundUser.GetCreated(),
+		Badges:       calculatedBadges,
+		Subscription: sub,
+		Theme:        foundUser.GetTheme(),
+		MaxSize:      maxSizeStr,
+		Currency:     foundUser.GetCredits(),
+		Index:        userIndex + 1,
+		Private:      foundUser.IsPrivate(),
+		Status:       st,
+		Id:           foundUser.GetId(),
 	}
 
 	benefits := foundUser.GetSubscriptionBenefits()
@@ -300,15 +339,15 @@ func getProfile(c *gin.Context) {
 	if len(bio) > benefits.Bio_Length {
 		bio = bio[:benefits.Bio_Length]
 	}
-	profileData["bio"] = bio
+	profileData.Bio = bio
 
 	if foundUser.Get("sys.banner") != nil || foundUser.Get("banner") != nil {
-		profileData["banner"] = "https://avatars.rotur.dev/.banners/" + foundUser.GetUsername()
+		profileData.Banner = "https://avatars.rotur.dev/.banners/" + foundUser.GetUsername().String()
 	}
 
 	if includePosts {
 		// Combine pinned and regular posts (pinned first, then regular, both in reverse chronological order)
-		allUserPosts := make([]Post, 0, len(pinnedPosts)+len(regularPosts))
+		allUserPosts := make([]NetPost, 0, len(pinnedPosts)+len(regularPosts))
 
 		for i := 0; i < len(pinnedPosts); i++ {
 			allUserPosts = append(allUserPosts, pinnedPosts[i])
@@ -317,32 +356,28 @@ func getProfile(c *gin.Context) {
 			allUserPosts = append(allUserPosts, regularPosts[i])
 		}
 
-		profileData["posts"] = allUserPosts
+		profileData.Posts = allUserPosts
 	}
 
 	// Add follow relationship info if available
 	if authKey != "" && isFollowing != nil {
-		profileData["followed"] = *isFollowing
-		profileData["follows_me"] = *isFollowedBy
+		profileData.Followed = *isFollowing
+		profileData.FollowsMe = *isFollowedBy
 	}
 
-	if marriage := foundUser.Get("sys.marriage"); marriage != nil {
-		if marriageMap, ok := marriage.(map[string]any); ok {
-			status, statusExists := marriageMap["status"]
-			if statusExists && status == "married" {
-				partner, partnerExists := marriageMap["partner"]
-				if partnerExists && partner != "" {
-					profileData["married_to"] = partner
-				}
-			}
-		}
+	if marriage := foundUser.GetMarriage(); marriage.Status == "married" {
+		profileData.MarriedTo = getUserById(marriage.Partner).GetUsername()
 	}
 
 	c.JSON(200, profileData)
 }
 
 func getExists(c *gin.Context) {
-	username := c.Query("username")
+	type resp struct {
+		Exists bool `json:"exists"`
+	}
+
+	username := Username(c.Query("username")).ToLower()
 	if username == "" {
 		c.JSON(400, gin.H{"error": "Username is required"})
 		return
@@ -352,18 +387,23 @@ func getExists(c *gin.Context) {
 	defer usersMutex.RUnlock()
 
 	for _, user := range users {
-		if strings.EqualFold(user.GetUsername(), username) {
-			c.JSON(200, gin.H{"exists": true})
+		if user.GetUsername().ToLower() == username {
+			c.JSON(200, resp{Exists: true})
 			return
 		}
 	}
-	c.JSON(200, gin.H{"exists": false})
+	c.JSON(200, resp{Exists: false})
 }
 
 func getSupporters(c *gin.Context) {
 	// anyone who isnt a free user is considered a supporter
 
-	supporters := make([]map[string]string, 0)
+	type resp struct {
+		Username     Username `json:"username"`
+		Subscription string   `json:"subscription"`
+	}
+
+	supporters := make([]resp, 0)
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 	for _, user := range users {
@@ -371,9 +411,9 @@ func getSupporters(c *gin.Context) {
 		if subscriptionName == "Free" {
 			continue
 		}
-		supporters = append(supporters, map[string]string{
-			"username":     user.GetUsername(),
-			"subscription": subscriptionName,
+		supporters = append(supporters, resp{
+			Username:     user.GetUsername(),
+			Subscription: subscriptionName,
 		})
 	}
 	c.JSON(200, supporters)

@@ -31,10 +31,57 @@ type sub_benefits struct {
 	Daily_Credit_Multipler  int  `json:"daily_credit_multiplier"`
 }
 
-var userMutexesLock sync.Mutex
-var userMutexes = map[string]*sync.Mutex{}
+type Username string
 
-func getUserMutex(username string) *sync.Mutex {
+func (u Username) String() string {
+	return string(u)
+}
+
+func (u Username) ToLower() Username {
+	return Username(strings.ToLower(string(u)))
+}
+
+func (u Username) Id() UserId {
+	return getIdByUsername(u)
+}
+
+type UserId string
+
+func (u UserId) String() string {
+	return string(u)
+}
+
+func (u UserId) User() User {
+	return idToUser[u]
+}
+
+type Marriage struct {
+	Status    string `json:"status"`
+	Partner   UserId `json:"partner"`
+	Timestamp int64  `json:"timestamp"`
+	Proposer  UserId `json:"proposer"`
+}
+
+type MarriageNet struct {
+	Status    string   `json:"status"`
+	Partner   Username `json:"partner"`
+	Timestamp int64    `json:"timestamp"`
+	Proposer  Username `json:"proposer"`
+}
+
+func (m Marriage) ToNet() MarriageNet {
+	return MarriageNet{
+		Status:    m.Status,
+		Partner:   m.Partner.User().GetUsername(),
+		Timestamp: m.Timestamp,
+		Proposer:  m.Proposer.User().GetUsername(),
+	}
+}
+
+var userMutexesLock sync.Mutex
+var userMutexes = map[Username]*sync.Mutex{}
+
+func getUserMutex(username Username) *sync.Mutex {
 	userMutexesLock.Lock()
 	defer userMutexesLock.Unlock()
 	mu, ok := userMutexes[username]
@@ -118,13 +165,33 @@ func tierMax() sub_benefits {
 type User map[string]any
 
 // Helper methods for User
-func (u User) GetUsername() string {
+func (u User) GetUsername() Username {
 	if username, ok := u["username"]; ok {
 		if str, ok := username.(string); ok {
-			return str
+			return Username(str)
 		}
 		return ""
 	}
+	return ""
+}
+
+func (u User) GetTheme() map[string]any {
+	if theme, ok := u["theme"]; ok {
+		if m, ok := theme.(map[string]any); ok {
+			return m
+		}
+	}
+	return map[string]any{}
+}
+
+func (u User) GetId() UserId {
+	if id, ok := u["sys.id"]; ok {
+		if str, ok := id.(string); ok {
+			return UserId(str)
+		}
+		return ""
+	}
+	// fallback to username
 	return ""
 }
 
@@ -154,36 +221,50 @@ func (u User) GetEmail() string {
 	return getStringOrEmpty(u.Get("email"))
 }
 
-func (u User) SetBlocked(blocked []string) {
+func (u User) SetBlocked(blocked []UserId) {
 	u.Set("sys.blocked", blocked)
 }
 
-func (u User) GetBlocked() []string {
-	return getStringSlice(u, "sys.blocked")
+func (u User) GetBlocked() []UserId {
+	blocked := getStringSlice(u, "sys.blocked")
+	out := make([]UserId, len(blocked))
+	for i, b := range blocked {
+		out[i] = UserId(b)
+	}
+	return out
 }
 
-func (u User) AddBlocked(username string) {
-	if u.HasBlocked(username) {
+func (u User) GetBlockedUsers() []Username {
+	blocked := u.GetBlocked()
+	out := make([]Username, len(blocked))
+	for i, b := range blocked {
+		out[i] = getUserById(b).GetUsername()
+	}
+	return out
+}
+
+func (u User) AddBlocked(userId UserId) {
+	if u.HasBlocked(userId) {
 		return
 	}
 	blocked := u.GetBlocked()
 	mu := getUserMutex(u.GetUsername())
 	mu.Lock()
-	blocked = append(blocked, username)
+	blocked = append(blocked, userId)
 	mu.Unlock()
 	u.SetBlocked(blocked)
 }
 
-func (u User) RemoveBlocked(username string) {
-	if !u.HasBlocked(username) {
+func (u User) RemoveBlocked(userId UserId) {
+	if !u.HasBlocked(userId) {
 		return
 	}
 	blocked := u.GetBlocked()
 	mu := getUserMutex(u.GetUsername())
 	mu.Lock()
-	newBlocked := make([]string, 0, len(blocked)-1)
+	newBlocked := make([]UserId, 0, len(blocked)-1)
 	for _, b := range blocked {
-		if b != username {
+		if b != userId {
 			newBlocked = append(newBlocked, b)
 		}
 	}
@@ -191,11 +272,10 @@ func (u User) RemoveBlocked(username string) {
 	u.SetBlocked(newBlocked)
 }
 
-func (u User) HasBlocked(username string) bool {
-	username = strings.ToLower(username)
+func (u User) HasBlocked(userId UserId) bool {
 	blocked := u.GetBlocked()
 	for _, b := range blocked {
-		if strings.ToLower(b) == username {
+		if b == userId {
 			return true
 		}
 	}
@@ -212,79 +292,120 @@ func (u User) IsPrivate() bool {
 	return private == true
 }
 
-func (u User) SetFriends(friends []string) {
+func (u *User) GetMarriage() Marriage {
+	marriage := u.Get("sys.marriage")
+	if marriage == nil {
+		return Marriage{
+			Status:    "single",
+			Partner:   UserId(""),
+			Timestamp: 0,
+			Proposer:  UserId(""),
+		}
+	}
+	switch v := marriage.(type) {
+	case map[string]any:
+		return Marriage{
+			Status:    getStringOrDefault(v["status"], "single"),
+			Partner:   UserId(getStringOrDefault(v["partner"], "")),
+			Timestamp: int64(getIntOrDefault(v["timestamp"], 0)),
+			Proposer:  UserId(getStringOrDefault(v["proposer"], "")),
+		}
+	}
+	// fallback to empty marriage
+	return Marriage{
+		Status:    "single",
+		Partner:   UserId(""),
+		Timestamp: 0,
+		Proposer:  UserId(""),
+	}
+}
+
+func (u *User) SetMarriage(marriage Marriage) {
+	u.Set("sys.marriage", map[string]any{
+		"status":    marriage.Status,
+		"partner":   marriage.Partner.String(),
+		"timestamp": marriage.Timestamp,
+		"proposer":  marriage.Proposer.String(),
+	})
+}
+
+func (u User) SetFriends(friends []UserId) {
 	u.Set("sys.friends", friends)
 }
 
-func (u User) SetRequests(requests []string) {
+func (u User) SetRequests(requests []UserId) {
 	u.Set("sys.requests", requests)
 }
 
-func (u User) AddRequest(username string) bool {
+func (u User) AddRequest(username Username) bool {
 	if u.HasRequest(username) {
 		return false
 	}
 	requests := u.GetRequests()
 	mu := getUserMutex(u.GetUsername())
+	userId := username.Id()
 	mu.Lock()
-	requests = append(requests, username)
+	requests = append(requests, userId)
 	mu.Unlock()
 	u.SetRequests(requests)
 	return true
 }
 
-func (u User) RemoveRequest(username string) bool {
+func (u User) RemoveRequest(username Username) bool {
 	if !u.HasRequest(username) {
 		return false
 	}
 	requests := u.GetRequests()
 	mu := getUserMutex(u.GetUsername())
+	userId := username.Id()
 	mu.Lock()
-	requests = make([]string, 0, len(requests)-1)
-	for _, r := range requests {
-		if r != username {
-			requests = append(requests, r)
+	requestIds := make([]UserId, 0, len(requests)-1)
+	for _, r := range requestIds {
+		if r != userId {
+			requestIds = append(requestIds, r)
 		}
 	}
 	mu.Unlock()
-	u.SetRequests(requests)
+	u.SetRequests(requestIds)
 	return true
 }
 
-func (u User) HasRequest(username string) bool {
+func (u User) HasRequest(username Username) bool {
 	requests := u.GetRequests()
 	for _, r := range requests {
-		if strings.EqualFold(r, username) {
+		if strings.EqualFold(string(r), string(username)) {
 			return true
 		}
 	}
 	return false
 }
 
-func (u User) AddFriend(username string) bool {
+func (u User) AddFriend(username Username) bool {
 	friends := u.GetFriends()
 	if u.IsFriend(username) {
 		return false
 	}
 	mu := getUserMutex(u.GetUsername())
+	userId := username.Id()
 	mu.Lock()
-	friends = append(friends, username)
+	friends = append(friends, userId)
 	mu.Unlock()
 	u.SetFriends(friends)
 
 	return true
 }
 
-func (u User) RemoveFriend(username string) bool {
+func (u User) RemoveFriend(username Username) bool {
 	friends := u.GetFriends()
 	if !u.IsFriend(username) {
 		return false
 	}
 	mu := getUserMutex(u.GetUsername())
+	userId := username.Id()
 	mu.Lock()
-	newFriends := make([]string, 0, len(friends)-1)
+	newFriends := make([]UserId, 0, len(friends)-1)
 	for _, f := range friends {
-		if f != username {
+		if f != userId {
 			newFriends = append(newFriends, f)
 		}
 	}
@@ -294,22 +415,62 @@ func (u User) RemoveFriend(username string) bool {
 	return true
 }
 
-func (u User) IsFriend(username string) bool {
+func (u User) IsFriend(username Username) bool {
 	friends := u.GetFriends()
 	for _, f := range friends {
-		if strings.EqualFold(f, username) {
+		if strings.EqualFold(string(f), string(username)) {
 			return true
 		}
 	}
 	return false
 }
 
-func (u User) GetFriends() []string {
-	return getStringSlice(u, "sys.friends")
+func getIdByUsername(username Username) UserId {
+	val, ok := usernameToId[username.ToLower()]
+	if ok {
+		return val
+	}
+	return UserId("")
 }
 
-func (u User) GetRequests() []string {
-	return getStringSlice(u, "sys.requests")
+func getUserById(id UserId) User {
+	return idToUser[id]
+}
+
+func (u User) GetFriends() []UserId {
+	friends := getStringSlice(u, "sys.friends")
+	out := make([]UserId, len(friends))
+	for i, f := range friends {
+		out[i] = UserId(f)
+	}
+	return out
+}
+
+func (u User) GetFriendUsers() []Username {
+	friends := getStringSlice(u, "sys.friends")
+	out := make([]Username, len(friends))
+	for i, f := range friends {
+		out[i] = getUserById(UserId(f)).GetUsername()
+	}
+	return out
+}
+
+func (u User) GetRequests() []UserId {
+	requests := getStringSlice(u, "sys.requests")
+	out := make([]UserId, len(requests))
+	for i, r := range requests {
+		out[i] = UserId(r)
+	}
+	return out
+}
+
+func (u User) GetRequestedUsers() []Username {
+	requests := getStringSlice(u, "sys.requests")
+	out := make([]Username, len(requests))
+	for i, r := range requests {
+		out[i] = getUserById(UserId(r)).GetUsername()
+	}
+	return out
 }
 
 func (u User) GetCreated() int64 {
@@ -324,16 +485,16 @@ func (u User) GetCreated() int64 {
 	return 0
 }
 
-func (u User) GetNotes() map[string]string {
+func (u User) GetNotes() map[UserId]string {
 	notes := u.Get("sys.notes")
 	if notes == nil {
-		return map[string]string{}
+		return map[UserId]string{}
 	}
-	m, ok := notes.(map[string]any)
+	m, ok := notes.(map[UserId]any)
 	if !ok {
-		return map[string]string{}
+		return map[UserId]string{}
 	}
-	out := make(map[string]string)
+	out := make(map[UserId]string)
 	for k, v := range m {
 		if s, ok := v.(string); ok {
 			out[k] = s
@@ -342,24 +503,26 @@ func (u User) GetNotes() map[string]string {
 	return out
 }
 
-func (u User) SetNote(username string, note string) error {
+func (u User) SetNote(username Username, note string) error {
 	if len(note) > 300 {
 		return fmt.Errorf("note content is too long")
 	}
 	notes := u.GetNotes()
 	mu := getUserMutex(u.GetUsername())
+	userId := username.Id()
 	mu.Lock()
-	notes[username] = note
+	notes[userId] = note
 	mu.Unlock()
 	u.Set("sys.notes", notes)
 	return nil
 }
 
-func (u User) RemoveNote(username string) {
+func (u User) RemoveNote(username Username) {
 	notes := u.GetNotes()
 	mu := getUserMutex(u.GetUsername())
+	userId := username.Id()
 	mu.Lock()
-	delete(notes, username)
+	delete(notes, userId)
 	mu.Unlock()
 	u.Set("sys.notes", notes)
 }
@@ -436,7 +599,7 @@ func (u User) GetLogins() []Login {
 
 func (u User) GetSubscription() subscription {
 	username := u.GetUsername()
-	if strings.EqualFold(username, "mist") {
+	if strings.EqualFold(string(username), "mist") {
 		// keep me as the sigma
 		return subscription{
 			Active:       true,
@@ -671,31 +834,86 @@ func (u User) Set(key string, value any) {
 
 // FollowerData represents follower information
 type FollowerData struct {
-	Followers []string `json:"followers"`
+	Followers []UserId `json:"followers"`
 }
 
 // Post represents a social media post
 type Post struct {
 	ID           string   `json:"id"`
 	Content      string   `json:"content"`
-	User         string   `json:"user"`
+	User         UserId   `json:"user"`
 	Timestamp    int64    `json:"timestamp"`
 	Attachment   *string  `json:"attachment,omitempty"`
 	ProfileOnly  bool     `json:"profile_only,omitempty"`
 	OS           *string  `json:"os,omitempty"`
 	Replies      []Reply  `json:"replies,omitempty"`
-	Likes        []string `json:"likes,omitempty"`
+	Likes        []UserId `json:"likes,omitempty"`
 	Pinned       bool     `json:"pinned,omitempty"`
 	IsRepost     bool     `json:"is_repost,omitempty"`
 	OriginalPost *Post    `json:"original_post,omitempty"`
+}
+
+type NetPost struct {
+	ID           string     `json:"id"`
+	Content      string     `json:"content"`
+	User         Username   `json:"user"`
+	Timestamp    int64      `json:"timestamp"`
+	Attachment   *string    `json:"attachment,omitempty"`
+	ProfileOnly  bool       `json:"profile_only,omitempty"`
+	OS           *string    `json:"os,omitempty"`
+	Replies      []NetReply `json:"replies,omitempty"`
+	Likes        []Username `json:"likes,omitempty"`
+	Pinned       bool       `json:"pinned,omitempty"`
+	IsRepost     bool       `json:"is_repost,omitempty"`
+	OriginalPost *Post      `json:"original_post,omitempty"`
+}
+
+func (p Post) ToNet() NetPost {
+	replies := make([]NetReply, 0)
+	likes := make([]Username, 0)
+	for _, reply := range p.Replies {
+		replies = append(replies, reply.ToNet())
+	}
+	for _, like := range p.Likes {
+		likes = append(likes, like.User().GetUsername())
+	}
+	return NetPost{
+		ID:           p.ID,
+		Content:      p.Content,
+		User:         p.User.User().GetUsername(),
+		Attachment:   p.Attachment,
+		ProfileOnly:  p.ProfileOnly,
+		OS:           p.OS,
+		Replies:      replies,
+		Likes:        likes,
+		Pinned:       p.Pinned,
+		IsRepost:     p.IsRepost,
+		OriginalPost: p.OriginalPost,
+	}
 }
 
 // Reply represents a reply to a post
 type Reply struct {
 	ID        string `json:"id"`
 	Content   string `json:"content"`
-	User      string `json:"user"`
+	User      UserId `json:"user"`
 	Timestamp int64  `json:"timestamp"`
+}
+
+type NetReply struct {
+	ID        string   `json:"id"`
+	Content   string   `json:"content"`
+	User      Username `json:"user"`
+	Timestamp int64    `json:"timestamp"`
+}
+
+func (r Reply) ToNet() NetReply {
+	return NetReply{
+		ID:        r.ID,
+		Content:   r.Content,
+		User:      r.User.User().GetUsername(),
+		Timestamp: r.Timestamp,
+	}
 }
 
 type Badge struct {
@@ -725,7 +943,7 @@ func (s *System) Set(key string, value any) (string, error) {
 	case "owner":
 		if v, ok := value.(SystemOwner); ok {
 			s.Owner = v
-			return v.Name, nil
+			return v.Name.String(), nil
 		} else {
 			return "", fmt.Errorf("invalid owner value: %v", value)
 		}
@@ -749,8 +967,8 @@ func (s *System) Set(key string, value any) (string, error) {
 
 // SystemOwner represents the owner of a system
 type SystemOwner struct {
-	Name      string `json:"name"`
-	DiscordID string `json:"discord_id"`
+	Name      Username `json:"name"`
+	DiscordID string   `json:"discord_id"`
 }
 
 type Transaction struct {
@@ -792,7 +1010,7 @@ func (r *Reply) UnmarshalJSON(data []byte) error {
 	type TempReply struct {
 		ID      string `json:"id"`
 		Content string `json:"content"`
-		User    string `json:"user"`
+		User    UserId `json:"user"`
 	}
 
 	var temp TempReply
@@ -815,12 +1033,44 @@ type Item struct {
 	Description     string            `json:"description"`
 	Price           int               `json:"price"`
 	Selling         bool              `json:"selling"`
-	Author          string            `json:"author"`
-	Owner           string            `json:"owner"`
+	Author          UserId            `json:"author"`
+	Owner           UserId            `json:"owner"`
 	PrivateData     any               `json:"private_data,omitempty"`
-	Created         float64           `json:"created"`
+	Created         int64             `json:"created"`
 	TransferHistory []TransferHistory `json:"transfer_history"`
 	TotalIncome     int               `json:"total_income"`
+}
+
+func (i Item) ToNet() NetItem {
+	transferHistory := make([]NetTransferHistory, 0, len(i.TransferHistory))
+	for _, history := range i.TransferHistory {
+		transferHistory = append(transferHistory, history.ToNet())
+	}
+	return NetItem{
+		Name:            i.Name,
+		Description:     i.Description,
+		Price:           i.Price,
+		Selling:         i.Selling,
+		Author:          i.Author.User().GetUsername(),
+		Owner:           i.Owner.User().GetUsername(),
+		PrivateData:     i.PrivateData,
+		Created:         i.Created,
+		TransferHistory: transferHistory,
+		TotalIncome:     i.TotalIncome,
+	}
+}
+
+type NetItem struct {
+	Name            string               `json:"name"`
+	Description     string               `json:"description"`
+	Price           int                  `json:"price"`
+	Selling         bool                 `json:"selling"`
+	Author          Username             `json:"author"`
+	Owner           Username             `json:"owner"`
+	PrivateData     any                  `json:"private_data,omitempty"`
+	Created         int64                `json:"created"`
+	TransferHistory []NetTransferHistory `json:"transfer_history"`
+	TotalIncome     int                  `json:"total_income"`
 }
 
 type Login struct {
@@ -835,18 +1085,42 @@ type Login struct {
 
 // TransferHistory represents item transfer history
 type TransferHistory struct {
-	From      *string `json:"from"`
-	To        string  `json:"to"`
-	Timestamp float64 `json:"timestamp"`
+	From      *UserId `json:"from"`
+	To        UserId  `json:"to"`
+	Timestamp int64   `json:"timestamp"`
 	Type      string  `json:"type"`
 	Price     *int    `json:"price,omitempty"`
+}
+
+func (t TransferHistory) ToNet() NetTransferHistory {
+	var from *Username
+
+	username := t.From.User().GetUsername()
+	if username != "" {
+		from = &username
+	}
+	return NetTransferHistory{
+		From:      from,
+		To:        t.To.User().GetUsername(),
+		Timestamp: t.Timestamp,
+		Type:      t.Type,
+		Price:     t.Price,
+	}
+}
+
+type NetTransferHistory struct {
+	From      *Username `json:"from"`
+	To        Username  `json:"to"`
+	Timestamp int64     `json:"timestamp"`
+	Type      string    `json:"type"`
+	Price     *int      `json:"price,omitempty"`
 }
 
 // Key represents an access key
 type Key struct {
 	Key          string                 `json:"key"`
-	Creator      string                 `json:"creator"`
-	Users        map[string]KeyUserData `json:"users"`
+	Creator      UserId                 `json:"creator"`
+	Users        map[UserId]KeyUserData `json:"users"`
 	Name         *string                `json:"name"`
 	Price        int                    `json:"price"`
 	Data         *string                `json:"data"`
@@ -854,6 +1128,37 @@ type Key struct {
 	Type         string                 `json:"type"`
 	TotalIncome  int                    `json:"total_income,omitempty"`
 	Webhook      *string                `json:"webhook,omitempty"`
+}
+
+func (k *Key) ToNet() NetKey {
+	users := make(map[Username]KeyUserData)
+	for k, v := range k.Users {
+		users[k.User().GetUsername()] = v
+	}
+	return NetKey{
+		Key:          k.Key,
+		Name:         k.Name,
+		Price:        k.Price,
+		Type:         k.Type,
+		TotalIncome:  k.TotalIncome,
+		Webhook:      k.Webhook,
+		Subscription: k.Subscription,
+		Users:        users,
+		Creator:      k.Creator.User().GetUsername(),
+	}
+}
+
+type NetKey struct {
+	Key          string                   `json:"key"`
+	Name         *string                  `json:"name"`
+	Price        int                      `json:"price"`
+	Type         string                   `json:"type"`
+	TotalIncome  int                      `json:"total_income,omitempty"`
+	Webhook      *string                  `json:"webhook,omitempty"`
+	Subscription *Subscription            `json:"subscription,omitempty"`
+	Users        map[Username]KeyUserData `json:"users"`
+	Creator      Username                 `json:"creator"`
+	Data         *string                  `json:"data,omitempty"`
 }
 
 func (k *Key) setKey(key string, value any) {
@@ -898,10 +1203,10 @@ func (k *Key) ToPublic() map[string]any {
 
 // KeyUserData represents user data for a key
 type KeyUserData struct {
-	Time        float64 `json:"time"`
-	Price       int     `json:"price,omitempty"`
-	NextBilling any     `json:"next_billing,omitempty"`
-	CancelAt    any     `json:"cancel_at,omitempty"` // unix ms; when reached, user should be removed from key
+	Time        int64 `json:"time"`
+	Price       int   `json:"price,omitempty"`
+	NextBilling any   `json:"next_billing,omitempty"`
+	CancelAt    any   `json:"cancel_at,omitempty"` // unix ms; when reached, user should be removed from key
 }
 
 // Subscription represents subscription information
@@ -936,10 +1241,12 @@ type RateLimitConfig struct {
 var (
 	startTime = time.Now()
 
-	users      []User
-	usersMutex sync.RWMutex
+	users        []User
+	usernameToId map[Username]UserId
+	idToUser     map[UserId]User
+	usersMutex   sync.RWMutex
 
-	followersData  map[string]FollowerData
+	followersData  map[UserId]FollowerData
 	followersMutex sync.RWMutex
 
 	posts      []Post
@@ -954,7 +1261,7 @@ var (
 	systems      map[string]System
 	systemsMutex sync.RWMutex
 
-	eventsHistory      map[string][]Event
+	eventsHistory      map[UserId][]Event
 	eventsHistoryMutex sync.RWMutex
 
 	rateLimitStorage = make(map[string]*RateLimit)
@@ -994,12 +1301,12 @@ func (p *Post) UnmarshalJSON(data []byte) error {
 	type TempPost struct {
 		ID           string   `json:"id"`
 		Content      string   `json:"content"`
-		User         string   `json:"user"`
+		User         UserId   `json:"user"`
 		Attachment   *string  `json:"attachment,omitempty"`
 		ProfileOnly  bool     `json:"profile_only,omitempty"`
 		OS           *string  `json:"os,omitempty"`
 		Replies      []Reply  `json:"replies,omitempty"`
-		Likes        []string `json:"likes,omitempty"`
+		Likes        []UserId `json:"likes,omitempty"`
 		Pinned       bool     `json:"pinned,omitempty"`
 		IsRepost     bool     `json:"is_repost,omitempty"`
 		OriginalPost *Post    `json:"original_post,omitempty"`

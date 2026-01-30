@@ -16,7 +16,7 @@ type ValidatorInfo struct {
 	Timestamp int64
 }
 
-var validatorInfos = make(map[string]ValidatorInfo)
+var validatorInfos = make(map[Username]ValidatorInfo)
 var validatorMutex sync.RWMutex
 
 func generateValidator(c *gin.Context) {
@@ -44,7 +44,7 @@ func generateValidator(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"validator": user.GetUsername() + "," + hashedKey,
+		"validator": user.GetUsername().String() + "," + hashedKey,
 	})
 }
 
@@ -70,11 +70,11 @@ func validateToken(c *gin.Context) {
 		return
 	}
 
-	username := parts[0]
+	username := Username(parts[0])
 	encryptedData := parts[1]
 
 	// Find the user in the users list
-	foundUsers, err := getAccountsBy("username", username, 1)
+	foundUsers, err := getAccountsBy("username", username.String(), 1)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return

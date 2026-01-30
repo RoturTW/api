@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/gin-gonic/gin"
@@ -21,11 +22,14 @@ func main() {
 	loadKeys()
 	loadSystems()
 	loadEventsHistory()
-	reconnectFriends()
+
+	// doAfter(reconnectFriends, nil, time.Second*20)
 
 	if err := loadJSONBadges(); err != nil {
 		log.Printf("Warning: Failed to load badges.json: %v", err)
 	}
+
+	fmt.Println("Completed loading data")
 
 	go cleanRateLimitStorage()
 	go checkSubscriptions()

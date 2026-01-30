@@ -33,12 +33,12 @@ const statusTTL = 24 * time.Hour
 const statusCleanupInterval = time.Hour
 
 // build path to a user's status.json
-func userStatusPath(username string) string {
-	username = strings.ToLower(username)
-	return filepath.Join(statusBasePath, username, "status.json")
+func userStatusPath(username Username) string {
+	name := username.ToLower().String()
+	return filepath.Join(statusBasePath, name, "status.json")
 }
 
-func loadUserStatus(username string) (*UserStatus, error) {
+func loadUserStatus(username Username) (*UserStatus, error) {
 	path := userStatusPath(username)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -57,7 +57,7 @@ func loadUserStatus(username string) (*UserStatus, error) {
 	return &st, nil
 }
 
-func saveUserStatus(username string, st *UserStatus) error {
+func saveUserStatus(username Username, st *UserStatus) error {
 	dir := filepath.Dir(userStatusPath(username))
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
@@ -73,7 +73,7 @@ func saveUserStatus(username string, st *UserStatus) error {
 	return os.Rename(tmp, userStatusPath(username))
 }
 
-func deleteUserStatus(username string) {
+func deleteUserStatus(username Username) {
 	os.Remove(userStatusPath(username))
 }
 
@@ -88,7 +88,7 @@ func statusClear(c *gin.Context) {
 
 // GET /status/get?name=username
 func statusGet(c *gin.Context) {
-	name := c.Query("name")
+	name := Username(c.Query("name"))
 	if name == "" {
 		c.JSON(400, gin.H{"error": "name parameter missing"})
 		return
@@ -109,7 +109,7 @@ func statusGet(c *gin.Context) {
 
 	remaining := st.Expires - now
 	c.JSON(200, gin.H{
-		"username":          strings.ToLower(name),
+		"username":          name.ToLower(),
 		"status":            st,
 		"time_remaining_ms": remaining,
 	})
@@ -226,7 +226,7 @@ func runStatusCleanup() {
 		if !e.IsDir() {
 			continue
 		}
-		username := e.Name()
+		username := Username(e.Name())
 		st, err := loadUserStatus(username)
 		if err != nil {
 			continue

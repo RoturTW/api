@@ -11,7 +11,7 @@ import (
 )
 
 type AccountCreateInput struct {
-	Username string
+	Username Username
 	Password string
 	Email    string
 	System   System
@@ -23,7 +23,7 @@ type AccountCreateInput struct {
 }
 
 func createAccount(in AccountCreateInput) (User, error) {
-	usernameLower := strings.ToLower(in.Username)
+	usernameLower := in.Username.ToLower()
 	if usernameLower == "" {
 		return nil, fmt.Errorf("username is required")
 	}
@@ -38,7 +38,7 @@ func createAccount(in AccountCreateInput) (User, error) {
 	defer usersMutex.Unlock()
 
 	for _, user := range users {
-		if strings.EqualFold(user.GetUsername(), usernameLower) {
+		if user.GetUsername().ToLower() == usernameLower {
 			return nil, fmt.Errorf("username already in use")
 		}
 		if strings.EqualFold(user.GetEmail(), in.Email) {

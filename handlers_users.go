@@ -25,9 +25,9 @@ func getAccountsBy(key string, value string, max int) ([]*User, error) {
 
 	var matches []*User
 	if key == "username" {
-		valueLower := strings.ToLower(value)
+		valueLower := Username(value).ToLower()
 		for _, user := range users {
-			if strings.ToLower(user.GetUsername()) == valueLower {
+			if user.GetUsername().ToLower() == valueLower {
 				matches = append(matches, &user)
 				if max != -1 && len(matches) >= max {
 					return matches, nil
@@ -55,9 +55,9 @@ func findAccountByLogin(username string, password string) (*User, error) {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 
-	username = strings.ToLower(username)
+	name := Username(username).ToLower()
 	for _, user := range users {
-		if strings.ToLower(user.GetUsername()) == username && user.GetPassword() == password {
+		if user.GetUsername().ToLower() == name && user.GetPassword() == password {
 			return &user, nil
 		}
 	}
@@ -70,8 +70,9 @@ func getIdxOfAccountBy(key string, value string) int {
 	defer usersMutex.RUnlock()
 
 	if key == "username" {
+		valueLower := Username(value).ToLower()
 		for i, user := range users {
-			if strings.EqualFold(user.GetUsername(), value) {
+			if user.GetUsername().ToLower() == valueLower {
 				return i
 			}
 		}
@@ -87,9 +88,9 @@ func getIdxOfAccountBy(key string, value string) int {
 }
 
 // helper function to update user keys
-func setAccountKey(username, key string, value any) error {
+func setAccountKey(username Username, key string, value any) error {
 
-	i := getIdxOfAccountBy("username", username)
+	i := getIdxOfAccountBy("username", username.String())
 
 	if i != -1 {
 		usersMutex.Lock()
@@ -213,6 +214,21 @@ func getUser(c *gin.Context) {
 
 		go saveUsers()
 		userCopy := copyUser(*foundUser)
+		userCopy["sys.friends"] = foundUser.GetFriendUsers()
+		userCopy["sys.requests"] = foundUser.GetRequestedUsers()
+		if foundUser.GetMarriage().Status != "single" {
+			userCopy["sys.marriage"] = foundUser.GetMarriage().ToNet()
+		}
+		transactions := deepCopyValue(foundUser.GetTransactions()).([]map[string]any)
+		for i, transaction := range transactions {
+			val, ok := transaction["user"].(string)
+			if !ok {
+				continue
+			}
+			transactions[i]["user"] = getUserById(UserId(val)).GetUsername()
+		}
+		userCopy["sys.transactions"] = transactions
+
 		delete(userCopy, "password")
 		c.JSON(200, userCopy)
 		return
@@ -354,7 +370,7 @@ func registerUser(c *gin.Context) {
 		return
 	}
 
-	username := req.Username
+	username := Username(req.Username)
 	password := req.Password
 	email := req.Email
 	system := req.System
@@ -364,7 +380,7 @@ func registerUser(c *gin.Context) {
 		return
 	}
 
-	usernameLower := strings.ToLower(username)
+	usernameLower := username.ToLower()
 	if ok, msg := ValidateUsername(username); !ok {
 		c.JSON(400, gin.H{"error": msg})
 		return
@@ -377,7 +393,7 @@ func registerUser(c *gin.Context) {
 
 	usersMutex.Lock()
 	for _, user := range users {
-		if strings.EqualFold(user.GetUsername(), usernameLower) {
+		if user.GetUsername().ToLower() == usernameLower {
 			c.JSON(400, gin.H{"error": "Username already in use"})
 			usersMutex.Unlock()
 			return
@@ -428,12 +444,12 @@ func registerUser(c *gin.Context) {
 	c.JSON(201, userCopy)
 }
 
-func findUserSize(username string) int {
+func findUserSize(username Username) int {
 	totalSize := 0
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 	for _, u := range users {
-		if strings.EqualFold(u.GetUsername(), username) {
+		if u.GetUsername().ToLower() == username {
 			for k, v := range u {
 				if strings.HasPrefix(k, "sys.") {
 					continue
@@ -496,6 +512,37 @@ func uploadUserImage(imageType, imageData, token string) (*http.Response, error)
 	return resp, nil
 }
 
+func canUpdateUsernameUnsafe(username string) (bool, string) {
+	if username == "" {
+		return false, "Invalid username"
+	}
+	name := Username(username)
+	ok, msg := ValidateUsername(name)
+	if !ok {
+		return false, msg
+	}
+	usernameLower := name.ToLower()
+	for _, user := range users {
+		if user.GetUsername().ToLower() == usernameLower {
+			return false, "Username already in use"
+		}
+	}
+
+	return true, "Can update username"
+}
+
+func updateUsername(userId UserId, newUsername Username) {
+	usernameLower := userId.User().GetUsername().ToLower()
+	newUsernameLower := newUsername.ToLower()
+
+	if usernameLower == newUsernameLower {
+		return
+	}
+
+	fs.RenameUserFileSystem(usernameLower, newUsernameLower)
+	renameUserAvatar(userId, newUsername)
+}
+
 func updateUser(c *gin.Context) {
 	var req struct {
 		Auth  string `json:"auth"`
@@ -541,7 +588,7 @@ func updateUser(c *gin.Context) {
 			c.JSON(400, gin.H{"error": "Banner must be a valid data URI"})
 			return
 		}
-		userIndex := getIdxOfAccountBy("username", username)
+		userIndex := getIdxOfAccountBy("username", username.String())
 		if userIndex == -1 {
 			c.JSON(403, gin.H{"error": "User not found"})
 			return
@@ -633,6 +680,11 @@ func updateUser(c *gin.Context) {
 		return
 	}
 
+	if key == "sys.id" {
+		c.JSON(400, gin.H{"error": "Cannot update sys.id"})
+		return
+	}
+
 	if key == "email" {
 		usersMutex.RLock()
 		for _, user := range users {
@@ -679,6 +731,16 @@ func updateUser(c *gin.Context) {
 	if len(key) > 20 {
 		c.JSON(400, gin.H{"error": "Key length exceeds 20 characters"})
 		return
+	}
+	if key == "username" {
+		usersMutex.RLock()
+		ok, msg := canUpdateUsernameUnsafe(getStringOrEmpty(value))
+		usersMutex.RUnlock()
+		if !ok {
+			c.JSON(400, gin.H{"error": msg})
+			return
+		}
+		updateUsername(user.GetId(), Username(getStringOrEmpty(value)))
 	}
 	if slices.Contains(lockedKeys, key) {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Key '%s' cannot be updated", key)})
@@ -746,9 +808,18 @@ func updateUserAdmin(c *gin.Context) {
 			usersMutex.RLock()
 			user := users[userIndex]
 			usersMutex.RUnlock()
-			if key == "sys.currency" {
+			switch key {
+			case "username":
+				username := Username(getStringOrEmpty(value))
+				if ok, msg := canUpdateUsernameUnsafe(username.String()); !ok {
+					c.JSON(400, gin.H{"error": msg})
+					return
+				}
+				updateUsername(user.GetId(), username)
+				user.Set("username", username.String())
+			case "sys.currency":
 				user.SetBalance(value)
-			} else {
+			default:
 				user.Set(key, value)
 			}
 
@@ -867,7 +938,7 @@ func deleteUserKey(c *gin.Context) {
 // PerformCreditTransfer performs a credit transfer between two users.
 // Handles tax, transaction logging, and safety rules.
 // Returns an error if the transfer cannot be completed.
-func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note string) error {
+func PerformCreditTransfer(fromUsername, toUsername Username, amount float64, note string) error {
 	const totalTax = 0.0
 	const taxRecipientShare = 0.25
 
@@ -877,19 +948,19 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 		return fmt.Errorf("minimum amount is 0.01")
 	}
 
-	fromUsers, err := getAccountsBy("username", fromUsername, 1)
+	fromUsers, err := getAccountsBy("username", fromUsername.String(), 1)
 	if err != nil {
 		return fmt.Errorf("sender user not found")
 	}
 	fromUser := fromUsers[0]
 
-	toUsers, err := getAccountsBy("username", toUsername, 1)
+	toUsers, err := getAccountsBy("username", toUsername.String(), 1)
 	if err != nil {
 		return fmt.Errorf("recipient user not found")
 	}
 	toUser := toUsers[0]
 
-	if strings.EqualFold(fromUser.GetUsername(), toUser.GetUsername()) {
+	if fromUser.GetUsername().ToLower() == toUser.GetUsername().ToLower() {
 		return fmt.Errorf("cannot send credits to yourself")
 	}
 
@@ -919,7 +990,7 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 
 	// Send credits when rotur is the sender
 	if fromUsername == "rotur" {
-		taxRecipient := "mist"
+		taxRecipient := Username("mist")
 		fromSystem := toUser.GetSystem()
 		systemsMutex.RLock()
 		if sys, ok := systems[fromSystem]; ok {
@@ -928,7 +999,7 @@ func PerformCreditTransfer(fromUsername, toUsername string, amount float64, note
 		systemsMutex.RUnlock()
 
 		// Apply tax to taxRecipient if exists
-		if idx := getIdxOfAccountBy("username", taxRecipient); taxRecipient != toUser.GetUsername() && idx != -1 {
+		if idx := getIdxOfAccountBy("username", taxRecipient.String()); taxRecipient != toUser.GetUsername() && idx != -1 {
 			taxUser, _ := getUserByIdx(idx)
 			newBalance := roundVal(taxUser.GetCredits() + taxRecipientShare)
 			taxUser.SetBalance(newBalance)
@@ -1013,12 +1084,12 @@ func transferCredits(c *gin.Context) {
 		return
 	}
 
-	toUsername := strings.ToLower(req.To)
+	toUsername := Username(req.To).ToLower()
 	if toUsername == "" {
 		c.JSON(400, gin.H{"error": "Recipient username and amount must be provided"})
 		return
 	}
-	if toUsername == strings.ToLower(user.GetUsername()) {
+	if toUsername == user.GetUsername().ToLower() {
 		c.JSON(400, gin.H{"error": "Cannot send credits to yourself"})
 		return
 	}
@@ -1035,14 +1106,14 @@ func transferCredits(c *gin.Context) {
 func deleteUser(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	username := c.Param("username")
+	username := Username(c.Param("username"))
 	if username == "" {
 		c.JSON(400, gin.H{"error": "Username is required"})
 		return
 	}
 
-	usernameLower := strings.ToLower(username)
-	requester := strings.ToLower(user.GetUsername())
+	usernameLower := username.ToLower()
+	requester := user.GetUsername().ToLower()
 	if requester != "mist" && requester != usernameLower {
 		c.JSON(403, gin.H{"error": "Insufficient permissions to delete this user"})
 		return
@@ -1069,7 +1140,7 @@ func deleteUserAdmin(c *gin.Context) {
 		return
 	}
 
-	username := req.Username
+	username := Username(req.Username)
 	if username == "" {
 		c.JSON(400, gin.H{"error": "Username is required"})
 		return
@@ -1089,7 +1160,7 @@ func banUserAdmin(c *gin.Context) {
 	}
 
 	var req struct {
-		Username string `json:"username"`
+		Username Username `json:"username"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": "Invalid request body"})
@@ -1115,9 +1186,9 @@ func transferCreditsAdmin(c *gin.Context) {
 		return
 	}
 
-	toUsername := c.Query("to")
+	toUsername := Username(c.Query("to"))
 	amountStr := c.Query("amount")
-	fromUsername := c.Query("from")
+	fromUsername := Username(c.Query("from"))
 	note := c.Query("note")
 
 	amountNum, err := strconv.ParseFloat(amountStr, 64)
@@ -1137,61 +1208,59 @@ func removeUserDirectory(path string) error {
 	return os.RemoveAll(path)
 }
 
-func reconnectFriends() {
+func reconnectFriends(_ any) {
 	usersMutex.Lock()
 	defer usersMutex.Unlock()
 
-	findUser := func(name string) *User {
-		for i := range users {
-			if strings.EqualFold(users[i].GetUsername(), name) {
-				return &users[i]
-			}
-		}
-		return nil
-	}
-
-	getLowerName := func(u *User) string {
-		return strings.ToLower(u.GetUsername())
-	}
-
-	friendMap := make(map[*User][]string, len(users))
+	friendMap := make(map[UserId][]UserId, len(users))
 	for i := range users {
-		u := &users[i]
+		u := users[i]
 		friends := u.GetFriends()
-		valid := make([]string, 0, len(friends))
+
+		valid := make([]UserId, 0, len(friends))
 		for _, f := range friends {
-			if friendUser := findUser(f); friendUser != nil {
-				valid = append(valid, strings.ToLower(f))
+			if friendUser := f.User(); friendUser != nil {
+				valid = append(valid, f)
 			}
 		}
-		friendMap[u] = valid
+		friendMap[u.GetId()] = valid
 	}
 
-	for u, friends := range friendMap {
-		uName := getLowerName(u)
+	for uId, friends := range friendMap {
 		for _, f := range friends {
-			friendUser := findUser(f)
-			if friendUser == nil {
+			if !accountExists(f) {
 				continue
 			}
 
-			friendList := friendMap[friendUser]
-			hasFriend := slices.Contains(friendList, uName)
-			if !hasFriend {
-				friendMap[friendUser] = append(friendList, uName)
+			friendList := friendMap[f]
+			if !slices.Contains(friendList, uId) {
+				friendMap[f] = append(friendList, uId)
 			}
 		}
 	}
 
-	for u, finalList := range friendMap {
-		u.SetFriends(finalList)
+	changed := false
+
+	for uId, finalList := range friendMap {
+		u := getUserById(uId)
+		old := u.GetFriends()
+
+		if !slices.Equal(old, finalList) {
+			u.SetFriends(finalList)
+			changed = true
+		}
+	}
+
+	if changed {
+		go saveUsers()
+		log.Printf("Reconnected %d friends", len(friendMap))
 	}
 }
 
-func performUserDeletion(username string, isAdmin bool, ban bool) error {
-	usernameLower := strings.ToLower(username)
+func performUserDeletion(username Username, isAdmin bool, ban bool) error {
+	usernameLower := username.ToLower()
 
-	idx := getIdxOfAccountBy("username", usernameLower)
+	idx := getIdxOfAccountBy("username", usernameLower.String())
 	if idx == -1 {
 		return fmt.Errorf("user not found")
 	}
@@ -1218,6 +1287,7 @@ func performUserDeletion(username string, isAdmin bool, ban bool) error {
 
 	go broadcastUserUpdate(usernameLower, "sys._deleted", true)
 
+	uId := usernameLower.Id()
 	usersMutex.Lock()
 	defer usersMutex.Unlock()
 
@@ -1226,7 +1296,7 @@ func performUserDeletion(username string, isAdmin bool, ban bool) error {
 
 		friends := target.GetFriends()
 		for i, f := range friends {
-			if strings.EqualFold(f, usernameLower) {
+			if f == uId {
 				friends = append(friends[:i], friends[i+1:]...)
 				target.SetFriends(friends)
 				break
@@ -1235,7 +1305,7 @@ func performUserDeletion(username string, isAdmin bool, ban bool) error {
 
 		requests := target.GetRequests()
 		for i, r := range requests {
-			if strings.EqualFold(r, usernameLower) {
+			if r == uId {
 				requests = append(requests[:i], requests[i+1:]...)
 				target.SetRequests(requests)
 				break
@@ -1244,7 +1314,7 @@ func performUserDeletion(username string, isAdmin bool, ban bool) error {
 
 		blocked := target.GetBlocked()
 		for i, b := range blocked {
-			if strings.EqualFold(b, usernameLower) {
+			if b == uId {
 				blocked = append(blocked[:i], blocked[i+1:]...)
 				target.SetBlocked(blocked)
 				break
@@ -1254,11 +1324,11 @@ func performUserDeletion(username string, isAdmin bool, ban bool) error {
 
 	go saveUsers()
 
-	go func(target string) {
+	go func(target UserId) {
 		// Update posts
 		postsMutex.Lock()
 		for i := range posts {
-			if strings.EqualFold(posts[i].User, target) {
+			if posts[i].User == target {
 				posts[i].User = "Deleted User"
 			}
 		}
@@ -1271,24 +1341,24 @@ func performUserDeletion(username string, isAdmin bool, ban bool) error {
 		}
 
 		// Remove user storage
-		userDir := "rotur/user_storage/" + target
+		userDir := string("rotur/user_storage/" + target)
 		if err := removeUserDirectory(userDir); err != nil {
 			log.Printf("Error removing user directory %s: %v", userDir, err)
 		}
 
 		// remove file system
-		if err := fs.DeleteUserFileSystem(target); err != nil {
+		if err := fs.DeleteUserFileSystem(target.User().GetUsername()); err != nil {
 			log.Printf("Error deleting user file system: %v", err)
 		}
-	}(usernameLower)
+	}(uId)
 	return nil
 }
 
-func deleteUserAvatar(username string) error {
-	usernameLower := strings.ToLower(username)
+func deleteUserAvatar(userId UserId) error {
+	usernameLower := userId.User().GetUsername().ToLower()
 
 	// Remove user storage
-	pfpPath := "rotur/avatars/" + usernameLower + ".jpg"
+	pfpPath := string("rotur/avatars/" + usernameLower + ".jpg")
 	exists := false
 	if _, err := os.Stat(pfpPath); err == nil {
 		exists = true
@@ -1299,7 +1369,7 @@ func deleteUserAvatar(username string) error {
 		}
 	}
 
-	bannerPath := "rotur/banners/" + usernameLower + ".jpg"
+	bannerPath := string("rotur/banners/" + usernameLower + ".jpg")
 	exists = false
 	if _, err := os.Stat(bannerPath); err == nil {
 		exists = true
@@ -1313,10 +1383,43 @@ func deleteUserAvatar(username string) error {
 	return nil
 }
 
+func renameUserAvatar(userId UserId, newUsername Username) error {
+	usernameLower := userId.User().GetUsername().ToLower()
+
+	fileTypes := []string{".jpg", ".gif"}
+
+	for _, fileType := range fileTypes {
+		filePath := "rotur/avatars/" + usernameLower.String() + fileType
+		exists := false
+		if _, err := os.Stat(filePath); err == nil {
+			exists = true
+		}
+		if exists {
+			newFilePath := "rotur/avatars/" + newUsername.String() + fileType
+			if err := os.Rename(filePath, newFilePath); err != nil {
+				return fmt.Errorf("error renaming user avatar %s: %v", filePath, err)
+			}
+		}
+
+		bannerPath := "rotur/banners/" + usernameLower.String() + fileType
+		exists = false
+		if _, err := os.Stat(bannerPath); err == nil {
+			exists = true
+		}
+		if exists {
+			newBannerPath := string("rotur/banners/" + newUsername.String() + fileType)
+			if err := os.Rename(bannerPath, newBannerPath); err != nil {
+				return fmt.Errorf("error renaming user banner %s: %v", bannerPath, err)
+			}
+		}
+	}
+	return nil
+}
+
 var dailyClaimMutex sync.Mutex
 
 func canClaimDaily(user *User) float64 {
-	username := strings.ToLower(user.GetUsername())
+	username := user.GetUsername().ToLower()
 
 	claimsData := loadDailyClaims()
 
@@ -1338,7 +1441,7 @@ func canClaimDaily(user *User) float64 {
 func timeUntilNextClaim(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	username := strings.ToLower(user.GetUsername())
+	username := user.GetUsername().ToLower()
 
 	claimsData := loadDailyClaims()
 
@@ -1363,7 +1466,7 @@ func timeUntilNextClaim(c *gin.Context) {
 func claimDaily(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	username := strings.ToLower(user.GetUsername())
+	username := user.GetUsername().ToLower()
 
 	waitTime := canClaimDaily(user)
 	if waitTime > 0 {
@@ -1390,26 +1493,26 @@ func claimDaily(c *gin.Context) {
 }
 
 // loadDailyClaims loads daily claims data from rotur_daily.json
-func loadDailyClaims() map[string]float64 {
+func loadDailyClaims() map[Username]float64 {
 	dailyClaimMutex.Lock()
 	defer dailyClaimMutex.Unlock()
 	data, err := os.ReadFile(DAILY_CLAIMS_FILE_PATH)
 	if err != nil {
 		// If file doesn't exist, return empty map
-		return make(map[string]float64)
+		return make(map[Username]float64)
 	}
 
-	var claimsData map[string]float64
+	var claimsData map[Username]float64
 	if err := json.Unmarshal(data, &claimsData); err != nil {
 		// If unmarshal fails, return empty map
-		return make(map[string]float64)
+		return make(map[Username]float64)
 	}
 
 	return claimsData
 }
 
 // saveDailyClaims saves daily claims data to rotur_daily.json
-func saveDailyClaims(claimsData map[string]float64) {
+func saveDailyClaims(claimsData map[Username]float64) {
 	dailyClaimMutex.Lock()
 	defer dailyClaimMutex.Unlock()
 	data, err := json.MarshalIndent(claimsData, "", "  ")

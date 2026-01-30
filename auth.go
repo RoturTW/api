@@ -19,18 +19,18 @@ func authenticateWithKey(key string) *User {
 	return nil
 }
 
-func doesUserOwnKey(username string, key string) bool {
+func doesUserOwnKey(username Username, key string) bool {
 	keyOwnershipCacheMutex.Lock()
 	defer keyOwnershipCacheMutex.Unlock()
 
-	username = strings.ToLower(username)
+	userId := username.Id()
 
 	keysMutex.RLock()
 	defer keysMutex.RUnlock()
 
 	for _, userKey := range keys {
 		if userKey.Key == key {
-			if _, exists := userKey.Users[username]; exists {
+			if _, exists := userKey.Users[userId]; exists {
 				return true
 			}
 			break
@@ -40,11 +40,11 @@ func doesUserOwnKey(username string, key string) bool {
 	return false
 }
 
-func getKeyNextBilling(username string, key string) int64 {
+func getKeyNextBilling(username Username, key string) int64 {
 	keyOwnershipCacheMutex.Lock()
 	defer keyOwnershipCacheMutex.Unlock()
 
-	username = strings.ToLower(username)
+	userId := username.Id()
 
 	var success bool = keysMutex.TryRLock()
 	if success {
@@ -53,8 +53,8 @@ func getKeyNextBilling(username string, key string) int64 {
 
 	for _, userKey := range keys {
 		if userKey.Key == key {
-			if _, exists := userKey.Users[username]; exists {
-				nextBilling := userKey.Users[username].NextBilling
+			if _, exists := userKey.Users[userId]; exists {
+				nextBilling := userKey.Users[userId].NextBilling
 				if nextBilling == nil {
 					return 0
 				}

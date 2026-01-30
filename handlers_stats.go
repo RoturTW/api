@@ -6,7 +6,6 @@ import (
 	"os"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -141,8 +140,8 @@ func getMostGained(c *gin.Context) {
 	monthAgo := time.Now().AddDate(0, -1, 0).UnixMilli()
 
 	type result struct {
-		User   string  `json:"user"`
-		Earned float64 `json:"earned"`
+		User   Username `json:"user"`
+		Earned float64  `json:"earned"`
 	}
 
 	leaderboard := make([]result, 0, len(users))
@@ -212,9 +211,7 @@ func getSystemStats(c *gin.Context) {
 	}
 
 	if len(systems) == 0 {
-		c.JSON(404, gin.H{
-			"error": "No system data available",
-		})
+		c.JSON(404, gin.H{"error": "No system data available"})
 		return
 	}
 
@@ -235,26 +232,27 @@ func getFollowersStats(c *gin.Context) {
 	}
 
 	type followerStats struct {
-		Username      string `json:"username"`
-		FollowerCount int    `json:"follower_count"`
+		Username      Username `json:"username"`
+		FollowerCount int      `json:"follower_count"`
 	}
 
 	followersList := make([]followerStats, 0, max*2)
 
-	userStatusMap := make(map[string]bool)
+	userStatusMap := make(map[Username]bool)
 	usersMutex.RLock()
 	for _, user := range users {
 		if user.IsBanned() || user.IsPrivate() {
 			continue
 		}
 		username := user.GetUsername()
-		userStatusMap[strings.ToLower(username)] = true
+		userStatusMap[username.ToLower()] = true
 	}
 	usersMutex.RUnlock()
 
 	followersMutex.RLock()
-	for username, data := range followersData {
-		if userStatusMap[strings.ToLower(username)] {
+	for userId, data := range followersData {
+		username := userId.User().GetUsername()
+		if userStatusMap[username.ToLower()] {
 			followersList = append(followersList, followerStats{
 				Username:      username,
 				FollowerCount: len(data.Followers),

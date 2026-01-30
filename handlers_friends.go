@@ -1,8 +1,6 @@
 package main
 
 import (
-	"strings"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -10,27 +8,28 @@ import (
 func sendFriendRequest(c *gin.Context) {
 	sender := c.MustGet("user").(*User)
 
-	targetUsername := c.Param("username")
+	targetUsername := Username(c.Param("username"))
 	if targetUsername == "" {
 		c.JSON(400, gin.H{"error": "Username cannot be empty"})
 		return
 	}
 
-	senderName := strings.ToLower(sender.GetUsername())
-	targetLower := strings.ToLower(targetUsername)
+	senderName := sender.GetUsername().ToLower()
+	senderId := sender.GetId()
+	targetLower := targetUsername.ToLower()
 
 	if senderName == targetLower {
 		c.JSON(400, gin.H{"error": "You need other friends"})
 		return
 	}
 
-	idx := getIdxOfAccountBy("username", targetLower)
+	idx := getIdxOfAccountBy("username", targetLower.String())
 	if idx == -1 {
 		c.JSON(404, gin.H{"error": "Account does not exist"})
 		return
 	}
 	target, _ := getUserByIdx(idx)
-	if isUserBlockedBy(*target, senderName) {
+	if isUserBlockedBy(*target, senderId) {
 		c.JSON(400, gin.H{"error": "You cant send friend requests to this user"})
 		return
 	}
@@ -61,19 +60,19 @@ func sendFriendRequest(c *gin.Context) {
 // POST /friends/accept/:username  (username = original requester)
 func acceptFriendRequest(c *gin.Context) {
 	current := c.MustGet("user").(*User)
-	requesterName := strings.ToLower(c.Param("username"))
+	requesterName := Username(c.Param("username")).ToLower()
 	if requesterName == "" {
 		c.JSON(400, gin.H{"error": "Username cannot be empty"})
 		return
 	}
 
-	currentName := strings.ToLower(current.GetUsername())
+	currentName := current.GetUsername().ToLower()
 	if currentName == requesterName {
 		c.JSON(400, gin.H{"error": "Invalid Operation"})
 		return
 	}
 
-	foundUsers, err := getAccountsBy("username", requesterName, 1)
+	foundUsers, err := getAccountsBy("username", requesterName.String(), 1)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "Account Does Not Exist"})
 		return
@@ -97,7 +96,7 @@ func acceptFriendRequest(c *gin.Context) {
 // POST /friends/reject/:username
 func rejectFriendRequest(c *gin.Context) {
 	current := c.MustGet("user").(*User)
-	requesterName := strings.ToLower(c.Param("username"))
+	requesterName := Username(c.Param("username")).ToLower()
 	if requesterName == "" {
 		c.JSON(400, gin.H{"error": "Username cannot be empty"})
 		return
@@ -117,19 +116,19 @@ func rejectFriendRequest(c *gin.Context) {
 // POST /friends/remove/:username
 func removeFriend(c *gin.Context) {
 	current := c.MustGet("user").(*User)
-	otherName := strings.ToLower(c.Param("username"))
+	otherName := Username(c.Param("username")).ToLower()
 	if otherName == "" {
 		c.JSON(400, gin.H{"error": "Username cannot be empty"})
 		return
 	}
 
-	currentName := strings.ToLower(current.GetUsername())
+	currentName := current.GetUsername().ToLower()
 	if currentName == otherName {
 		c.JSON(400, gin.H{"error": "Cannot Remove Yourself"})
 		return
 	}
 
-	foundUsers, err := getAccountsBy("username", otherName, 1)
+	foundUsers, err := getAccountsBy("username", otherName.String(), 1)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "Account Does Not Exist"})
 		return
@@ -153,5 +152,5 @@ func removeFriend(c *gin.Context) {
 func getFriends(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	c.JSON(200, gin.H{"friends": user.GetFriends()})
+	c.JSON(200, gin.H{"friends": user.GetFriendUsers()})
 }

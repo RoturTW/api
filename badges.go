@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"strings"
 	"sync"
 	"time"
 )
@@ -12,10 +11,10 @@ import (
 const BADGES_FILE_PATH = "./rotur/badges.json"
 
 type JSONBadge struct {
-	Name        string   `json:"name"`
-	Icon        string   `json:"icon"`
-	Description string   `json:"description"`
-	Users       []string `json:"users"`
+	Name        string     `json:"name"`
+	Icon        string     `json:"icon"`
+	Description string     `json:"description"`
+	Users       []Username `json:"users"`
 }
 
 var (
@@ -110,16 +109,12 @@ func calculateUserBadges(user *User) []Badge {
 		})
 	}
 
-	if marriage := user.Get("sys.marriage"); marriage != nil {
-		if marriageMap, ok := marriage.(map[string]any); ok {
-			if status, ok := marriageMap["status"].(string); ok && status == "married" {
-				badges = append(badges, Badge{
-					Name:        "married",
-					Icon:        "scale 0.9 c #f33 w 3 cutcircle -4.5 4 5 -3 90 cutcircle 4.5 4 5 3 90 line -8.5 1 0 -9 line 8.5 1 0 -9 w 9 line -4.5 4 0 -1 cont 4.5 4 dot 0 -2.5",
-					Description: "This user got married, how cute!",
-				})
-			}
-		}
+	if marriage := user.GetMarriage(); marriage.Status == "married" {
+		badges = append(badges, Badge{
+			Name:        "married",
+			Icon:        "scale 0.9 c #f33 w 3 cutcircle -4.5 4 5 -3 90 cutcircle 4.5 4 5 3 90 line -8.5 1 0 -9 line 8.5 1 0 -9 w 9 line -4.5 4 0 -1 cont 4.5 4 dot 0 -2.5",
+			Description: "This user got married, how cute!",
+		})
 	}
 
 	subscription := user.GetSubscription()
@@ -131,11 +126,11 @@ func calculateUserBadges(user *User) []Badge {
 		})
 	}
 
-	username := strings.ToLower(user.GetUsername())
+	username := user.GetUsername().ToLower()
 	jsonBadgesMutex.RLock()
 	for _, jsonBadge := range jsonBadges {
 		for _, badgeUser := range jsonBadge.Users {
-			if strings.ToLower(badgeUser) == username {
+			if badgeUser == username {
 				badges = append(badges, Badge{
 					Name:        jsonBadge.Name,
 					Icon:        jsonBadge.Icon,

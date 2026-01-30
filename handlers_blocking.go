@@ -2,7 +2,6 @@ package main
 
 import (
 	"slices"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -10,35 +9,35 @@ import (
 func getBlocking(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	c.JSON(200, user.GetBlocked())
+	c.JSON(200, user.GetBlockedUsers())
 }
 
 func blockUser(c *gin.Context) {
 	user := c.MustGet("user").(*User)
-	username := strings.ToLower(c.Param("username"))
+	userId := Username(c.Param("username")).Id()
 
-	if username == "" {
+	if userId == "" {
 		c.JSON(400, gin.H{"error": "Username is required"})
 		return
 	}
 
-	if !accountExists(username) {
+	if !accountExists(userId) {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
 
-	if strings.EqualFold(user.GetUsername(), username) {
+	if user.GetId() == userId {
 		c.JSON(400, gin.H{"error": "Cannot block yourself"})
 		return
 	}
 
 	blocked := user.GetBlocked()
-	if slices.Contains(blocked, username) {
+	if slices.Contains(blocked, userId) {
 		c.JSON(400, gin.H{"error": "User already blocked"})
 		return
 	}
 
-	user.AddBlocked(username)
+	user.AddBlocked(userId)
 
 	go saveUsers()
 
@@ -47,9 +46,9 @@ func blockUser(c *gin.Context) {
 
 func unblockUser(c *gin.Context) {
 	user := c.MustGet("user").(*User)
-	username := strings.ToLower(c.Param("username"))
+	userId := Username(c.Param("username")).Id()
 
-	if username == "" {
+	if userId == "" {
 		c.JSON(400, gin.H{"error": "Username is required"})
 		return
 	}
@@ -57,7 +56,7 @@ func unblockUser(c *gin.Context) {
 	blocked := user.GetBlocked()
 	index := -1
 	for i, b := range blocked {
-		if b == username {
+		if b == userId {
 			index = i
 			break
 		}
@@ -68,7 +67,7 @@ func unblockUser(c *gin.Context) {
 		return
 	}
 
-	user.RemoveBlocked(username)
+	user.RemoveBlocked(userId)
 
 	go saveUsers()
 

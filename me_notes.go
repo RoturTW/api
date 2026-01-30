@@ -3,7 +3,7 @@ package main
 import "github.com/gin-gonic/gin"
 
 func noteUser(c *gin.Context) {
-	username := c.Param("username")
+	username := Username(c.Param("username"))
 	if username == "" {
 		c.JSON(400, gin.H{"error": "Username is required"})
 		return
@@ -39,7 +39,7 @@ func noteUser(c *gin.Context) {
 }
 
 func deleteNote(c *gin.Context) {
-	username := c.Param("username")
+	username := Username(c.Param("username"))
 	if username == "" {
 		c.JSON(400, gin.H{"error": "Username is required"})
 		return

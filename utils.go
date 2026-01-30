@@ -175,25 +175,21 @@ func containsDerogatory(text string) bool {
 	return false
 }
 
-func accountExists(username string) bool {
+func accountExists(userId UserId) bool {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 
-	for _, user := range users {
-		if strings.EqualFold(user.GetUsername(), username) {
-			return true
-		}
-	}
-	return false
+	_, ok := idToUser[userId]
+	return ok
 }
 
-func isUserBlockedBy(user User, username string) bool {
+func isUserBlockedBy(user User, userId UserId) bool {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 
 	blocked := user.GetBlocked()
-	for _, blockedUser := range blocked {
-		if strings.EqualFold(blockedUser, username) {
+	for _, blockedId := range blocked {
+		if blockedId == userId {
 			return true
 		}
 	}

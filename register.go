@@ -126,7 +126,7 @@ func handleUserGoogle(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	usernameLower := strings.ToLower(username)
+	usernameLower := username.ToLower()
 
 	password := generateRandomMD5LikePasswordHash()
 
@@ -171,7 +171,7 @@ func handleUserGoogle(c *gin.Context) {
 	if picURL, ok := payload.Claims["picture"]; ok {
 		picture := strings.TrimSpace(fmt.Sprintf("%v", picURL))
 		if picture != "" {
-			go func(token string, username string, pictureURL string) {
+			go func(token string, username Username, pictureURL string) {
 				if err := uploadGoogleProfilePictureToRotur(token, pictureURL); err == nil {
 					broadcastUserUpdate(username, "pfp", "https://avatars.rotur.dev/"+username)
 					go saveUsers()
@@ -264,7 +264,7 @@ func encodeBase64(b []byte) string {
 	return out.String()
 }
 
-func generateUsernameFromGoogle(payload *idtoken.Payload) (string, error) {
+func generateUsernameFromGoogle(payload *idtoken.Payload) (Username, error) {
 	var base string
 	if v, ok := payload.Claims["given_name"]; ok {
 		base = fmt.Sprintf("%v", v)
@@ -326,7 +326,7 @@ func generateUsernameFromGoogle(payload *idtoken.Payload) (string, error) {
 	if regexp.MustCompile("[^a-z0-9_]").FindStringIndex(base) != nil {
 		return "", errors.New("generated username contains invalid characters")
 	}
-	return base, nil
+	return Username(base), nil
 }
 
 func generateRandomMD5LikePasswordHash() string {

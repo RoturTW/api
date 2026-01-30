@@ -11,12 +11,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+type keyCreationResp struct {
+	Status       string        `json:"status,omitempty"`
+	Key          string        `json:"key,omitempty"`
+	Type         string        `json:"type,omitempty"`
+	Price        int           `json:"price,omitempty"`
+	Subscription *Subscription `json:"subscription,omitempty"`
+}
+
 func createKey(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
 	name := c.Query("name")
 	if name == "" {
-		c.JSON(400, gin.H{"error": "Key name is required"})
+		c.JSON(400, ErrorResponse{Error: "Key name is required"})
 		return
 	}
 
@@ -49,22 +61,22 @@ func createKey(c *gin.Context) {
 	defer keysMutex.Unlock()
 
 	// Check if key name already exists
-	username := strings.ToLower(user.GetUsername())
+	userId := user.GetUsername().Id()
 	total_keys := 0
 	for _, key := range keys {
-		if strings.EqualFold(key.Creator, username) {
+		if key.Creator == userId {
 			total_keys++
 		}
 	}
 	if total_keys > max_keys {
-		c.JSON(400, gin.H{"error": fmt.Sprintf("You can only have up to %d free keys", max_keys)})
+		c.JSON(400, ErrorResponse{Error: fmt.Sprintf("You can only have up to %d free keys", max_keys)})
 		return
 	}
 
 	newKey := Key{
 		Key:         generateToken(),
-		Creator:     strings.ToLower(user.GetUsername()),
-		Users:       make(map[string]KeyUserData),
+		Creator:     userId,
+		Users:       make(map[UserId]KeyUserData),
 		Name:        &name,
 		Price:       price,
 		Type:        "standard",
@@ -102,38 +114,42 @@ func createKey(c *gin.Context) {
 	}
 
 	// Add creator to key users
-	newKey.Users[strings.ToLower(user.GetUsername())] = KeyUserData{
-		Time: float64(time.Now().Unix()),
+	newKey.Users[user.GetId()] = KeyUserData{
+		Time: time.Now().Unix(),
 	}
 
 	keys = append(keys, newKey)
 
 	go saveKeys()
 
-	c.JSON(200, gin.H{
-		"status":       "Key created successfully",
-		"key":          newKey.Key,
-		"type":         newKey.Type,
-		"price":        newKey.Price,
-		"subscription": newKey.Subscription,
+	c.JSON(200, keyCreationResp{
+		Status:       "Key created successfully",
+		Key:          newKey.Key,
+		Type:         newKey.Type,
+		Price:        newKey.Price,
+		Subscription: newKey.Subscription,
 	})
 }
 
 func getMyKeys(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	username := strings.ToLower(user.GetUsername())
+	userId := user.GetId()
 
 	keysMutex.RLock()
-	userKeys := make([]Key, 0)
+	userKeys := make([]NetKey, 0)
 	for _, key := range keys {
-		if _, hasAccess := key.Users[username]; hasAccess {
-			if key.Creator != username {
-				key.Users = make(map[string]KeyUserData)
+		if _, hasAccess := key.Users[userId]; hasAccess {
+			users := make(map[Username]KeyUserData)
+			if key.Creator != userId {
 				key.Data = nil
 				key.TotalIncome = 0
+			} else {
+				for k, v := range key.Users {
+					users[k.User().GetUsername()] = v
+				}
 			}
-			userKeys = append(userKeys, key)
+			userKeys = append(userKeys, key.ToNet())
 		}
 	}
 	keysMutex.RUnlock()
@@ -142,7 +158,7 @@ func getMyKeys(c *gin.Context) {
 }
 
 func checkKey(c *gin.Context) {
-	username := c.Param("username")
+	username := Username(c.Param("username"))
 	keyToCheck := c.Query("key")
 
 	if keyToCheck == "" {
@@ -163,9 +179,9 @@ func revokeKey(c *gin.Context) {
 	id := c.Param("id")
 	user := c.MustGet("user").(*User)
 
-	targetUser := c.Query("user")
-	if targetUser == "" {
-		c.JSON(400, gin.H{"error": "Target user is required"})
+	targetId := Username(c.Query("user")).Id()
+	if !accountExists(targetId) {
+		c.JSON(400, gin.H{"error": "Target user not found"})
 		return
 	}
 
@@ -174,16 +190,16 @@ func revokeKey(c *gin.Context) {
 
 	for i := range keys {
 		if keys[i].Key == id {
-			if !strings.EqualFold(keys[i].Creator, user.GetUsername()) {
+			if keys[i].Creator != user.GetId() {
 				c.JSON(403, gin.H{"error": "You can only revoke access to keys you created"})
 				return
 			}
-			if strings.EqualFold(targetUser, keys[i].Creator) {
+			if targetId == keys[i].Creator {
 				c.JSON(400, gin.H{"error": "You cannot revoke access from the key creator"})
 				return
 			}
 
-			delete(keys[i].Users, strings.ToLower(targetUser))
+			delete(keys[i].Users, targetId)
 
 			go saveKeys()
 
@@ -204,8 +220,8 @@ func deleteKey(c *gin.Context) {
 
 	for i, key := range keys {
 		if key.Key == id {
-			if !strings.EqualFold(key.Creator, user.GetUsername()) {
-				c.JSON(403, gin.H{"error": "You can only delete keys you created"})
+			if key.Creator != user.GetId() {
+				c.JSON(403, ErrorResponse{Error: "You can only delete keys you created"})
 				return
 			}
 
@@ -219,7 +235,7 @@ func deleteKey(c *gin.Context) {
 		}
 	}
 
-	c.JSON(404, gin.H{"error": "Key not found"})
+	c.JSON(404, ErrorResponse{Error: "Key not found"})
 }
 
 func updateKey(c *gin.Context) {
@@ -228,7 +244,7 @@ func updateKey(c *gin.Context) {
 	data := c.Query("data")
 	user := c.MustGet("user").(*User)
 	if key == "" {
-		c.JSON(403, gin.H{"error": "update key and data are required"})
+		c.JSON(403, ErrorResponse{Error: "update key and data are required"})
 		return
 	}
 
@@ -244,8 +260,8 @@ func updateKey(c *gin.Context) {
 
 	for i := range keys {
 		if keys[i].Key == id {
-			if !strings.EqualFold(keys[i].Creator, user.GetUsername()) {
-				c.JSON(403, gin.H{"error": "You can only update keys you created"})
+			if keys[i].Creator != user.GetId() {
+				c.JSON(403, ErrorResponse{Error: "You can only update keys you created"})
 				return
 			}
 
@@ -258,7 +274,7 @@ func updateKey(c *gin.Context) {
 		}
 	}
 
-	c.JSON(404, gin.H{"error": "Key not found"})
+	c.JSON(404, ErrorResponse{Error: "Key not found"})
 }
 
 func setKeyName(c *gin.Context) {
@@ -276,8 +292,8 @@ func setKeyName(c *gin.Context) {
 
 	for i := range keys {
 		if keys[i].Key == id {
-			if !strings.EqualFold(keys[i].Creator, user.GetUsername()) {
-				c.JSON(403, gin.H{"error": "You can only rename keys you created"})
+			if keys[i].Creator != user.GetId() {
+				c.JSON(403, ErrorResponse{Error: "You can only rename keys you created"})
 				return
 			}
 
@@ -290,7 +306,7 @@ func setKeyName(c *gin.Context) {
 		}
 	}
 
-	c.JSON(404, gin.H{"error": "Key not found"})
+	c.JSON(404, ErrorResponse{Error: "Key not found"})
 }
 
 func getKey(c *gin.Context) {
@@ -306,19 +322,24 @@ func getKey(c *gin.Context) {
 		}
 	}
 
-	c.JSON(404, gin.H{"error": "Key not found"})
+	c.JSON(404, ErrorResponse{Error: "Key not found"})
 }
 
 func adminAddUserToKey(c *gin.Context) {
 	id := c.Param("id")
 	user := c.MustGet("user").(*User)
 
-	targetUser := c.Query("user")
+	targetUser := Username(c.Query("user"))
 	if targetUser == "" {
-		targetUser = c.Query("username")
+		targetUser = Username(c.Query("username"))
 	}
 	if targetUser == "" {
-		c.JSON(400, gin.H{"error": "Target user is required"})
+		c.JSON(400, ErrorResponse{Error: "Target user is required"})
+		return
+	}
+	targetId := targetUser.Id()
+	if !accountExists(targetId) {
+		c.JSON(400, ErrorResponse{Error: "Target user not found"})
 		return
 	}
 
@@ -327,12 +348,12 @@ func adminAddUserToKey(c *gin.Context) {
 
 	for i := range keys {
 		if keys[i].Key == id {
-			if !strings.EqualFold(keys[i].Creator, user.GetUsername()) {
-				c.JSON(403, gin.H{"error": "You can only add users to your own keys"})
+			if keys[i].Creator != user.GetId() {
+				c.JSON(403, ErrorResponse{Error: "You can only add users to your own keys"})
 				return
 			}
-			keys[i].Users[strings.ToLower(targetUser)] = KeyUserData{
-				Time: float64(time.Now().Unix()),
+			keys[i].Users[targetId] = KeyUserData{
+				Time: time.Now().Unix(),
 			}
 
 			go saveKeys()
@@ -342,19 +363,24 @@ func adminAddUserToKey(c *gin.Context) {
 		}
 	}
 
-	c.JSON(404, gin.H{"error": "Key not found"})
+	c.JSON(404, ErrorResponse{Error: "Key not found"})
 }
 
 func adminRemoveUserFromKey(c *gin.Context) {
 	id := c.Param("id")
 	user := c.MustGet("user").(*User)
 
-	targetUser := c.Query("user")
+	targetUser := Username(c.Query("user"))
 	if targetUser == "" {
-		targetUser = c.Query("username")
+		targetUser = Username(c.Query("username"))
 	}
 	if targetUser == "" {
-		c.JSON(400, gin.H{"error": "Target user is required"})
+		c.JSON(400, ErrorResponse{Error: "Target user is required"})
+		return
+	}
+	targetId := targetUser.Id()
+	if !accountExists(targetId) {
+		c.JSON(400, ErrorResponse{Error: "Target user not found"})
 		return
 	}
 
@@ -363,11 +389,11 @@ func adminRemoveUserFromKey(c *gin.Context) {
 
 	for i := range keys {
 		if keys[i].Key == id {
-			if !strings.EqualFold(keys[i].Creator, user.GetUsername()) {
-				c.JSON(403, gin.H{"error": "You can only remove users from your own keys"})
+			if keys[i].Creator != user.GetId() {
+				c.JSON(403, ErrorResponse{Error: "You can only remove users from your own keys"})
 				return
 			}
-			delete(keys[i].Users, strings.ToLower(targetUser))
+			delete(keys[i].Users, targetId)
 
 			go saveKeys()
 
@@ -376,7 +402,7 @@ func adminRemoveUserFromKey(c *gin.Context) {
 		}
 	}
 
-	c.JSON(404, gin.H{"error": "Key not found"})
+	c.JSON(404, ErrorResponse{Error: "Key not found"})
 }
 
 func buyKey(c *gin.Context) {
@@ -389,25 +415,25 @@ func buyKey(c *gin.Context) {
 	for i := range keys {
 		if keys[i].Key == id {
 			if keys[i].Price < 0 {
-				c.JSON(400, gin.H{"error": "Key is not for sale"})
+				c.JSON(400, ErrorResponse{Error: "Key is not for sale"})
 				return
 			}
 
-			username := strings.ToLower(user.GetUsername())
-			if _, hasAccess := keys[i].Users[username]; hasAccess {
-				c.JSON(400, gin.H{"error": "You already have access to this key"})
+			userId := user.GetId()
+			if _, hasAccess := keys[i].Users[userId]; hasAccess {
+				c.JSON(400, ErrorResponse{Error: "You already have access to this key"})
 				return
 			}
 
 			var balance = user.GetCredits()
 			if balance < float64(keys[i].Price) {
-				c.JSON(400, gin.H{"error": "Insufficient balance to buy this key"})
+				c.JSON(400, ErrorResponse{Error: "Insufficient balance to buy this key"})
 				return
 			}
 
 			// Add user to key
 			userData := KeyUserData{
-				Time:  float64(time.Now().Unix()),
+				Time:  time.Now().Unix(),
 				Price: keys[i].Price,
 			}
 
@@ -441,7 +467,7 @@ func buyKey(c *gin.Context) {
 				userData.NextBilling = nextBillingTime.UnixMilli()
 			}
 
-			keys[i].Users[username] = userData
+			keys[i].Users[userId] = userData
 
 			// Update total income for the key
 			keys[i].TotalIncome += keys[i].Price
@@ -452,7 +478,7 @@ func buyKey(c *gin.Context) {
 			usersMutex.Lock()
 			userIndex := -1
 			for j, u := range users {
-				if strings.EqualFold(u.GetUsername(), username) {
+				if u.GetId() == userId {
 					userIndex = j
 					break
 				}
@@ -460,7 +486,7 @@ func buyKey(c *gin.Context) {
 
 			ownerIndex := -1
 			for j, u := range users {
-				if strings.EqualFold(u.GetUsername(), keys[i].Creator) {
+				if u.GetId() == keys[i].Creator {
 					ownerIndex = j
 					break
 				}
@@ -501,18 +527,19 @@ func buyKey(c *gin.Context) {
 				}
 
 				if len(*keys[i].Webhook) > 0 {
+					username := user.GetUsername()
 					_ = sendWebhook(*keys[i].Webhook, map[string]any{
 						"username":  username,    // purchaser
 						"key":       keys[i].Key, // id
 						"price":     keys[i].Price,
-						"content":   username + " purchased key " + keys[i].Key + " for " + strconv.Itoa(keys[i].Price) + " credits",
+						"content":   username.String() + " purchased key " + keys[i].Key + " for " + strconv.Itoa(keys[i].Price) + " credits",
 						"timestamp": time.Now().Unix(),
 					})
 				}
 
 				go saveUsers()
 			} else {
-				c.JSON(500, gin.H{"error": "User not found in users list"})
+				c.JSON(500, ErrorResponse{Error: "User not found in users list"})
 				return
 			}
 
@@ -521,14 +548,14 @@ func buyKey(c *gin.Context) {
 		}
 	}
 
-	c.JSON(404, gin.H{"error": "Key not found"})
+	c.JSON(404, ErrorResponse{Error: "Key not found"})
 }
 
 func cancelKey(c *gin.Context) {
 	id := c.Param("id")
 	user := c.MustGet("user").(*User)
 
-	username := strings.ToLower(user.GetUsername())
+	userId := user.GetId()
 
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
@@ -538,16 +565,16 @@ func cancelKey(c *gin.Context) {
 			continue
 		}
 
-		userData, ok := keys[i].Users[username]
+		userData, ok := keys[i].Users[userId]
 		if !ok {
-			c.JSON(404, gin.H{"error": "You don't have this key"})
+			c.JSON(404, ErrorResponse{Error: "You don't have this key"})
 			return
 		}
 
 		// Subscription keys: keep access until next billing date, then remove.
 		if keys[i].Subscription != nil {
 			if userData.NextBilling == nil {
-				c.JSON(400, gin.H{"error": "This subscription has no next_billing date"})
+				c.JSON(400, ErrorResponse{Error: "This subscription has no next_billing date"})
 				return
 			}
 
@@ -560,7 +587,7 @@ func cancelKey(c *gin.Context) {
 			case int:
 				nextBilling = int64(v)
 			default:
-				c.JSON(400, gin.H{"error": "Invalid next_billing type"})
+				c.JSON(400, ErrorResponse{Error: "Invalid next_billing type"})
 				return
 			}
 
@@ -571,7 +598,7 @@ func cancelKey(c *gin.Context) {
 			}
 
 			userData.CancelAt = nextBilling
-			keys[i].Users[username] = userData
+			keys[i].Users[userId] = userData
 			go saveKeys()
 
 			c.JSON(200, gin.H{
@@ -582,7 +609,7 @@ func cancelKey(c *gin.Context) {
 		}
 
 		// Non-subscription keys: cancel immediately.
-		delete(keys[i].Users, username)
+		delete(keys[i].Users, userId)
 		go saveKeys()
 		c.JSON(200, gin.H{"status": "Cancelled"})
 		return
@@ -595,7 +622,7 @@ func debugSubscriptionsEndpoint(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
 	// Only allow admin users to access debug info
-	if strings.ToLower(user.GetUsername()) != "mist" {
+	if user.GetUsername().ToLower() != "mist" {
 		c.JSON(403, gin.H{"error": "Admin access required"})
 		return
 	}
@@ -651,14 +678,14 @@ func checkSubscriptions() {
 			}
 
 			subscriptionsProcessed++
-			usersToRemove := make([]string, 0)
+			usersToRemove := make([]UserId, 0)
 
-			ownerIndex := getIdxOfAccountBy("username", key.Creator)
+			ownerIndex := getIdxOfAccountBy("username", key.Creator.String())
 			if ownerIndex == -1 {
 				continue
 			}
 
-			for username, userData := range key.Users {
+			for userId, userData := range key.Users {
 				if userData.NextBilling == nil {
 					continue
 				}
@@ -679,11 +706,13 @@ func checkSubscriptions() {
 							cancelAt = cancelAt * 1000
 						}
 						if time.Now().UnixMilli() >= cancelAt {
-							usersToRemove = append(usersToRemove, username)
+							usersToRemove = append(usersToRemove, userId)
 							continue
 						}
 					}
 				}
+
+				username := userId.User().GetUsername()
 
 				var nextBilling int64
 				switch v := userData.NextBilling.(type) {
@@ -709,18 +738,18 @@ func checkSubscriptions() {
 					if userData.Price != 0 {
 						log.Printf("Processing subscription payment for %s for key %s (amount: %.2f)", username, key.Key, float64(userData.Price))
 
-						userIndex := getIdxOfAccountBy("username", username)
+						userIndex := getIdxOfAccountBy("username", username.String())
 
 						if userIndex == -1 {
 							log.Printf("User %s not found for key %s", username, key.Key)
-							usersToRemove = append(usersToRemove, username)
+							usersToRemove = append(usersToRemove, userId)
 							continue
 						}
 
 						if userIndex == ownerIndex {
 							nextBillingTime := computeNextBilling(key.Subscription)
 							userData.NextBilling = nextBillingTime.UnixMilli()
-							key.Users[username] = userData
+							key.Users[userId] = userData
 							continue
 						}
 
@@ -741,7 +770,7 @@ func checkSubscriptions() {
 								"key":      key.Key,
 								"key_name": key.Name,
 							})
-							usersToRemove = append(usersToRemove, username)
+							usersToRemove = append(usersToRemove, userId)
 							continue
 						}
 						currencyFloat -= price
@@ -778,14 +807,14 @@ func checkSubscriptions() {
 
 						newNextBilling := nextBillingTime.UnixMilli()
 						userData.NextBilling = newNextBilling
-						key.Users[username] = userData
+						key.Users[userId] = userData
 
 						if key.Webhook != nil && len(*key.Webhook) > 0 {
 							_ = sendWebhook(*key.Webhook, map[string]any{
 								"username":  username, // purchaser
 								"key":       key.Key,  // id
 								"price":     key.Price,
-								"content":   username + " was charged by key: " + key.Key + " for " + strconv.Itoa(key.Price) + " credits",
+								"content":   username.String() + " was charged by key: " + key.Key + " for " + strconv.Itoa(key.Price) + " credits",
 								"timestamp": time.Now().Unix(),
 							})
 						}

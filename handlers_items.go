@@ -15,23 +15,23 @@ func transferItem(c *gin.Context) {
 
 	user := c.MustGet("user").(*User)
 
-	targetUsername := c.Query("username")
+	targetUsername := Username(c.Query("username"))
 	if targetUsername == "" {
-		targetUsername = c.Query("to")
+		targetUsername = Username(c.Query("to"))
 	}
 	if targetUsername == "" {
 		c.JSON(400, gin.H{"error": "Target username is required"})
 		return
 	}
+	targetId := targetUsername.Id()
 
 	// Check if target user exists
-	idx := getIdxOfAccountBy("username", strings.ToLower(targetUsername))
-	if idx == -1 {
+	if !accountExists(targetId) {
 		c.JSON(404, gin.H{"error": "Target user not found"})
 		return
 	}
 
-	if strings.EqualFold(user.GetUsername(), targetUsername) {
+	if targetUsername == user.GetUsername() {
 		c.JSON(400, gin.H{"error": "You cannot transfer an item to yourself"})
 		return
 	}
@@ -52,20 +52,20 @@ func transferItem(c *gin.Context) {
 		return
 	}
 
-	if !strings.EqualFold(targetItem.Owner, user.GetUsername()) {
+	if targetItem.Owner != user.GetId() {
 		c.JSON(403, gin.H{"error": "You are not authorized to transfer this item"})
 		return
 	}
 
 	// Transfer the item
 	oldOwner := targetItem.Owner
-	targetItem.Owner = strings.ToLower(targetUsername)
+	targetItem.Owner = targetId
 
 	// Add transfer history
 	transferRecord := TransferHistory{
 		From:      &oldOwner,
-		To:        strings.ToLower(targetUsername),
-		Timestamp: float64(time.Now().Unix()),
+		To:        targetId,
+		Timestamp: time.Now().Unix(),
 		Type:      "transfer",
 	}
 	targetItem.TransferHistory = append(targetItem.TransferHistory, transferRecord)
@@ -73,14 +73,14 @@ func transferItem(c *gin.Context) {
 	go saveItems()
 
 	// Notify target user
-	addUserEvent(strings.ToLower(targetUsername), "item_received", map[string]any{
+	addUserEvent(targetId, "item_received", map[string]any{
 		"item_name":     targetItem.Name,
 		"from":          user.GetUsername(),
 		"transfer_type": "transfer",
 	})
 
 	c.JSON(200, gin.H{
-		"message": "Item '" + targetItem.Name + "' transferred successfully to " + targetUsername,
+		"message": "Item '" + targetItem.Name + "' transferred successfully to " + targetUsername.String(),
 	})
 }
 
@@ -112,7 +112,7 @@ func buyItem(c *gin.Context) {
 	}
 
 	// Check if user is trying to buy their own item
-	if strings.EqualFold(user.GetUsername(), targetItem.Owner) {
+	if user.GetId() == targetItem.Owner {
 		c.JSON(400, gin.H{"error": "You cannot buy your own item"})
 		return
 	}
@@ -127,14 +127,14 @@ func buyItem(c *gin.Context) {
 
 	// Process the purchase
 	oldOwner := targetItem.Owner
-	targetItem.Owner = strings.ToLower(user.GetUsername())
+	targetItem.Owner = user.GetId()
 	targetItem.Selling = false // Remove from sale after purchase
 
 	// Add transfer history
 	transferRecord := TransferHistory{
 		From:      &oldOwner,
-		To:        strings.ToLower(user.GetUsername()),
-		Timestamp: float64(time.Now().Unix()),
+		To:        user.GetId(),
+		Timestamp: time.Now().Unix(),
 		Type:      "purchase",
 		Price:     &targetItem.Price,
 	}
@@ -155,7 +155,7 @@ func buyItem(c *gin.Context) {
 		"price":     targetItem.Price,
 	})
 
-	addUserEvent(strings.ToLower(user.GetUsername()), "item_purchased", map[string]any{
+	addUserEvent(user.GetId(), "item_purchased", map[string]any{
 		"item_name": targetItem.Name,
 		"seller":    oldOwner,
 		"price":     targetItem.Price,
@@ -187,7 +187,7 @@ func stopSellingItem(c *gin.Context) {
 		return
 	}
 
-	if !strings.EqualFold(targetItem.Owner, user.GetUsername()) {
+	if targetItem.Owner != user.GetId() {
 		c.JSON(403, gin.H{"error": "You are not authorized to modify this item"})
 		return
 	}
@@ -236,7 +236,7 @@ func setItemPrice(c *gin.Context) {
 		return
 	}
 
-	if !strings.EqualFold(targetItem.Owner, user.GetUsername()) {
+	if targetItem.Owner != user.GetId() {
 		c.JSON(403, gin.H{"error": "You are not authorized to modify this item"})
 		return
 	}
@@ -316,14 +316,14 @@ func createItem(c *gin.Context) {
 		Description: description,
 		Price:       price,
 		Selling:     selling,
-		Author:      strings.ToLower(user.GetUsername()),
-		Owner:       strings.ToLower(user.GetUsername()),
+		Author:      user.GetId(),
+		Owner:       user.GetId(),
 		PrivateData: itemData["data"],
-		Created:     float64(time.Now().Unix()),
+		Created:     time.Now().Unix(),
 		TransferHistory: []TransferHistory{{
 			From:      nil,
-			To:        strings.ToLower(user.GetUsername()),
-			Timestamp: float64(time.Now().Unix()),
+			To:        user.GetId(),
+			Timestamp: time.Now().Unix(),
 			Type:      "creation",
 		}},
 		TotalIncome: 0,
@@ -335,7 +335,7 @@ func createItem(c *gin.Context) {
 
 	go saveItems()
 
-	c.JSON(201, newItem)
+	c.JSON(201, newItem.ToNet())
 }
 
 func getItem(c *gin.Context) {
@@ -365,11 +365,11 @@ func getItem(c *gin.Context) {
 	}
 
 	// Hide private data unless user is the owner
-	if user == nil || !strings.EqualFold(user.GetUsername(), targetItem.Owner) {
+	if user == nil || user.GetId() != targetItem.Owner {
 		itemToReturn.PrivateData = nil
 	}
 
-	c.JSON(200, itemToReturn)
+	c.JSON(200, itemToReturn.ToNet())
 }
 
 func deleteItem(c *gin.Context) {
@@ -387,7 +387,7 @@ func deleteItem(c *gin.Context) {
 		if strings.ToLower(item.Name) == name {
 			targetItem = &item
 			// Check authorization
-			if !strings.EqualFold(user.GetUsername(), item.Owner) {
+			if user.GetId() != item.Owner {
 				c.JSON(403, gin.H{"error": "You are not authorized to delete this item"})
 				return
 			}
@@ -408,16 +408,16 @@ func deleteItem(c *gin.Context) {
 }
 
 func listItems(c *gin.Context) {
-	username := strings.ToLower(c.Param("username"))
+	username := Username(c.Param("username")).Id()
 
 	itemsMutex.RLock()
-	userItems := make([]Item, 0)
+	userItems := make([]NetItem, 0)
 	for _, item := range items {
-		if strings.ToLower(item.Owner) == username {
+		if item.Owner == username {
 			// Remove private data before returning
 			itemCopy := item
 			itemCopy.PrivateData = nil
-			userItems = append(userItems, itemCopy)
+			userItems = append(userItems, itemCopy.ToNet())
 		}
 	}
 	itemsMutex.RUnlock()
@@ -458,7 +458,7 @@ func updateItem(c *gin.Context) {
 		return
 	}
 
-	if !strings.EqualFold(targetItem.Owner, user.GetUsername()) {
+	if targetItem.Owner != user.GetId() {
 		c.JSON(403, gin.H{"error": "You are not authorized to update this item"})
 		return
 	}
@@ -473,7 +473,7 @@ func updateItem(c *gin.Context) {
 
 	go saveItems()
 
-	c.JSON(200, *targetItem)
+	c.JSON(200, targetItem.ToNet())
 }
 
 func sellItem(c *gin.Context) {
@@ -497,7 +497,7 @@ func sellItem(c *gin.Context) {
 		return
 	}
 
-	if !strings.EqualFold(targetItem.Owner, user.GetUsername()) {
+	if targetItem.Owner != user.GetId() {
 		c.JSON(403, gin.H{"error": "You are not authorized to sell this item"})
 		return
 	}
@@ -519,19 +519,19 @@ func getSellingItems(c *gin.Context) {
 	}
 
 	itemsMutex.RLock()
-	sellingItems := make([]Item, 0)
+	sellingItems := make([]NetItem, 0)
 	for _, item := range items {
 		if item.Price > 0 && item.Selling {
 			// Remove private data
 			itemCopy := item
 			itemCopy.PrivateData = nil
-			sellingItems = append(sellingItems, itemCopy)
+			sellingItems = append(sellingItems, itemCopy.ToNet())
 		}
 	}
 	itemsMutex.RUnlock()
 
 	// Get last 'limit' items and reverse
-	var result = make([]Item, 0)
+	var result = make([]NetItem, 0)
 	if len(sellingItems) > limit {
 		result = sellingItems[len(sellingItems)-limit:]
 	} else {
@@ -552,19 +552,20 @@ func adminAddUserToItem(c *gin.Context) {
 
 	user := c.MustGet("user").(*User)
 
-	if strings.ToLower(user.GetUsername()) != "mist" {
+	if user.GetUsername().ToLower() != "mist" {
 		c.JSON(403, gin.H{"error": "Invalid authentication key"})
 		return
 	}
 
-	username := c.Query("username")
+	username := Username(c.Query("username"))
 	if username == "" {
-		username = c.Query("name")
+		username = Username(c.Query("name"))
 	}
 	if username == "" {
 		c.JSON(400, gin.H{"error": "Username is required"})
 		return
 	}
+	userId := username.Id()
 
 	itemsMutex.Lock()
 	defer itemsMutex.Unlock()
@@ -582,8 +583,8 @@ func adminAddUserToItem(c *gin.Context) {
 		return
 	}
 
-	targetItem.Owner = strings.ToLower(username)
+	targetItem.Owner = userId
 	go saveItems()
 
-	c.JSON(200, *targetItem)
+	c.JSON(200, targetItem.ToNet())
 }

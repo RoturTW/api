@@ -2,7 +2,6 @@ package main
 
 import (
 	"slices"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -10,30 +9,31 @@ import (
 func followUser(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	targetUsername := c.Query("username")
+	targetUsername := Username(c.Query("username"))
 	if targetUsername == "" {
-		targetUsername = c.Query("name")
+		targetUsername = Username(c.Query("name"))
 	}
 	if targetUsername == "" {
 		c.JSON(400, gin.H{"error": "Target username is required"})
 		return
 	}
+	targetId := targetUsername.Id()
+	currentId := user.GetId()
 
-	targetUsername = strings.ToLower(targetUsername)
-	currentUsername := strings.ToLower(user.GetUsername())
+	targetUsername = targetUsername.ToLower()
 
 	// Check if the target user exists
-	idx := getIdxOfAccountBy("username", targetUsername)
-	if idx == -1 {
+	if !accountExists(targetId) {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
-	if isUserBlockedBy(users[idx], currentUsername) {
+	idx := getIdxOfAccountBy("username", targetUsername.String())
+	if isUserBlockedBy(users[idx], currentId) {
 		c.JSON(400, gin.H{"error": "You cant follow this user"})
 		return
 	}
 
-	if currentUsername == targetUsername {
+	if targetId == currentId {
 		c.JSON(400, gin.H{"error": "You cannot follow yourself"})
 		return
 	}
@@ -42,24 +42,24 @@ func followUser(c *gin.Context) {
 	defer followersMutex.Unlock()
 
 	// Ensure target user has an entry in followers data
-	if _, exists := followersData[targetUsername]; !exists {
-		followersData[targetUsername] = FollowerData{Followers: make([]string, 0)}
+	if _, exists := followersData[targetId]; !exists {
+		followersData[targetId] = FollowerData{Followers: make([]UserId, 0)}
 	}
 
 	// Check if already following
-	if slices.Contains(followersData[targetUsername].Followers, currentUsername) {
+	if slices.Contains(followersData[targetId].Followers, currentId) {
 		c.JSON(400, gin.H{"error": "You are already following " + targetUsername})
 		return
 	}
 
 	// Add to followers list
-	data := followersData[targetUsername]
-	data.Followers = append(data.Followers, currentUsername)
-	followersData[targetUsername] = data
+	data := followersData[targetId]
+	data.Followers = append(data.Followers, currentId)
+	followersData[targetId] = data
 
 	go saveFollowers()
 
-	addUserEvent(targetUsername, "follow", map[string]any{
+	addUserEvent(targetId, "follow", map[string]any{
 		"followers": data.Followers,
 	})
 
@@ -69,32 +69,33 @@ func followUser(c *gin.Context) {
 func unfollowUser(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	targetUsername := c.Query("username")
+	targetUsername := Username(c.Query("username"))
 	if targetUsername == "" {
-		targetUsername = c.Query("name")
+		targetUsername = Username(c.Query("name"))
 	}
-	if targetUsername == "" {
+	targetId := targetUsername.Id()
+	if !accountExists(targetId) {
 		c.JSON(400, gin.H{"error": "Target username is required"})
 		return
 	}
+	currentId := user.GetId()
 
-	targetUsername = strings.ToLower(targetUsername)
-	currentUsername := strings.ToLower(user.GetUsername())
+	targetUsername = targetUsername.ToLower()
 
 	followersMutex.Lock()
 	defer followersMutex.Unlock()
 
-	data, exists := followersData[targetUsername]
+	data, exists := followersData[targetId]
 	if !exists || len(data.Followers) == 0 {
 		c.JSON(400, gin.H{"error": "You are not following this user"})
 		return
 	}
 
 	// Remove from followers list
-	newFollowers := make([]string, 0)
+	newFollowers := make([]UserId, 0)
 	found := false
 	for _, follower := range data.Followers {
-		if follower != currentUsername {
+		if follower != currentId {
 			newFollowers = append(newFollowers, follower)
 		} else {
 			found = true
@@ -107,7 +108,7 @@ func unfollowUser(c *gin.Context) {
 	}
 
 	data.Followers = newFollowers
-	followersData[targetUsername] = data
+	followersData[targetId] = data
 
 	go saveFollowers()
 
@@ -119,16 +120,16 @@ func unfollowUser(c *gin.Context) {
 	// Remove follow notification from target user's events history
 	shouldSave := false
 	eventsHistoryMutex.Lock()
-	if userEvents, exists := eventsHistory[targetUsername]; exists {
+	if userEvents, exists := eventsHistory[targetId]; exists {
 		newEvents := make([]Event, 0)
 		for _, event := range userEvents {
 			if !(event.Type == "follow" &&
 				event.Data["follower"] != nil &&
-				strings.ToLower(event.Data["follower"].(string)) == currentUsername) {
+				event.Data["follower"].(UserId) == currentId) {
 				newEvents = append(newEvents, event)
 			}
 		}
-		eventsHistory[targetUsername] = newEvents
+		eventsHistory[targetId] = newEvents
 		shouldSave = true
 	}
 	eventsHistoryMutex.Unlock()
@@ -140,19 +141,18 @@ func unfollowUser(c *gin.Context) {
 }
 
 func getFollowing(c *gin.Context) {
-	name := c.Query("name")
+	name := Username(c.Query("name"))
 	if name == "" {
-		name = c.Query("username")
+		name = Username(c.Query("username"))
 	}
 	if name == "" {
 		c.JSON(400, gin.H{"error": "Username is required"})
 		return
 	}
-	name = strings.ToLower(name)
 
+	targetId := name.Id()
 	// Check if the user exists
-	idx := getIdxOfAccountBy("username", name)
-	if idx == -1 {
+	if !accountExists(targetId) {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
@@ -160,15 +160,15 @@ func getFollowing(c *gin.Context) {
 	followersMutex.RLock()
 	defer followersMutex.RUnlock()
 
-	following := make([]string, 0)
+	following := make([]Username, 0)
 
 	// Iterate through all followersData to find who this user is following
-	for targetUser, data := range followersData {
+	for _, data := range followersData {
 		for _, follower := range data.Followers {
-			if strings.ToLower(follower) == name {
+			if follower == targetId {
 				// This user (name) is following targetUser
 				for _, user := range users {
-					if strings.ToLower(user.GetUsername()) == targetUser {
+					if user.GetId() == targetId {
 						following = append(following, user.GetUsername())
 						break
 					}
@@ -182,19 +182,18 @@ func getFollowing(c *gin.Context) {
 }
 
 func getFollowers(c *gin.Context) {
-	name := c.Query("name")
+	name := Username(c.Query("name"))
 	if name == "" {
-		name = c.Query("username")
+		name = Username(c.Query("username"))
 	}
 	if name == "" {
 		c.JSON(400, gin.H{"error": "Username is required"})
 		return
 	}
-	name = strings.ToLower(name)
 
 	// Check if the user exists
-	idx := getIdxOfAccountBy("username", name)
-	if idx == -1 {
+	targetId := name.Id()
+	if !accountExists(targetId) {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
@@ -202,12 +201,12 @@ func getFollowers(c *gin.Context) {
 	followersMutex.RLock()
 	defer followersMutex.RUnlock()
 
-	followers := make([]string, 0)
+	followers := make([]Username, 0)
 
-	if data, exists := followersData[name]; exists {
+	if data, exists := followersData[targetId]; exists {
 		for _, follower := range data.Followers {
 			for _, user := range users {
-				if strings.EqualFold(user.GetUsername(), follower) {
+				if user.GetId() == follower {
 					followers = append(followers, user.GetUsername())
 					break
 				}

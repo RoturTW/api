@@ -1,7 +1,6 @@
 package main
 
 import (
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -10,63 +9,55 @@ import (
 func proposeMarriage(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	targetUsername := c.Param("username")
+	targetUsername := Username(c.Param("username"))
 	if targetUsername == "" {
-		c.JSON(400, gin.H{"error": "Target username is required"})
+		c.JSON(400, ErrorResponse{Error: "Target username is required"})
 		return
 	}
 
-	proposerMarriage := user.Get("sys.marriage")
-	if proposerMarriage != nil {
-		if marriageMap, ok := proposerMarriage.(map[string]any); ok {
-			if status, exists := marriageMap["status"]; exists && status != "single" {
-				c.JSON(400, gin.H{"error": "You are already married or have a pending proposal"})
-				return
-			}
-		}
+	proposerMarriage := user.GetMarriage()
+	if proposerMarriage.Status != "single" {
+		c.JSON(400, ErrorResponse{Error: "You are already married or have a pending proposal"})
+		return
 	}
 
-	foundUsers, err := getAccountsBy("username", targetUsername, 1)
+	foundUsers, err := getAccountsBy("username", targetUsername.String(), 1)
 	if err != nil {
-		c.JSON(404, gin.H{"error": "Target user not found"})
+		c.JSON(404, ErrorResponse{Error: "Target user not found"})
 		return
 	}
 
 	targetUser := foundUsers[0]
-	targetMarriage := targetUser.Get("sys.marriage")
-	if targetMarriage != nil {
-		if marriageMap, ok := targetMarriage.(map[string]any); ok {
-			if status, exists := marriageMap["status"]; exists && status != "single" {
-				c.JSON(400, gin.H{"error": "Target user is already married or has a pending proposal"})
-				return
-			}
-		}
-	}
-
-	if user.GetUsername() == targetUsername {
-		c.JSON(400, gin.H{"error": "Cannot propose to yourself"})
+	targetMarriage := targetUser.GetMarriage()
+	if targetMarriage.Status != "single" {
+		c.JSON(400, ErrorResponse{Error: "Target user is already married or has a pending proposal"})
 		return
 	}
 
-	if isUserBlockedBy(*user, user.GetUsername()) {
-		c.JSON(400, gin.H{"error": "You cant propose to this user"})
+	if user.GetId() == targetUser.GetId() {
+		c.JSON(400, ErrorResponse{Error: "Cannot propose to yourself"})
+		return
+	}
+
+	if isUserBlockedBy(*user, user.GetId()) {
+		c.JSON(400, ErrorResponse{Error: "You cant propose to this user"})
 		return
 	}
 
 	timestamp := time.Now().UnixMilli()
 
-	user.Set("sys.marriage", map[string]any{
-		"status":    "proposed",
-		"partner":   targetUsername,
-		"timestamp": timestamp,
-		"proposer":  user.GetUsername(),
+	user.SetMarriage(Marriage{
+		Status:    "proposed",
+		Partner:   targetUser.GetId(),
+		Timestamp: timestamp,
+		Proposer:  user.GetId(),
 	})
 
-	targetUser.Set("sys.marriage", map[string]any{
-		"status":    "proposed",
-		"partner":   user.GetUsername(),
-		"timestamp": timestamp,
-		"proposer":  user.GetUsername(),
+	targetUser.SetMarriage(Marriage{
+		Status:    "proposed",
+		Partner:   user.GetId(),
+		Timestamp: timestamp,
+		Proposer:  user.GetId(),
 	})
 
 	go saveUsers()
@@ -77,40 +68,28 @@ func proposeMarriage(c *gin.Context) {
 func acceptMarriage(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	marriageData := user.Get("sys.marriage")
-	if marriageData == nil {
-		c.JSON(400, gin.H{"error": "No pending proposal"})
+	marriageData := user.GetMarriage()
+	if marriageData.Status != "proposed" {
+		c.JSON(400, ErrorResponse{Error: "No pending proposal"})
 		return
 	}
 
-	marriageMap, ok := marriageData.(map[string]any)
-	if !ok {
-		c.JSON(400, gin.H{"error": "No pending proposal"})
+	partnerUsername := marriageData.Partner.User().GetUsername()
+	proposerUsername := marriageData.Proposer.User().GetUsername()
+
+	if user.GetUsername().ToLower() != proposerUsername.ToLower() {
+		c.JSON(400, ErrorResponse{Error: "Invalid proposal data"})
 		return
 	}
 
-	status, statusExists := marriageMap["status"]
-	if !statusExists || status != "proposed" {
-		c.JSON(400, gin.H{"error": "No pending proposal"})
+	if user.GetId() == marriageData.Proposer {
+		c.JSON(400, ErrorResponse{Error: "Cannot accept your own proposal"})
 		return
 	}
 
-	partnerUsername, partnerExists := marriageMap["partner"].(string)
-	proposerUsername, proposerExists := marriageMap["proposer"].(string)
-
-	if !partnerExists || !proposerExists {
-		c.JSON(400, gin.H{"error": "Invalid proposal data"})
-		return
-	}
-
-	if user.GetUsername() == proposerUsername {
-		c.JSON(400, gin.H{"error": "Cannot accept your own proposal"})
-		return
-	}
-
-	partners, err := getAccountsBy("username", partnerUsername, 1)
+	partners, err := getAccountsBy("username", partnerUsername.String(), 1)
 	if err != nil {
-		c.JSON(404, gin.H{"error": "Partner not found"})
+		c.JSON(404, ErrorResponse{Error: "Partner not found"})
 		return
 	}
 	partner := partners[0]
@@ -118,18 +97,18 @@ func acceptMarriage(c *gin.Context) {
 	// Update marriage status for both users
 	timestamp := time.Now().UnixMilli()
 
-	user.Set("sys.marriage", map[string]any{
-		"status":    "married",
-		"partner":   partnerUsername,
-		"timestamp": timestamp,
-		"proposer":  proposerUsername,
+	user.SetMarriage(Marriage{
+		Status:    "married",
+		Partner:   partnerUsername.Id(),
+		Timestamp: timestamp,
+		Proposer:  proposerUsername.Id(),
 	})
 
-	partner.Set("sys.marriage", map[string]any{
-		"status":    "married",
-		"partner":   user.GetUsername(),
-		"timestamp": timestamp,
-		"proposer":  proposerUsername,
+	partner.SetMarriage(Marriage{
+		Status:    "married",
+		Partner:   user.GetId(),
+		Timestamp: timestamp,
+		Proposer:  proposerUsername.Id(),
 	})
 
 	go saveUsers()
@@ -142,29 +121,17 @@ func acceptMarriage(c *gin.Context) {
 func rejectMarriage(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	marriageData := user.Get("sys.marriage")
-	if marriageData == nil {
-		c.JSON(400, gin.H{"error": "No pending proposal"})
+	marriageData := user.GetMarriage()
+	if marriageData.Status != "proposed" {
+		c.JSON(400, ErrorResponse{Error: "No pending proposal"})
 		return
 	}
 
-	marriageMap, ok := marriageData.(map[string]any)
-	if !ok {
-		c.JSON(400, gin.H{"error": "No pending proposal"})
-		return
-	}
+	partnerUsername := marriageData.Partner.User().GetUsername()
+	proposerUsername := marriageData.Proposer.User().GetUsername()
 
-	status, statusExists := marriageMap["status"]
-	if !statusExists || status != "proposed" {
-		c.JSON(400, gin.H{"error": "No pending proposal"})
-		return
-	}
-
-	partnerUsername, partnerExists := marriageMap["partner"].(string)
-	proposerUsername, proposerExists := marriageMap["proposer"].(string)
-
-	if !partnerExists || !proposerExists {
-		c.JSON(400, gin.H{"error": "Invalid proposal data"})
+	if user.GetId() == marriageData.Proposer {
+		c.JSON(400, ErrorResponse{Error: "Invalid proposal data"})
 		return
 	}
 
@@ -175,10 +142,10 @@ func rejectMarriage(c *gin.Context) {
 	}
 
 	// Find partner
-	partners, err := getAccountsBy("username", partnerUsername, 1)
+	partners, err := getAccountsBy("username", partnerUsername.String(), 1)
 
 	if err != nil {
-		c.JSON(404, gin.H{"error": "Partner not found"})
+		c.JSON(404, ErrorResponse{Error: "Partner not found"})
 		return
 	}
 	partner := partners[0]
@@ -196,35 +163,23 @@ func divorceMarriage(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
 	// Check marriage status
-	marriageData := user.Get("sys.marriage")
-	if marriageData == nil {
-		c.JSON(400, gin.H{"error": "Not married"})
+	marriageData := user.GetMarriage()
+	if marriageData.Status != "married" {
+		c.JSON(400, ErrorResponse{Error: "Not married"})
 		return
 	}
 
-	marriageMap, ok := marriageData.(map[string]any)
-	if !ok {
-		c.JSON(400, gin.H{"error": "Not married"})
-		return
-	}
-
-	status, statusExists := marriageMap["status"]
-	if !statusExists || status != "married" {
-		c.JSON(400, gin.H{"error": "Not married"})
-		return
-	}
-
-	partnerUsername, partnerExists := marriageMap["partner"].(string)
-	if !partnerExists {
-		c.JSON(400, gin.H{"error": "Invalid marriage data"})
+	partnerUsername := marriageData.Partner.User().GetUsername()
+	if partnerUsername == "" {
+		c.JSON(400, ErrorResponse{Error: "Invalid marriage data"})
 		return
 	}
 
 	// Find partner
-	partners, err := getAccountsBy("username", partnerUsername, 1)
+	partners, err := getAccountsBy("username", partnerUsername.String(), 1)
 
 	if err != nil {
-		c.JSON(404, gin.H{"error": "Partner not found"})
+		c.JSON(404, ErrorResponse{Error: "Partner not found"})
 		return
 	}
 	partner := partners[0]
@@ -244,40 +199,22 @@ func cancelMarriage(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
 	// Check marriage status
-	marriageData := user.Get("sys.marriage")
-	if marriageData == nil {
-		c.JSON(400, gin.H{"error": "No pending proposal"})
+	marriageData := user.GetMarriage()
+	if marriageData.Status != "proposed" {
+		c.JSON(400, ErrorResponse{Error: "No pending proposal"})
 		return
 	}
 
-	marriageMap, ok := marriageData.(map[string]any)
-	if !ok {
-		c.JSON(400, gin.H{"error": "No pending proposal"})
-		return
-	}
-
-	status, statusExists := marriageMap["status"]
-	if !statusExists || status != "proposed" {
-		c.JSON(400, gin.H{"error": "No pending proposal"})
-		return
-	}
-
-	partnerUsername, partnerExists := marriageMap["partner"].(string)
-	proposerUsername, proposerExists := marriageMap["proposer"].(string)
-
-	if !partnerExists || !proposerExists {
-		c.JSON(400, gin.H{"error": "Invalid proposal data"})
-		return
-	}
+	partnerUsername := marriageData.Partner.User().GetUsername()
 
 	// Can only cancel if you're the proposer
-	if !strings.EqualFold(user.GetUsername(), proposerUsername) {
+	if user.GetId() != marriageData.Proposer {
 		c.JSON(400, gin.H{"error": "Can only cancel your own proposal"})
 		return
 	}
 
 	// Find partner
-	partners, err := getAccountsBy("username", partnerUsername, 1)
+	partners, err := getAccountsBy("username", partnerUsername.String(), 1)
 
 	if err != nil {
 		c.JSON(404, gin.H{"error": "Partner not found"})
@@ -297,8 +234,8 @@ func cancelMarriage(c *gin.Context) {
 func getMarriageStatus(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	marriageData := user.Get("sys.marriage")
-	if marriageData == nil {
+	marriageData := user.GetMarriage()
+	if marriageData.Status == "single" {
 		c.JSON(200, gin.H{
 			"status":    "single",
 			"partner":   "",
@@ -308,14 +245,5 @@ func getMarriageStatus(c *gin.Context) {
 		return
 	}
 
-	if marriageMap, ok := marriageData.(map[string]any); ok {
-		c.JSON(200, marriageMap)
-	} else {
-		c.JSON(200, gin.H{
-			"status":    "single",
-			"partner":   "",
-			"timestamp": 0,
-			"proposer":  "",
-		})
-	}
+	c.JSON(200, marriageData.ToNet())
 }
