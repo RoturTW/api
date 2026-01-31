@@ -93,7 +93,7 @@ func handleKofiTransaction(c *gin.Context) {
 		sub := account.GetSubscription()
 		sub.Tier = name
 		sub.Active = true
-		sub.Next_billing = int64(time.Now().Add(time.Hour * 24 * 30).UnixMilli())
+		sub.Next_billing = int64(time.Now().Add(time.Hour * 24 * 31).UnixMilli())
 		account.SetSubscription(sub)
 		go saveUsers()
 

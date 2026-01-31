@@ -942,6 +942,12 @@ func (fs *FileSystem) GetFilesIndexWithThreshold(username Username, sizeThreshol
 
 			if sizeThreshold > 0 && len(entryCopy) > 3 {
 				if entryCopy[0] == ".folder" {
+					arr, ok := entryCopy[3].([]any)
+					if !ok {
+						continue
+					}
+					entryCopy[3] = arr
+					entryCopy[11] = len(arr)
 				} else {
 					dataStr := ""
 					switch entryCopy[3].(type) {
@@ -951,7 +957,8 @@ func (fs *FileSystem) GetFilesIndexWithThreshold(username Username, sizeThreshol
 						dataStr = JSONStringify(entryCopy[3])
 						entryCopy[3] = dataStr
 					}
-					if len(dataStr) > sizeThreshold {
+					entryCopy[11] = len(dataStr)
+					if entryCopy[11].(int) > sizeThreshold {
 						entryCopy[3] = false
 					}
 				}
