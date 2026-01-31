@@ -36,7 +36,23 @@ type FileEntryStruct struct {
 	Type          string   `json:"type"`
 	Name          string   `json:"name"`
 	Location      string   `json:"location"`
-	Data          any      `json:"data"`
+	Data          string   `json:"data"`
+	DataSecondary any      `json:"data_secondary"`
+	X             int64    `json:"x"`
+	Y             int64    `json:"y"`
+	Id            any      `json:"id"`
+	Created       int64    `json:"created"`
+	Edited        int64    `json:"edited"`
+	Icon          string   `json:"icon"`
+	Size          int64    `json:"size"`
+	Permissions   []string `json:"permissions"`
+	UUID          string   `json:"uuid"`
+}
+
+type FolderEntryStruct struct {
+	Name          string   `json:"name"`
+	Location      string   `json:"location"`
+	Data          []any    `json:"data"`
 	DataSecondary any      `json:"data_secondary"`
 	X             int64    `json:"x"`
 	Y             int64    `json:"y"`
@@ -411,6 +427,9 @@ func (fs *FileSystem) handleAddUnsafe(username Username, change UpdateChange) {
 		return
 	}
 
+	dta[8] = time.Now().UnixMilli()
+	dta[9] = dta[8]
+
 	meta := FileMetadata{
 		Entry: dta,
 		Index: 0,
@@ -435,6 +454,7 @@ func (fs *FileSystem) handleReplaceUnsafe(username Username, change UpdateChange
 	oldPath := entryToPath(entry)
 
 	idx := extractIndex(change.Idx)
+	entry[9] = time.Now().UnixMilli()
 	if idx >= 0 && idx < len(entry) {
 		entry[idx] = change.Dta
 	}
@@ -729,11 +749,18 @@ func (fs *FileSystem) getFileByUUIDUnsafe(username Username, uuid string) (FileE
 	}
 
 	var metadata FileMetadata
-	if err := json.Unmarshal(data, &metadata); err == nil && metadata.Entry != nil {
-		return metadata.Entry, nil
+	err = json.Unmarshal(data, &metadata)
+	if err != nil || metadata.Entry == nil {
+		return nil, fmt.Errorf("file not found with the provided UUID")
 	}
 
-	return nil, fmt.Errorf("file not found with the provided UUID")
+	if metadata.Entry[0] != ".folder" {
+		switch metadata.Entry[3].(type) {
+		case map[string]any, []any:
+			metadata.Entry[3] = JSONStringify(metadata.Entry[3])
+		}
+	}
+	return metadata.Entry, nil
 }
 
 // GetFileByUUID is the public version that acquires the lock
@@ -748,6 +775,13 @@ func (fs *FileSystem) setFileByUUIDUnsafe(username Username, uuid string, file F
 	userDir := filepath.Join(fileDir, username.String())
 
 	filePath := filepath.Join(userDir, uuid+".json")
+
+	if file[0] != ".folder" {
+		switch file[3].(type) {
+		case map[string]any, []any:
+			file[3] = JSONStringify(file[3])
+		}
+	}
 
 	data, err := json.Marshal(FileMetadata{
 		Entry: file,
@@ -908,8 +942,18 @@ func (fs *FileSystem) GetFilesIndexWithThreshold(username Username, sizeThreshol
 
 			if sizeThreshold > 0 && len(entryCopy) > 3 {
 				if entryCopy[0] == ".folder" {
-				} else if dataStr, ok := entryCopy[3].(string); ok && len(dataStr) > sizeThreshold {
-					entryCopy[3] = false
+				} else {
+					dataStr := ""
+					switch entryCopy[3].(type) {
+					case string:
+						dataStr = entryCopy[3].(string)
+					case []any, map[string]any:
+						dataStr = JSONStringify(entryCopy[3])
+						entryCopy[3] = dataStr
+					}
+					if len(dataStr) > sizeThreshold {
+						entryCopy[3] = false
+					}
 				}
 			}
 
@@ -919,7 +963,7 @@ func (fs *FileSystem) GetFilesIndexWithThreshold(username Username, sizeThreshol
 	}
 
 	sort.Slice(allEntries, func(i, j int) bool {
-		return allEntries[i].Index < allEntries[j].Index
+		return getIntOrDefault(allEntries[i].Entry[8], 0) < getIntOrDefault(allEntries[j].Entry[8], 0)
 	})
 
 	result := make([]any, 0)
