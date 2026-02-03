@@ -45,9 +45,9 @@ type profileResp struct {
 	Id           UserId         `json:"id"`
 }
 
-func renderBioRegex(bio string, profile *User, otherKeys profileResp) string {
+func renderBioRegex(bio string, profile User, otherKeys profileResp) string {
 	safeProfile := map[string]string{}
-	for k, v := range *profile {
+	for k, v := range profile {
 		if k == "key" || k == "password" {
 			continue
 		}
@@ -175,7 +175,7 @@ func getProfile(c *gin.Context) {
 	name := Username(nameRaw)
 	nameLower := name.ToLower()
 	// Find user with case-insensitive matching
-	var foundUser *User
+	var foundUser User
 	if discord_id != "" {
 		foundUsers, err := getAccountsBy("discord_id", discord_id, 1)
 		if err != nil {

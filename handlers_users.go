@@ -19,16 +19,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func getAccountsBy(key string, value string, max int) ([]*User, error) {
+func getAccountsBy(key string, value string, max int) ([]User, error) {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 
-	var matches []*User
+	var matches []User
 	if key == "username" {
 		valueLower := Username(value).ToLower()
 		for _, user := range users {
 			if user.GetUsername().ToLower() == valueLower {
-				matches = append(matches, &user)
+				matches = append(matches, user)
 				if max != -1 && len(matches) >= max {
 					return matches, nil
 				}
@@ -37,7 +37,7 @@ func getAccountsBy(key string, value string, max int) ([]*User, error) {
 	} else {
 		for _, user := range users {
 			if fmt.Sprintf("%v", user.Get(key)) == value {
-				matches = append(matches, &user)
+				matches = append(matches, user)
 				if max != -1 && len(matches) >= max {
 					return matches, nil
 				}
@@ -51,14 +51,14 @@ func getAccountsBy(key string, value string, max int) ([]*User, error) {
 	return matches, nil
 }
 
-func findAccountByLogin(username string, password string) (*User, error) {
+func findAccountByLogin(username string, password string) (User, error) {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
 
 	name := Username(username).ToLower()
 	for _, user := range users {
 		if user.GetUsername().ToLower() == name && user.GetPassword() == password {
-			return &user, nil
+			return user, nil
 		}
 	}
 
@@ -132,7 +132,7 @@ func getUserBy(c *gin.Context) {
 		return
 	}
 
-	copy := copyUser(*foundUsers[0])
+	copy := copyUser(foundUsers[0])
 	delete(copy, "password")
 
 	c.JSON(200, copy)
@@ -141,7 +141,7 @@ func getUserBy(c *gin.Context) {
 func getUser(c *gin.Context) {
 	authKey := c.Query("auth")
 
-	var foundUser *User
+	var foundUser User
 
 	if authKey != "" {
 		foundUsers, _ := getAccountsBy("key", authKey, 1)
@@ -213,7 +213,7 @@ func getUser(c *gin.Context) {
 		foundUser.SetSubscription(foundUser.GetSubscription())
 
 		go saveUsers()
-		userCopy := copyUser(*foundUser)
+		userCopy := copyUser(foundUser)
 		userCopy["sys.friends"] = foundUser.GetFriendUsers()
 		userCopy["sys.requests"] = foundUser.GetRequestedUsers()
 		if foundUser.GetMarriage().Status != "single" {
@@ -253,7 +253,7 @@ func checkAuth(c *gin.Context) {
 	c.JSON(200, gin.H{"auth": false, "username": ""})
 }
 
-func addLogin(c *gin.Context, user *User, message string) {
+func addLogin(c *gin.Context, user User, message string) {
 	if user == nil {
 		return
 	}
@@ -1534,8 +1534,10 @@ func acceptTos(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
 	// Accept the TOS by setting a flag in the user data
-	go patchUserUpdate(user.GetUsername(), "sys.tos_accepted", true)
-	go patchUserUpdate(user.GetUsername(), "sys.tos_time", time.Now().Unix())
+	user.Set("sys.tos_accepted", true)
+	user.Set("sys.tos_time", time.Now().Unix())
+
+	go saveUsers()
 
 	c.JSON(200, gin.H{"message": "Terms of Service accepted"})
 }
@@ -1568,7 +1570,7 @@ func getBadges(c *gin.Context) {
 	// Find user in users slice to get updated data
 	for _, u := range users {
 		if u.GetUsername() == user.GetUsername() {
-			badgeNames := calculateUserBadges(&u)
+			badgeNames := calculateUserBadges(u)
 
 			c.JSON(200, gin.H{
 				"badge_names": badgeNames,

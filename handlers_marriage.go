@@ -7,7 +7,7 @@ import (
 )
 
 func proposeMarriage(c *gin.Context) {
-	user := c.MustGet("user").(*User)
+	user := *c.MustGet("user").(*User)
 
 	targetUsername := Username(c.Param("username"))
 	if targetUsername == "" {
@@ -39,7 +39,7 @@ func proposeMarriage(c *gin.Context) {
 		return
 	}
 
-	if isUserBlockedBy(*user, user.GetId()) {
+	if isUserBlockedBy(user, user.GetId()) {
 		c.JSON(400, ErrorResponse{Error: "You cant propose to this user"})
 		return
 	}

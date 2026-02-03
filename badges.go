@@ -64,7 +64,7 @@ func watchBadgesFile() {
 	}
 }
 
-func calculateUserBadges(user *User) []Badge {
+func calculateUserBadges(user User) []Badge {
 	var badges []Badge
 
 	system := user.GetSystem()

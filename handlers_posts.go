@@ -200,9 +200,8 @@ func replyToPost(c *gin.Context) {
 		return
 	}
 
-	idx := getIdxOfAccountBy("username", targetPost.User.String())
-	targetUser, err := getUserByIdx(idx)
-	if isUserBlockedBy(*targetUser, user.GetId()) || err != nil {
+	foundUsers, err := getAccountsBy("username", targetPost.User.String(), 1)
+	if err != nil || isUserBlockedBy(foundUsers[0], user.GetId()) {
 		c.JSON(400, gin.H{"error": "You cant reply to this post"})
 		return
 	}
@@ -308,13 +307,8 @@ func ratePost(c *gin.Context) {
 	}
 
 	if rating == 1 {
-		idx := getIdxOfAccountBy("username", targetPost.User.String())
-		if idx == -1 {
-			c.JSON(400, gin.H{"error": "User does not exist"})
-			return
-		}
-		targetUser, err := getUserByIdx(idx)
-		if isUserBlockedBy(*targetUser, user.GetId()) || err != nil {
+		foundUsers, err := getAccountsBy("username", targetPost.User.String(), 1)
+		if err != nil || isUserBlockedBy(foundUsers[0], user.GetId()) {
 			c.JSON(400, gin.H{"error": "You cant like this post"})
 			return
 		}
@@ -383,9 +377,8 @@ func repost(c *gin.Context) {
 		return
 	}
 
-	idx := getIdxOfAccountBy("username", originalPost.User.String())
-	originalUser, err := getUserByIdx(idx)
-	if isUserBlockedBy(*originalUser, user.GetId()) || err != nil {
+	foundUsers, err := getAccountsBy("username", originalPost.User.String(), 1)
+	if err != nil || isUserBlockedBy(foundUsers[0], user.GetId()) {
 		c.JSON(400, gin.H{"error": "You cant repost this post"})
 		return
 	}

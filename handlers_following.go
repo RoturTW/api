@@ -27,8 +27,7 @@ func followUser(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
-	idx := getIdxOfAccountBy("username", targetUsername.String())
-	if isUserBlockedBy(users[idx], currentId) {
+	if isUserBlockedBy(targetId.User(), currentId) {
 		c.JSON(400, gin.H{"error": "You cant follow this user"})
 		return
 	}

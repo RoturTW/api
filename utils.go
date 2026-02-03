@@ -303,7 +303,11 @@ func getUserByIdx(idx int) (*User, error) {
 	if idx < 0 || len(users) <= idx {
 		return nil, fmt.Errorf("index out of bounds")
 	}
-	return &users[idx], nil
+	user := &users[idx]
+	if user == nil {
+		return nil, fmt.Errorf("user not found")
+	}
+	return user, nil
 }
 
 func rateLimit(limitType string) gin.HandlerFunc {

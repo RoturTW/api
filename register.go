@@ -93,7 +93,7 @@ func handleUserGoogle(c *gin.Context) {
 						now := time.Now().UnixMilli()
 						users[i].Set("sys.last_login", now)
 						users[i].Set("sys.total_logins", users[i].GetInt("sys.total_logins")+1)
-						users[i].Set("sys.badges", calculateUserBadges(&users[i]))
+						users[i].Set("sys.badges", calculateUserBadges(users[i]))
 						users[i].SetSubscription(users[i].GetSubscription())
 						go saveUsers()
 

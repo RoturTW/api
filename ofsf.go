@@ -271,6 +271,8 @@ func getFileByPath(c *gin.Context) {
 		path = "/" + path
 	}
 
+	path = strings.ToLower(path)
+
 	index, err := fs.loadPathIndex(username)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load path index"})
@@ -427,8 +429,8 @@ func (fs *FileSystem) handleAddUnsafe(username Username, change UpdateChange) {
 		return
 	}
 
-	dta[8] = time.Now().UnixMilli()
-	dta[9] = dta[8]
+	dta[7] = time.Now().UnixMilli()
+	dta[8] = dta[7]
 
 	meta := FileMetadata{
 		Entry: dta,
@@ -454,7 +456,7 @@ func (fs *FileSystem) handleReplaceUnsafe(username Username, change UpdateChange
 	oldPath := entryToPath(entry)
 
 	idx := extractIndex(change.Idx)
-	entry[9] = time.Now().UnixMilli()
+	entry[8] = time.Now().UnixMilli()
 	if idx >= 0 && idx < len(entry) {
 		entry[idx] = change.Dta
 	}
@@ -498,8 +500,8 @@ func (fs *FileSystem) RenameUserFileSystem(oldUsername Username, newUsername Use
 		return
 	}
 
-	oldLocationPrefix := "origin/(c) users/" + oldUsername.String()
-	newLocationPrefix := "origin/(c) users/" + newUsername.String()
+	oldLocationPrefix := strings.ToLower("origin/(c) users/" + oldUsername.String())
+	newLocationPrefix := strings.ToLower("origin/(c) users/" + newUsername.String())
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	for path, uuid := range index {
@@ -608,9 +610,34 @@ func (fs *FileSystem) loadPathIndex(username Username) (PathIndex, error) {
 	if err := fs.migrateFromLegacy(username); err != nil {
 		fmt.Printf("\033[91m[-] OFSF Error\033[0m | Migration failed: %v\n", err)
 	}
+
+	path := userIndexPath(username)
+
+	// First check if index exists with read lock
 	fs.mu.RLock()
-	defer fs.mu.RUnlock()
-	return fs.loadPathIndexUnsafe(username)
+	_, err := os.Stat(path)
+	fs.mu.RUnlock()
+
+	if err == nil {
+		fs.mu.RLock()
+		data, readErr := os.ReadFile(path)
+		fs.mu.RUnlock()
+
+		if readErr == nil {
+			fmt.Println("Loading path index for", username)
+			var idx PathIndex
+			if unmarshalErr := json.Unmarshal(data, &idx); unmarshalErr == nil {
+				return idx, nil
+			}
+		}
+	}
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	fmt.Println("Rebuilding path index for", username)
+
+	return fs.rebuildPathIndexUnsafe(username)
 }
 
 // savePathIndexUnsafe assumes the lock is already held
@@ -631,9 +658,9 @@ func (fs *FileSystem) savePathIndexUnsafe(username Username, idx PathIndex) erro
 }
 
 func entryToPath(entry FileEntry) string {
-	return getStringOrEmpty(entry[2]) + "/" +
+	return strings.ToLower(getStringOrEmpty(entry[2]) + "/" +
 		getStringOrEmpty(entry[1]) +
-		getStringOrEmpty(entry[0])
+		getStringOrEmpty(entry[0]))
 }
 
 func (fs *FileSystem) GetFileStats(username Username, uuids []string) ([]FileStat, error) {
@@ -940,14 +967,13 @@ func (fs *FileSystem) GetFilesIndexWithThreshold(username Username, sizeThreshol
 			entryCopy := make(FileEntry, len(metadata.Entry))
 			copy(entryCopy, metadata.Entry)
 
-			if sizeThreshold > 0 && len(entryCopy) > 3 {
+			if sizeThreshold > 0 && len(entryCopy) == 14 {
 				if entryCopy[0] == ".folder" {
 					arr, ok := entryCopy[3].([]any)
-					if !ok {
-						continue
+					if ok {
+						entryCopy[3] = JSONStringify(arr)
+						entryCopy[11] = len(arr)
 					}
-					entryCopy[3] = arr
-					entryCopy[11] = len(arr)
 				} else {
 					dataStr := ""
 					switch entryCopy[3].(type) {
@@ -970,7 +996,7 @@ func (fs *FileSystem) GetFilesIndexWithThreshold(username Username, sizeThreshol
 	}
 
 	sort.Slice(allEntries, func(i, j int) bool {
-		return getIntOrDefault(allEntries[i].Entry[8], 0) < getIntOrDefault(allEntries[j].Entry[8], 0)
+		return len(allEntries[i].Entry[2].(string)) < len(allEntries[j].Entry[2].(string))
 	})
 
 	result := make([]any, 0)

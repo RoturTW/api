@@ -23,13 +23,13 @@ func sendFriendRequest(c *gin.Context) {
 		return
 	}
 
-	idx := getIdxOfAccountBy("username", targetLower.String())
-	if idx == -1 {
-		c.JSON(404, gin.H{"error": "Account does not exist"})
+	foundUsers, err := getAccountsBy("username", targetLower.String(), 1)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "Account Does Not Exist"})
 		return
 	}
-	target, _ := getUserByIdx(idx)
-	if isUserBlockedBy(*target, senderId) {
+	target := foundUsers[0]
+	if isUserBlockedBy(target, senderId) {
 		c.JSON(400, gin.H{"error": "You cant send friend requests to this user"})
 		return
 	}
