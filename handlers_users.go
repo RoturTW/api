@@ -135,7 +135,7 @@ func getUserBy(c *gin.Context) {
 	copy := copyUser(foundUsers[0])
 	delete(copy, "password")
 
-	c.JSON(200, copy)
+	c.JSON(200, userToNet(copy))
 }
 
 func getUser(c *gin.Context) {
@@ -213,25 +213,29 @@ func getUser(c *gin.Context) {
 		foundUser.SetSubscription(foundUser.GetSubscription())
 
 		go saveUsers()
-		userCopy := copyUser(foundUser)
-		userCopy["sys.friends"] = foundUser.GetFriendUsers()
-		userCopy["sys.requests"] = foundUser.GetRequestedUsers()
-		if foundUser.GetMarriage().Status != "single" {
-			userCopy["sys.marriage"] = foundUser.GetMarriage().ToNet()
-		}
-		transactions := foundUser.GetTransactions()
-		netTransactions := make([]TransactionNet, len(transactions))
-		for i, transaction := range transactions {
-			netTransactions[i] = transaction.ToNet()
-		}
-		userCopy["sys.transactions"] = netTransactions
-
-		delete(userCopy, "password")
-		c.JSON(200, userCopy)
+		c.JSON(200, userToNet(foundUser))
 		return
 	}
 
 	c.JSON(403, gin.H{"error": "Invalid authentication credentials"})
+}
+
+func userToNet(user User) User {
+	userCopy := copyUser(user)
+	userCopy["sys.friends"] = user.GetFriendUsers()
+	userCopy["sys.requests"] = user.GetRequestedUsers()
+	if user.GetMarriage().Status != "single" {
+		userCopy["sys.marriage"] = user.GetMarriage().ToNet()
+	}
+	transactions := user.GetTransactions()
+	netTransactions := make([]TransactionNet, len(transactions))
+	for i, transaction := range transactions {
+		netTransactions[i] = transaction.ToNet()
+	}
+	userCopy["sys.transactions"] = netTransactions
+
+	delete(userCopy, "password")
+	return userCopy
 }
 
 func checkAuth(c *gin.Context) {
@@ -528,8 +532,8 @@ func canUpdateUsernameUnsafe(username string) (bool, string) {
 	return true, "Can update username"
 }
 
-func updateUsername(userId UserId, newUsername Username) {
-	usernameLower := userId.User().GetUsername().ToLower()
+func updateUsername(userId UserId, oldUsername, newUsername Username) {
+	usernameLower := oldUsername.ToLower()
 	newUsernameLower := newUsername.ToLower()
 
 	if usernameLower == newUsernameLower {
@@ -537,7 +541,7 @@ func updateUsername(userId UserId, newUsername Username) {
 	}
 
 	fs.RenameUserFileSystem(usernameLower, newUsernameLower)
-	renameUserAvatar(userId, newUsername)
+	renameUserAvatar(oldUsername, newUsername)
 }
 
 func updateUser(c *gin.Context) {
@@ -737,7 +741,7 @@ func updateUser(c *gin.Context) {
 			c.JSON(400, gin.H{"error": msg})
 			return
 		}
-		updateUsername(user.GetId(), Username(getStringOrEmpty(value)))
+		updateUsername(user.GetId(), user.GetUsername(), Username(getStringOrEmpty(value)))
 	}
 	if slices.Contains(lockedKeys, key) {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Key '%s' cannot be updated", key)})
@@ -817,7 +821,8 @@ func updateUserAdmin(c *gin.Context) {
 					c.JSON(400, gin.H{"error": msg})
 					return
 				}
-				updateUsername(user.GetId(), username)
+				oldUsername := user.GetUsername()
+				updateUsername(user.GetId(), oldUsername, username)
 				user.Set("username", username.String())
 			case "sys.currency":
 				user.SetBalance(value)
@@ -1326,7 +1331,7 @@ func performUserDeletion(username Username, isAdmin bool, ban bool) error {
 
 	go saveUsers()
 
-	go func(target UserId) {
+	go func(target UserId, username Username) {
 		// Update posts
 		postsMutex.Lock()
 		for i := range posts {
@@ -1338,7 +1343,7 @@ func performUserDeletion(username Username, isAdmin bool, ban bool) error {
 		go savePosts()
 
 		// remove avatar and banner
-		if err := deleteUserAvatar(target); err != nil {
+		if err := deleteUserAvatar(username); err != nil {
 			log.Printf("Error deleting user avatar: %v", err)
 		}
 
@@ -1349,34 +1354,25 @@ func performUserDeletion(username Username, isAdmin bool, ban bool) error {
 		}
 
 		// remove file system
-		if err := fs.DeleteUserFileSystem(target.User().GetUsername()); err != nil {
+		if err := fs.DeleteUserFileSystem(username); err != nil {
 			log.Printf("Error deleting user file system: %v", err)
 		}
-	}(uId)
+	}(uId, usernameLower)
 	return nil
 }
 
-func deleteUserAvatar(userId UserId) error {
-	usernameLower := userId.User().GetUsername().ToLower()
+func deleteUserAvatar(username Username) error {
+	usernameLower := username.ToLower()
 
-	// Remove user storage
-	pfpPath := string("rotur/avatars/" + usernameLower + ".jpg")
-	exists := false
+	pfpPath := string("rotur/avatars/" + usernameLower.String() + ".jpg")
 	if _, err := os.Stat(pfpPath); err == nil {
-		exists = true
-	}
-	if exists {
 		if err := os.Remove(pfpPath); err != nil {
 			return fmt.Errorf("error removing user avatar %s: %v", pfpPath, err)
 		}
 	}
 
-	bannerPath := string("rotur/banners/" + usernameLower + ".jpg")
-	exists = false
+	bannerPath := string("rotur/banners/" + usernameLower.String() + ".jpg")
 	if _, err := os.Stat(bannerPath); err == nil {
-		exists = true
-	}
-	if exists {
 		if err := os.Remove(bannerPath); err != nil {
 			return fmt.Errorf("error removing user banner %s: %v", bannerPath, err)
 		}
@@ -1385,31 +1381,24 @@ func deleteUserAvatar(userId UserId) error {
 	return nil
 }
 
-func renameUserAvatar(userId UserId, newUsername Username) error {
-	usernameLower := userId.User().GetUsername().ToLower()
+func renameUserAvatar(oldUsername, newUsername Username) error {
+	usernameLower := oldUsername.ToLower()
+	newUsernameLower := newUsername.ToLower()
 
 	fileTypes := []string{".jpg", ".gif"}
 
 	for _, fileType := range fileTypes {
 		filePath := "rotur/avatars/" + usernameLower.String() + fileType
-		exists := false
 		if _, err := os.Stat(filePath); err == nil {
-			exists = true
-		}
-		if exists {
-			newFilePath := "rotur/avatars/" + newUsername.String() + fileType
+			newFilePath := "rotur/avatars/" + newUsernameLower.String() + fileType
 			if err := os.Rename(filePath, newFilePath); err != nil {
 				return fmt.Errorf("error renaming user avatar %s: %v", filePath, err)
 			}
 		}
 
 		bannerPath := "rotur/banners/" + usernameLower.String() + fileType
-		exists = false
 		if _, err := os.Stat(bannerPath); err == nil {
-			exists = true
-		}
-		if exists {
-			newBannerPath := string("rotur/banners/" + newUsername.String() + fileType)
+			newBannerPath := string("rotur/banners/" + newUsernameLower.String() + fileType)
 			if err := os.Rename(bannerPath, newBannerPath); err != nil {
 				return fmt.Errorf("error renaming user banner %s: %v", bannerPath, err)
 			}

@@ -34,7 +34,7 @@ func sendFriendRequest(c *gin.Context) {
 		return
 	}
 
-	for sender.IsFriend(targetUsername) {
+	if sender.IsFriend(targetUsername) {
 		c.JSON(400, gin.H{"error": "Already Friends"})
 		return
 	}

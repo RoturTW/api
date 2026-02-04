@@ -304,9 +304,6 @@ func getUserByIdx(idx int) (*User, error) {
 		return nil, fmt.Errorf("index out of bounds")
 	}
 	user := &users[idx]
-	if user == nil {
-		return nil, fmt.Errorf("user not found")
-	}
 	return user, nil
 }
 

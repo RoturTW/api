@@ -50,7 +50,11 @@ func handleAI(c *gin.Context) {
 		"messages": history,
 	}
 
-	data, _ := json.Marshal(payload)
+	data, err := json.Marshal(payload)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to marshal request payload"})
+		return
+	}
 	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(data))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
@@ -67,7 +71,11 @@ func handleAI(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to read response body"})
+		return
+	}
 	if resp.StatusCode != 200 {
 		c.JSON(resp.StatusCode, gin.H{"error": string(body)})
 		return
@@ -85,8 +93,22 @@ func handleAI(c *gin.Context) {
 		return
 	}
 
-	msg := choices[0].(map[string]any)["message"].(map[string]any)
-	aiResponse := fmt.Sprint(msg["content"])
+	choice, ok := choices[0].(map[string]any)
+	if !ok {
+		c.JSON(500, gin.H{"error": "Invalid choice format"})
+		return
+	}
+	message, ok := choice["message"].(map[string]any)
+	if !ok {
+		c.JSON(500, gin.H{"error": "Invalid message format"})
+		return
+	}
+	msgContent, ok := message["content"].(string)
+	if !ok {
+		c.JSON(500, gin.H{"error": "Invalid content format"})
+		return
+	}
+	aiResponse := fmt.Sprint(msgContent)
 
 	history = append(history, map[string]any{
 		"role":    "assistant",

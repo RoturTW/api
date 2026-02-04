@@ -3,6 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -76,6 +80,359 @@ func (m Marriage) ToNet() MarriageNet {
 		Timestamp: m.Timestamp,
 		Proposer:  m.Proposer.User().GetUsername(),
 	}
+}
+
+type GroupId string
+
+type JoinPolicy string
+
+const (
+	JoinPolicyOpen    JoinPolicy = "OPEN"
+	JoinPolicyRequest JoinPolicy = "REQUEST"
+	JoinPolicyInvite  JoinPolicy = "INVITE"
+)
+
+type GroupFile struct {
+	Group           Group                          `json:"group"`
+	Members         []GroupMember                  `json:"members"`
+	Roles           []GroupRole                    `json:"roles"`
+	Announcements   []GroupAnnouncement            `json:"announcements"`
+	Events          map[string]GroupEvent          `json:"events"`
+	Tips            []GroupTip                     `json:"tips"`
+	BenefitProducts map[string]GroupBenefitProduct `json:"benefit_products"`
+}
+
+type Group struct {
+	Id             GroupId    `json:"id"`
+	Tag            string     `json:"tag"`
+	Name           string     `json:"name"`
+	Description    string     `json:"description"`
+	IconUrl        string     `json:"icon_url"`
+	BannerUrl      string     `json:"banner_url"`
+	OwnerUserId    UserId     `json:"owner_user_id"`
+	Public         bool       `json:"public"`
+	JoinPolicy     JoinPolicy `json:"join_policy"`
+	CreatedAt      int64      `json:"created_at"`
+	CreditsBalance float64    `json:"credits_balance"`
+}
+
+func getGroupByName(name string) (*Group, bool) {
+	if name == "" {
+		return &Group{}, false
+	}
+
+	for _, data := range groupsData {
+		if data.Group.Name == name {
+			return &data.Group, true
+		}
+	}
+	return &Group{}, false
+}
+
+func getGroupDataByTag(tag string) (*GroupData, bool) {
+	if tag == "" {
+		return nil, false
+	}
+
+	path := filepath.Join(GROUPS_FILE_PATH, tag+".json")
+	var group GroupData
+	if !fileExists(path) {
+		return nil, false
+	}
+	data, err := os.Open(path)
+	if err != nil {
+		log.Printf("Error opening group data from %s: %v", tag, err)
+		return nil, false
+	}
+	defer data.Close()
+	dataBytes, err := io.ReadAll(data)
+
+	if err != nil {
+		log.Printf("Error reading group data from %s: %v", tag, err)
+		return nil, false
+	}
+
+	if err := json.Unmarshal(dataBytes, &group); err != nil {
+		log.Printf("Error unmarshaling group data from %s: %v", tag, err)
+		return nil, false
+	}
+
+	return &group, true
+}
+
+func getGroupByTag(tag string) (*Group, bool) {
+	groupFile, exists := getGroupDataByTag(tag)
+	if !exists {
+		return &Group{}, false
+	}
+	return &groupFile.Group, true
+}
+
+func getGroupMembers(groupTag string) []GroupMember {
+	data, exists := getGroupDataByTag(groupTag)
+	if !exists {
+		return []GroupMember{}
+	}
+	return data.Members
+}
+
+func updateGroupMembers(groupTag string, members []GroupMember) {
+	groupsDataMutex.Lock()
+	defer groupsDataMutex.Unlock()
+
+	data := groupsData[groupTag]
+	data.Members = members
+	go saveGroupData(groupTag)
+}
+
+func getGroupRoles(groupTag string) []GroupRole {
+	data, exists := getGroupDataByTag(groupTag)
+	if !exists {
+		return []GroupRole{}
+	}
+	return data.Roles
+}
+
+func updateGroupRoles(groupTag string, roles []GroupRole) {
+	groupsDataMutex.Lock()
+	defer groupsDataMutex.Unlock()
+
+	data := groupsData[groupTag]
+	data.Roles = roles
+	go saveGroupData(groupTag)
+}
+
+func getGroupAnnouncements(groupTag string) []GroupAnnouncement {
+	data, exists := getGroupDataByTag(groupTag)
+	if !exists {
+		return []GroupAnnouncement{}
+	}
+	return data.Announcements
+}
+
+func addGroupAnnouncement(groupTag string, announcement GroupAnnouncement) {
+	groupsDataMutex.Lock()
+	defer groupsDataMutex.Unlock()
+
+	data := groupsData[groupTag]
+	data.Announcements = append(data.Announcements, announcement)
+	go saveGroupData(groupTag)
+}
+
+func getGroupEvents(groupTag string) []GroupEvent {
+	groupsDataMutex.RLock()
+	defer groupsDataMutex.RUnlock()
+
+	data, exists := groupsData[groupTag]
+	if !exists {
+		return nil
+	}
+
+	events := make([]GroupEvent, 0, len(data.Events))
+	for _, event := range data.Events {
+		events = append(events, event)
+	}
+	return events
+}
+
+func addGroupEvent(groupTag string, event GroupEvent) {
+	groupsDataMutex.Lock()
+	defer groupsDataMutex.Unlock()
+
+	data := groupsData[groupTag]
+	if data.Events == nil {
+		data.Events = make(map[string]GroupEvent)
+	}
+	data.Events[event.Id] = event
+	go saveGroupData(groupTag)
+}
+
+func getGroupTips(groupTag string) []GroupTip {
+	data, exists := getGroupDataByTag(groupTag)
+	if !exists {
+		return []GroupTip{}
+	}
+	return data.Tips
+}
+
+func addGroupTip(groupTag string, tip GroupTip) {
+	groupsDataMutex.Lock()
+	defer groupsDataMutex.Unlock()
+
+	data := groupsData[groupTag]
+	data.Tips = append(data.Tips, tip)
+
+	data.Group.CreditsBalance += tip.AmountCredits
+
+	go saveGroupData(groupTag)
+}
+
+func getGroupRolesMap(groupTag string) map[string]GroupRole {
+	groupsDataMutex.RLock()
+	defer groupsDataMutex.RUnlock()
+
+	data, exists := groupsData[groupTag]
+	if !exists {
+		return nil
+	}
+
+	rolesMap := make(map[string]GroupRole)
+	for _, role := range data.Roles {
+		rolesMap[role.Id] = role
+	}
+	return rolesMap
+}
+
+func updateGroupRolesMap(groupTag string, rolesMap map[string]GroupRole) {
+	groupsDataMutex.Lock()
+	defer groupsDataMutex.Unlock()
+
+	data := groupsData[groupTag]
+	data.Roles = make([]GroupRole, 0)
+	for _, role := range rolesMap {
+		data.Roles = append(data.Roles, role)
+	}
+	go saveGroupData(groupTag)
+}
+
+type GroupPublic struct {
+	Tag            string     `json:"tag"`
+	Name           string     `json:"name"`
+	Description    string     `json:"description"`
+	IconUrl        string     `json:"icon_url"`
+	BannerUrl      string     `json:"banner_url"`
+	OwnerUserId    Username   `json:"owner_user_id"`
+	Public         bool       `json:"public"`
+	JoinPolicy     JoinPolicy `json:"join_policy"`
+	CreatedAt      int64      `json:"created_at"`
+	CreditsBalance float64    `json:"credits_balance"`
+	MemberCount    int        `json:"member_count"`
+}
+
+type GroupNet struct {
+	Id             GroupId    `json:"id"`
+	Tag            string     `json:"tag"`
+	Name           string     `json:"name"`
+	Description    string     `json:"description"`
+	IconUrl        string     `json:"icon_url"`
+	BannerUrl      string     `json:"banner_url"`
+	OwnerUserId    Username   `json:"owner_user_id"`
+	Public         bool       `json:"public"`
+	JoinPolicy     JoinPolicy `json:"join_policy"`
+	CreatedAt      int64      `json:"created_at"`
+	CreditsBalance float64    `json:"credits_balance"`
+	MemberCount    int        `json:"member_count"`
+}
+
+func (g Group) ToNet() GroupNet {
+	return GroupNet{
+		Id:             g.Id,
+		Tag:            g.Tag,
+		Name:           g.Name,
+		Description:    g.Description,
+		IconUrl:        g.IconUrl,
+		BannerUrl:      g.BannerUrl,
+		OwnerUserId:    g.OwnerUserId.User().GetUsername(),
+		Public:         g.Public,
+		JoinPolicy:     g.JoinPolicy,
+		CreatedAt:      g.CreatedAt,
+		CreditsBalance: g.CreditsBalance,
+		MemberCount:    0,
+	}
+}
+
+func (g *Group) ToPublic() GroupPublic {
+	return GroupPublic{
+		Tag:            g.Tag,
+		Name:           g.Name,
+		Description:    g.Description,
+		IconUrl:        g.IconUrl,
+		BannerUrl:      g.BannerUrl,
+		OwnerUserId:    g.OwnerUserId.User().GetUsername(),
+		Public:         g.Public,
+		JoinPolicy:     g.JoinPolicy,
+		CreatedAt:      g.CreatedAt,
+		CreditsBalance: g.CreditsBalance,
+		MemberCount:    0,
+	}
+}
+
+type GroupMember struct {
+	Id                 string   `json:"id"`
+	GroupTag           string   `json:"group_tag"`
+	UserId             UserId   `json:"user_id"`
+	RoleIds            []string `json:"role_ids"`
+	JoinedAt           int64    `json:"joined_at"`
+	MutedAnnouncements bool     `json:"muted_announcements"`
+}
+
+type GroupRole struct {
+	Id             string   `json:"id"`
+	GroupTag       string   `json:"group_tag"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	AssignOnJoin   bool     `json:"assign_on_join"`
+	SelfAssignable bool     `json:"self_assignable"`
+	Benefits       []string `json:"benefits"`
+	Permissions    []string `json:"permissions"`
+}
+
+type GroupAnnouncement struct {
+	Id           string `json:"id"`
+	GroupTag     string `json:"group_tag"`
+	Title        string `json:"title"`
+	Body         string `json:"body"`
+	AuthorUserId UserId `json:"author_user_id"`
+	CreatedAt    int64  `json:"created_at"`
+	PingMembers  bool   `json:"ping_members"`
+}
+
+type EventVisibility string
+
+const (
+	EventVisibilityMembers EventVisibility = "MEMBERS"
+	EventVisibilityPublic  EventVisibility = "PUBLIC"
+)
+
+type GroupEvent struct {
+	Id          string          `json:"id"`
+	GroupTag    string          `json:"group_tag"`
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	StartTime   int64           `json:"start_time"`
+	EndTime     int64           `json:"end_time"`
+	Location    string          `json:"location"`
+	Visibility  EventVisibility `json:"visibility"`
+	CreatedBy   UserId          `json:"created_by"`
+	Published   bool            `json:"published"`
+}
+
+type GroupTip struct {
+	Id            string  `json:"id"`
+	GroupTag      string  `json:"group_tag"`
+	FromUserId    UserId  `json:"from_user_id"`
+	AmountCredits float64 `json:"amount_credits"`
+	CreatedAt     int64   `json:"created_at"`
+}
+
+type GroupBenefitProduct struct {
+	Id             string  `json:"id"`
+	GroupTag       string  `json:"group_tag"`
+	Name           string  `json:"name"`
+	Description    string  `json:"description"`
+	PriceCredits   float64 `json:"price_credits"`
+	RoleGrantedId  string  `json:"role_granted_id,omitempty"`
+	BenefitGranted string  `json:"benefit_granted,omitempty"`
+}
+
+type GroupData struct {
+	Group           Group                          `json:"group"`
+	Members         []GroupMember                  `json:"members"`
+	Roles           []GroupRole                    `json:"roles"`
+	Announcements   []GroupAnnouncement            `json:"announcements"`
+	Events          map[string]GroupEvent          `json:"events"`
+	Tips            []GroupTip                     `json:"tips"`
+	BenefitProducts map[string]GroupBenefitProduct `json:"benefit_products"`
 }
 
 var userMutexesLock sync.Mutex
@@ -236,9 +593,13 @@ func (u User) GetBlocked() []UserId {
 
 func (u User) GetBlockedUsers() []Username {
 	blocked := u.GetBlocked()
-	out := make([]Username, len(blocked))
-	for i, b := range blocked {
-		out[i] = getUserById(b).GetUsername()
+	out := make([]Username, 0)
+	for _, b := range blocked {
+		if user := getUserById(b); len(user) > 0 {
+			if username := user.GetUsername(); username != "" {
+				out = append(out, username)
+			}
+		}
 	}
 	return out
 }
@@ -248,10 +609,7 @@ func (u User) AddBlocked(userId UserId) {
 		return
 	}
 	blocked := u.GetBlocked()
-	mu := getUserMutex(u.GetUsername())
-	mu.Lock()
 	blocked = append(blocked, userId)
-	mu.Unlock()
 	u.SetBlocked(blocked)
 }
 
@@ -260,15 +618,12 @@ func (u User) RemoveBlocked(userId UserId) {
 		return
 	}
 	blocked := u.GetBlocked()
-	mu := getUserMutex(u.GetUsername())
-	mu.Lock()
 	newBlocked := make([]UserId, 0, len(blocked)-1)
 	for _, b := range blocked {
 		if b != userId {
 			newBlocked = append(newBlocked, b)
 		}
 	}
-	mu.Unlock()
 	u.SetBlocked(newBlocked)
 }
 
@@ -342,11 +697,8 @@ func (u User) AddRequest(username Username) bool {
 		return false
 	}
 	requests := u.GetRequests()
-	mu := getUserMutex(u.GetUsername())
 	userId := username.Id()
-	mu.Lock()
 	requests = append(requests, userId)
-	mu.Unlock()
 	u.SetRequests(requests)
 	return true
 }
@@ -356,16 +708,13 @@ func (u User) RemoveRequest(username Username) bool {
 		return false
 	}
 	requests := u.GetRequests()
-	mu := getUserMutex(u.GetUsername())
 	userId := username.Id()
-	mu.Lock()
 	requestIds := make([]UserId, 0, len(requests)-1)
-	for _, r := range requestIds {
+	for _, r := range requests {
 		if r != userId {
 			requestIds = append(requestIds, r)
 		}
 	}
-	mu.Unlock()
 	u.SetRequests(requestIds)
 	return true
 }
@@ -385,11 +734,8 @@ func (u User) AddFriend(username Username) bool {
 	if u.IsFriend(username) {
 		return false
 	}
-	mu := getUserMutex(u.GetUsername())
 	userId := username.Id()
-	mu.Lock()
 	friends = append(friends, userId)
-	mu.Unlock()
 	u.SetFriends(friends)
 
 	return true
@@ -400,16 +746,13 @@ func (u User) RemoveFriend(username Username) bool {
 	if !u.IsFriend(username) {
 		return false
 	}
-	mu := getUserMutex(u.GetUsername())
 	userId := username.Id()
-	mu.Lock()
 	newFriends := make([]UserId, 0, len(friends)-1)
 	for _, f := range friends {
 		if f != userId {
 			newFriends = append(newFriends, f)
 		}
 	}
-	mu.Unlock()
 	u.SetFriends(newFriends)
 
 	return true
@@ -448,9 +791,13 @@ func (u User) GetFriends() []UserId {
 
 func (u User) GetFriendUsers() []Username {
 	friends := getStringSlice(u, "sys.friends")
-	out := make([]Username, len(friends))
-	for i, f := range friends {
-		out[i] = getUserById(UserId(f)).GetUsername()
+	out := make([]Username, 0)
+	for _, f := range friends {
+		if user := getUserById(UserId(f)); len(user) > 0 {
+			if username := user.GetUsername(); username != "" {
+				out = append(out, username)
+			}
+		}
 	}
 	return out
 }
@@ -466,9 +813,13 @@ func (u User) GetRequests() []UserId {
 
 func (u User) GetRequestedUsers() []Username {
 	requests := getStringSlice(u, "sys.requests")
-	out := make([]Username, len(requests))
-	for i, r := range requests {
-		out[i] = getUserById(UserId(r)).GetUsername()
+	out := make([]Username, 0)
+	for _, r := range requests {
+		if user := getUserById(UserId(r)); len(user) > 0 {
+			if username := user.GetUsername(); username != "" {
+				out = append(out, username)
+			}
+		}
 	}
 	return out
 }
@@ -508,22 +859,16 @@ func (u User) SetNote(username Username, note string) error {
 		return fmt.Errorf("note content is too long")
 	}
 	notes := u.GetNotes()
-	mu := getUserMutex(u.GetUsername())
 	userId := username.Id()
-	mu.Lock()
 	notes[userId] = note
-	mu.Unlock()
 	u.Set("sys.notes", notes)
 	return nil
 }
 
 func (u User) RemoveNote(username Username) {
 	notes := u.GetNotes()
-	mu := getUserMutex(u.GetUsername())
 	userId := username.Id()
-	mu.Lock()
 	delete(notes, userId)
-	mu.Unlock()
 	u.Set("sys.notes", notes)
 }
 
@@ -1279,6 +1624,9 @@ var (
 	usernameToId map[Username]UserId
 	idToUser     map[UserId]User
 	usersMutex   sync.RWMutex
+
+	groupsData      map[string]*GroupData
+	groupsDataMutex sync.RWMutex
 
 	followersData  map[UserId]FollowerData
 	followersMutex sync.RWMutex

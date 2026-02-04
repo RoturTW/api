@@ -99,9 +99,16 @@ func handleKofiTransaction(c *gin.Context) {
 
 		c.JSON(200, gin.H{"status": "success"})
 	case "Shop Order":
-		shop_items := parsedData["shop_items"].([]any)
-		for _, shop_item := range shop_items {
-			item := shop_item.(map[string]any)
+		shopItems, ok := parsedData["shop_items"].([]any)
+		if !ok {
+			c.JSON(400, gin.H{"error": "Invalid shop_items format"})
+			return
+		}
+		for _, shop_item := range shopItems {
+			item, ok := shop_item.(map[string]any)
+			if !ok {
+				continue
+			}
 			sendDiscordWebhook([]map[string]any{
 				{
 					"title": "New Shop Order",

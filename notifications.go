@@ -155,6 +155,19 @@ func sendPostToDiscord(postData NetPost) {
 	}
 }
 
+func sendReportToDiscord(reportData string) {
+	webhookData := map[string]any{
+		"username":   "Rotur",
+		"avatar_url": "https://avatars.rotur.dev/rotur",
+		"content":    "<@603952506330021898> Reported: " + reportData,
+	}
+
+	success := makeHTTPRequest("POST", DISCORD_WEBHOOK_URL, webhookData, 5*time.Second, "Discord", 204)
+	if success {
+		log.Printf("[Discord] Report sent to Discord successfully")
+	}
+}
+
 func notify(eventType string, data any) bool {
 	payload := createEventPayload(eventType, data)
 	success := makeHTTPRequest("POST", EVENT_SERVER_URL, payload, 5*time.Second, "Event", 200)

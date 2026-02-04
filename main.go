@@ -16,6 +16,7 @@ func main() {
 	// Load initial data
 	loadBannedWords()
 	loadUsers()
+	loadGroupData()
 	loadFollowers()
 	loadPosts()
 	loadItems()
@@ -164,6 +165,43 @@ func main() {
 		// notes endpoints, get not needed, stored in user["sys.notes"]
 		me.POST("/note/:username", requiresAuth, requireTier("Plus"), noteUser)
 		me.DELETE("/note/:username", requiresAuth, requireTier("Plus"), deleteNote)
+	}
+
+	groups := r.Group("/groups")
+	{
+		groups.GET("/mine", requiresAuth, getMyGroups)
+		groups.GET("/search", requiresAuth, searchGroups)
+		groups.POST("/create", requiresAuth, createGroup)
+		groups.POST("/:grouptag/rep", requiresAuth, representGroup)
+		groups.POST("/:grouptag/disrep", requiresAuth, disrepresentGroup)
+		groups.POST("/:grouptag/report", requiresAuth, reportGroup)
+		groups.POST("/:grouptag/join", requiresAuth, joinGroup)
+		groups.POST("/:grouptag/leave", requiresAuth, leaveGroup)
+		groups.GET("/:grouptag", requiresAuth, getGroup)
+		groups.PATCH("/:grouptag", requiresAuth, updateGroup)
+		groups.DELETE("/:grouptag", requiresAuth, deleteGroup)
+
+		groups.GET("/:grouptag/announcements", getAnnouncements)
+		groups.POST("/:grouptag/announcements", requiresAuth, createAnnouncement)
+		groups.DELETE("/:grouptag/announcements/:announcementid", requiresAuth, deleteAnnouncement)
+		groups.POST("/:grouptag/announcements/mute", requiresAuth, toggleAnnouncementMute)
+
+		groups.GET("/:grouptag/events", requiresAuth, getEvents)
+		groups.POST("/:grouptag/events", requiresAuth, createEvent)
+
+		groups.GET("/:grouptag/tips", requiresAuth, getTips)
+		groups.POST("/:grouptag/tips", requiresAuth, sendTip)
+
+		groups.GET("/:grouptag/roles", requiresAuth, getRoles)
+		groups.POST("/:grouptag/roles", requiresAuth, createRole)
+		groups.PATCH("/:grouptag/roles/:roleid", requiresAuth, updateRole)
+		groups.DELETE("/:grouptag/roles/:roleid", requiresAuth, deleteRole)
+
+		groups.GET("/:grouptag/members/:userid/roles", requiresAuth, getUserRoles)
+		groups.GET("/:grouptag/members/:userid/permissions", requiresAuth, getUserPermissions)
+		groups.GET("/:grouptag/members/:userid/benefits", requiresAuth, getUserBenefits)
+		groups.POST("/:grouptag/members/:userid/roles/:roleid", requiresAuth, assignRole)
+		groups.DELETE("/:grouptag/members/:userid/roles/:roleid", requiresAuth, removeRole)
 	}
 	r.POST("/accept_tos", requiresAuth, acceptTos)
 

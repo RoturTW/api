@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -437,8 +438,15 @@ func (fs *FileSystem) handleAddUnsafe(username Username, change UpdateChange) {
 		Index: 0,
 	}
 
-	data, _ := json.Marshal(meta)
-	os.WriteFile(path, data, 0644)
+	data, err := json.Marshal(meta)
+	if err != nil {
+		log.Printf("Error marshaling metadata: %v", err)
+		return
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		log.Printf("Error writing file %s: %v", path, err)
+		return
+	}
 
 	// Load and update path index (unsafe version - no locking)
 	idx, _ := fs.loadPathIndexUnsafe(username)
@@ -745,9 +753,16 @@ func (fs *FileSystem) migrateFromLegacy(username Username) error {
 			}
 			internalPath := entryToPath(entry)
 			pathIndex[internalPath] = uuid
-			entryData, _ := json.Marshal(metadata)
+			entryData, err := json.Marshal(metadata)
+			if err != nil {
+				log.Printf("Error marshaling entry data: %v", err)
+				continue
+			}
 			filePath := filepath.Join(userDir, uuid+".json")
-			os.WriteFile(filePath, entryData, 0644)
+			if err := os.WriteFile(filePath, entryData, 0644); err != nil {
+				log.Printf("Error writing file %s: %v", filePath, err)
+				continue
+			}
 			index++
 		}
 	}
@@ -755,7 +770,11 @@ func (fs *FileSystem) migrateFromLegacy(username Username) error {
 	filePath := filepath.Join(userDir, ".index.json")
 	data, err = json.Marshal(pathIndex)
 	if err == nil {
-		os.WriteFile(filePath, data, 0644)
+		if writeErr := os.WriteFile(filePath, data, 0644); writeErr != nil {
+			log.Printf("Error writing index file %s: %v", filePath, writeErr)
+		}
+	} else {
+		log.Printf("Error marshaling path index: %v", err)
 	}
 
 	os.Remove(legacyPath)

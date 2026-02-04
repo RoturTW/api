@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -45,6 +46,94 @@ func loadUsers() {
 	usernameToId = usernameToIdInner
 	idToUser = idToUserInner
 	users = loaded
+}
+
+func loadGroupData() {
+	groupsDataMutex.Lock()
+	defer groupsDataMutex.Unlock()
+
+	if _, err := os.Stat(GROUPS_FILE_PATH); os.IsNotExist(err) {
+		err = os.MkdirAll(GROUPS_FILE_PATH, 0755)
+		if err != nil {
+			log.Printf("Error creating groups directory: %v", err)
+			groupsData = make(map[string]*GroupData)
+			return
+		}
+		groupsData = make(map[string]*GroupData)
+		return
+	}
+
+	entries, err := os.ReadDir(GROUPS_FILE_PATH)
+	if err != nil {
+		log.Printf("Error reading groups directory: %v", err)
+		groupsData = make(map[string]*GroupData)
+		return
+	}
+
+	groupsData = make(map[string]*GroupData)
+	loadedCount := 0
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		if filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+
+		tag := entry.Name()[:len(entry.Name())-5]
+
+		filePath := filepath.Join(GROUPS_FILE_PATH, entry.Name())
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			log.Printf("Error reading group file %s: %v", entry.Name(), err)
+			continue
+		}
+
+		var groupData GroupData
+		if err := json.Unmarshal(data, &groupData); err != nil {
+			log.Printf("Error unmarshaling group data from %s: %v", entry.Name(), err)
+			continue
+		}
+
+		groupsData[tag] = &groupData
+		loadedCount++
+	}
+
+	log.Printf("Loaded %d groups", loadedCount)
+}
+
+func saveGroupFile(groupTag string, groupData *GroupData) {
+	path := filepath.Join(GROUPS_FILE_PATH, groupTag+".json")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		log.Printf("Error creating groups directory: %v", err)
+		return
+	}
+
+	data, err := json.MarshalIndent(groupData, "", "  ")
+	if err != nil {
+		log.Printf("Error marshaling group data for %s: %v", groupTag, err)
+		return
+	}
+
+	if err := atomicWrite(path, data, 0644); err != nil {
+		log.Printf("Error saving group data for %s: %v", groupTag, err)
+	}
+}
+
+func saveGroupData(groupTag string) {
+	for tag, groupData := range groupsData {
+		if groupTag != tag {
+			continue
+		}
+		saveGroupFile(tag, groupData)
+	}
+}
+
+func deleteGroupData(groupTag string) {
+	filePath := filepath.Join(GROUPS_FILE_PATH, groupTag+".json")
+	os.Remove(filePath)
 }
 
 func atomicWrite(path string, data []byte, perm os.FileMode) error {
@@ -210,6 +299,7 @@ func loadPosts() {
 	if err := json.Unmarshal(data, &posts); err != nil {
 		log.Printf("Error unmarshaling posts: %v", err)
 		posts = make([]Post, 0)
+		return
 	}
 
 	log.Printf("Loaded %d posts", len(posts))
@@ -240,6 +330,7 @@ func loadItems() {
 	if err := json.Unmarshal(data, &items); err != nil {
 		log.Printf("Error unmarshaling items: %v", err)
 		items = make([]Item, 0)
+		return
 	}
 
 	log.Printf("Loaded %d items", len(items))
@@ -270,6 +361,7 @@ func loadKeys() {
 	if err := json.Unmarshal(data, &keys); err != nil {
 		log.Printf("Error unmarshaling keys: %v", err)
 		keys = make([]Key, 0)
+		return
 	}
 
 	log.Printf("Loaded %d keys", len(keys))
@@ -300,6 +392,7 @@ func loadSystems() {
 	if err := json.Unmarshal(data, &systems); err != nil {
 		log.Printf("Error unmarshaling systems: %v", err)
 		systems = make(map[string]System)
+		return
 	}
 
 	log.Printf("Loaded %d systems", len(systems))
@@ -330,6 +423,7 @@ func loadEventsHistory() {
 	if err := json.Unmarshal(data, &eventsHistory); err != nil {
 		log.Printf("Error unmarshaling events history: %v", err)
 		eventsHistory = make(map[UserId][]Event)
+		return
 	}
 
 	log.Printf("Loaded %d events history", len(eventsHistory))
