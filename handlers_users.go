@@ -935,6 +935,11 @@ func deleteUserKey(c *gin.Context) {
 		return
 	}
 
+	if key == "username" {
+		c.JSON(400, gin.H{"error": "Cannot delete username key"})
+		return
+	}
+
 	user.DelKey(key)
 
 	go saveUsers()
