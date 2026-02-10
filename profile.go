@@ -163,9 +163,20 @@ func getProfile(c *gin.Context) {
 	}
 
 	discord_id := c.Query("discord_id")
-	if nameRaw == "" && discord_id == "" {
-		c.JSON(400, gin.H{"error": "Name or Discord ID is required"})
+
+	id := UserId(c.Query("id"))
+	if nameRaw == "" && discord_id == "" && id == "" {
+		c.JSON(400, gin.H{"error": "Name, Discord ID, or ID is required"})
 		return
+	}
+
+	if id != "" {
+		foundUser, ok := idToUser[id]
+		if !ok {
+			c.JSON(404, gin.H{"error": "User not found"})
+			return
+		}
+		nameRaw = foundUser.GetUsername().String()
 	}
 
 	authKey := c.Query("auth")

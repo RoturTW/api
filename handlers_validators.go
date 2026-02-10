@@ -74,8 +74,8 @@ func validateToken(c *gin.Context) {
 	encryptedData := parts[1]
 
 	// Find the user in the users list
-	foundUser := getUserById(userId)
-	if foundUser != nil {
+	foundUser, ok := idToUser[userId]
+	if !ok {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
@@ -102,8 +102,8 @@ func validateToken(c *gin.Context) {
 	hashedKey := hex.EncodeToString(hasher.Sum(nil))
 
 	if hashedKey == encryptedData {
-		c.JSON(200, gin.H{"valid": true})
+		c.JSON(200, gin.H{"valid": true, "username": foundUser.GetUsername(), "id": foundUser.GetId()})
 	} else {
-		c.JSON(200, gin.H{"valid": false})
+		c.JSON(200, gin.H{"valid": false, "error": "Invalid validator"})
 	}
 }
