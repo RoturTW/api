@@ -16,7 +16,7 @@ type ValidatorInfo struct {
 	Timestamp int64
 }
 
-var validatorInfos = make(map[Username]ValidatorInfo)
+var validatorInfos = make(map[UserId]ValidatorInfo)
 var validatorMutex sync.RWMutex
 
 func generateValidator(c *gin.Context) {
@@ -38,13 +38,13 @@ func generateValidator(c *gin.Context) {
 	// Store the validator and timestamp for this user
 	validatorMutex.Lock()
 	defer validatorMutex.Unlock()
-	validatorInfos[user.GetUsername()] = ValidatorInfo{
+	validatorInfos[user.GetId()] = ValidatorInfo{
 		Value:     hashedKey,
 		Timestamp: timestamp,
 	}
 
 	c.JSON(200, gin.H{
-		"validator": user.GetUsername().String() + "," + hashedKey,
+		"validator": user.GetId().String() + "," + hashedKey,
 	})
 }
 
@@ -70,16 +70,15 @@ func validateToken(c *gin.Context) {
 		return
 	}
 
-	username := Username(parts[0])
+	userId := UserId(parts[0])
 	encryptedData := parts[1]
 
 	// Find the user in the users list
-	foundUsers, err := getAccountsBy("username", username.String(), 1)
-	if err != nil {
+	foundUser := getUserById(userId)
+	if foundUser != nil {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
-	foundUser := foundUsers[0]
 	// Get the user's key (token)
 	userKey := foundUser.GetKey()
 	if userKey == "" {
@@ -89,7 +88,7 @@ func validateToken(c *gin.Context) {
 
 	// Check if validator matches latest and is not expired
 	validatorMutex.RLock()
-	info, ok := validatorInfos[username]
+	info, ok := validatorInfos[userId]
 	validatorMutex.RUnlock()
 	if !ok || info.Value != encryptedData || time.Now().Unix()-info.Timestamp > 300 {
 		c.JSON(200, gin.H{"valid": false, "error": "Validator expired or invalid"})
