@@ -450,7 +450,7 @@ func (fs *FileSystem) handleAddUnsafe(username Username, change UpdateChange) {
 
 	// Load and update path index (unsafe version - no locking)
 	idx, _ := fs.loadPathIndexUnsafe(username)
-	idx[entryToPath(dta)] = change.UUID
+	idx[entryToPath(dta, username)] = change.UUID
 	fs.savePathIndexUnsafe(username, idx)
 }
 
@@ -461,7 +461,7 @@ func (fs *FileSystem) handleReplaceUnsafe(username Username, change UpdateChange
 		return
 	}
 
-	oldPath := entryToPath(entry)
+	oldPath := entryToPath(entry, username)
 
 	idx := extractIndex(change.Idx)
 	entry[8] = time.Now().UnixMilli()
@@ -469,7 +469,7 @@ func (fs *FileSystem) handleReplaceUnsafe(username Username, change UpdateChange
 		entry[idx] = change.Dta
 	}
 
-	newPath := entryToPath(entry)
+	newPath := entryToPath(entry, username)
 
 	fs.setFileByUUIDUnsafe(username, change.UUID, entry)
 
@@ -577,7 +577,7 @@ func (fs *FileSystem) rebuildPathIndexUnsafe(username Username) (PathIndex, erro
 			continue
 		}
 
-		path := entryToPath(meta.Entry)
+		path := entryToPath(meta.Entry, username)
 		uuid := strings.TrimSuffix(entry.Name(), ".json")
 
 		idx[path] = uuid
@@ -665,10 +665,44 @@ func (fs *FileSystem) savePathIndexUnsafe(username Username, idx PathIndex) erro
 	return os.Rename(tmp, path) // atomic on POSIX
 }
 
-func entryToPath(entry FileEntry) string {
-	return strings.ToLower(getStringOrEmpty(entry[2]) + "/" +
-		getStringOrEmpty(entry[1]) +
-		getStringOrEmpty(entry[0]))
+func entryToLocation(entry FileEntry, username Username) string {
+	location := strings.ToLower(getStringOrEmpty(entry[2]))
+	if strings.HasPrefix(location, "origin/(c) users/") {
+		parts := strings.Split(location, "/")
+		if len(parts) >= 3 {
+			rest := parts[3:]
+			location = "origin/(c) users/" + username.ToLower().String()
+			if len(rest) > 0 {
+				location += "/" + strings.Join(rest, "/")
+			}
+		}
+	}
+	return location
+}
+
+func joinNoClean(a, b string) string {
+	a = strings.TrimRight(a, "/")
+	b = strings.TrimLeft(b, "/")
+
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+
+	return a + "/" + b
+}
+
+func entryToPath(entry FileEntry, username Username) string {
+	name := getStringOrEmpty(entry[1]) + getStringOrEmpty(entry[0])
+
+	return strings.ToLower(
+		joinNoClean(
+			entryToLocation(entry, username),
+			name,
+		),
+	)
 }
 
 func (fs *FileSystem) GetFileStats(username Username, uuids []string) ([]FileStat, error) {
@@ -751,7 +785,7 @@ func (fs *FileSystem) migrateFromLegacy(username Username) error {
 				Entry: entry,
 				Index: index,
 			}
-			internalPath := entryToPath(entry)
+			internalPath := entryToPath(entry, username)
 			pathIndex[internalPath] = uuid
 			entryData, err := json.Marshal(metadata)
 			if err != nil {
@@ -1009,6 +1043,7 @@ func (fs *FileSystem) GetFilesIndexWithThreshold(username Username, sizeThreshol
 				}
 			}
 
+			entryCopy[2] = entryToLocation(entryCopy, username)
 			metadata.Entry = entryCopy
 			allEntries = append(allEntries, metadata)
 		}
