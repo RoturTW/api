@@ -227,6 +227,7 @@ func userToNet(user User) User {
 	if user.GetMarriage().Status != "single" {
 		userCopy["sys.marriage"] = user.GetMarriage().ToNet()
 	}
+	userCopy["sys.blocked"] = user.GetBlockedUsers()
 	transactions := user.GetTransactions()
 	netTransactions := make([]TransactionNet, len(transactions))
 	for i, transaction := range transactions {
@@ -532,7 +533,7 @@ func canUpdateUsernameUnsafe(username string) (bool, string) {
 	return true, "Can update username"
 }
 
-func updateUsername(userId UserId, oldUsername, newUsername Username) {
+func updateUsername(oldUsername, newUsername Username) {
 	usernameLower := oldUsername.ToLower()
 	newUsernameLower := newUsername.ToLower()
 
@@ -741,7 +742,7 @@ func updateUser(c *gin.Context) {
 			c.JSON(400, gin.H{"error": msg})
 			return
 		}
-		updateUsername(user.GetId(), user.GetUsername(), Username(getStringOrEmpty(value)))
+		updateUsername(user.GetUsername(), Username(getStringOrEmpty(value)))
 	}
 	if slices.Contains(lockedKeys, key) {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Key '%s' cannot be updated", key)})
@@ -822,7 +823,7 @@ func updateUserAdmin(c *gin.Context) {
 					return
 				}
 				oldUsername := user.GetUsername()
-				updateUsername(user.GetId(), oldUsername, username)
+				updateUsername(oldUsername, username)
 				user.Set("username", username.String())
 			case "sys.currency":
 				user.SetBalance(value)
