@@ -34,7 +34,7 @@ const statusCleanupInterval = time.Hour
 
 // build path to a user's status.json
 func userStatusPath(username Username) string {
-	name := username.ToLower().String()
+	name := string(username.ToLower())
 	return filepath.Join(statusBasePath, name, "status.json")
 }
 

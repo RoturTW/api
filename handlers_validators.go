@@ -44,7 +44,7 @@ func generateValidator(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"validator": user.GetId().String() + "," + hashedKey,
+		"validator": string(user.GetId()) + "," + hashedKey,
 	})
 }
 

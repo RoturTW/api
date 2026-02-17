@@ -158,7 +158,7 @@ func setSubscription(c *gin.Context) {
 		return
 	}
 
-	username := data["username"].(string)
+	username := Username(data["username"].(string))
 	tier := data["tier"].(string)
 
 	if username == "" || tier == "" {
@@ -166,12 +166,11 @@ func setSubscription(c *gin.Context) {
 		return
 	}
 
-	foundUsers, err := getAccountsBy("username", username, -1)
+	user, err := getAccountByUsername(username)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
-	user := foundUsers[0]
 	user.SetSubscription(subscription{
 		Tier:         tier,
 		Active:       true,

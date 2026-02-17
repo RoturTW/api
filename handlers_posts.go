@@ -200,8 +200,8 @@ func replyToPost(c *gin.Context) {
 		return
 	}
 
-	foundUsers, err := getAccountsBy("username", targetPost.User.String(), 1)
-	if err != nil || isUserBlockedBy(foundUsers[0], user.GetId()) {
+	foundUser, err := getAccountByUserId(targetPost.User)
+	if err != nil || isUserBlockedBy(foundUser, user.GetId()) {
 		c.JSON(400, gin.H{"error": "You cant reply to this post"})
 		return
 	}
@@ -307,8 +307,8 @@ func ratePost(c *gin.Context) {
 	}
 
 	if rating == 1 {
-		foundUsers, err := getAccountsBy("username", targetPost.User.String(), 1)
-		if err != nil || isUserBlockedBy(foundUsers[0], user.GetId()) {
+		foundUser, err := getAccountByUserId(targetPost.User)
+		if err != nil || isUserBlockedBy(foundUser, user.GetId()) {
 			c.JSON(400, gin.H{"error": "You cant like this post"})
 			return
 		}
@@ -377,8 +377,8 @@ func repost(c *gin.Context) {
 		return
 	}
 
-	foundUsers, err := getAccountsBy("username", originalPost.User.String(), 1)
-	if err != nil || isUserBlockedBy(foundUsers[0], user.GetId()) {
+	foundUser, err := getAccountByUserId(originalPost.User)
+	if err != nil || isUserBlockedBy(foundUser, user.GetId()) {
 		c.JSON(400, gin.H{"error": "You cant repost this post"})
 		return
 	}

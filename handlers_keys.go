@@ -534,7 +534,7 @@ func buyKey(c *gin.Context) {
 						"username":  username,    // purchaser
 						"key":       keys[i].Key, // id
 						"price":     keys[i].Price,
-						"content":   username.String() + " purchased key " + keys[i].Key + " for " + strconv.Itoa(keys[i].Price) + " credits",
+						"content":   string(username) + " purchased key " + keys[i].Key + " for " + strconv.Itoa(keys[i].Price) + " credits",
 						"timestamp": time.Now().Unix(),
 					})
 				}
@@ -682,10 +682,12 @@ func checkSubscriptions() {
 			subscriptionsProcessed++
 			usersToRemove := make([]UserId, 0)
 
-			ownerIndex := getIdxOfAccountBy("username", key.Creator.String())
-			if ownerIndex == -1 {
+			owner, err := getAccountByUserId(key.Creator)
+			if err != nil {
 				continue
 			}
+
+			ownerId := owner.GetId()
 
 			for userId, userData := range key.Users {
 				if userData.NextBilling == nil {
@@ -740,25 +742,20 @@ func checkSubscriptions() {
 					if userData.Price != 0 {
 						log.Printf("Processing subscription payment for %s for key %s (amount: %.2f)", username, key.Key, float64(userData.Price))
 
-						userIndex := getIdxOfAccountBy("username", username.String())
+						purchaser, err := getAccountByUsername(username)
 
-						if userIndex == -1 {
+						if err != nil {
 							log.Printf("User %s not found for key %s", username, key.Key)
 							usersToRemove = append(usersToRemove, userId)
 							continue
 						}
 
-						if userIndex == ownerIndex {
+						if purchaser.GetId() == ownerId {
 							nextBillingTime := computeNextBilling(key.Subscription)
 							userData.NextBilling = nextBillingTime.UnixMilli()
 							key.Users[userId] = userData
 							continue
 						}
-
-						usersMutex.RLock()
-						purchaser := users[userIndex]
-						owner := users[ownerIndex]
-						usersMutex.RUnlock()
 
 						var currencyFloat float64 = purchaser.GetCredits()
 						price := float64(userData.Price)
@@ -818,7 +815,7 @@ func checkSubscriptions() {
 								"username":  username, // purchaser
 								"key":       key.Key,  // id
 								"price":     key.Price,
-								"content":   username.String() + " was charged by key: " + key.Key + " for " + strconv.Itoa(key.Price) + " credits",
+								"content":   string(username) + " was charged by key: " + key.Key + " for " + strconv.Itoa(key.Price) + " credits",
 								"timestamp": time.Now().Unix(),
 							})
 						}

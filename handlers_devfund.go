@@ -42,16 +42,8 @@ func escrowTransfer(c *gin.Context) {
 		return
 	}
 
-	// Find sender user
-	foundUsers, err := getAccountsBy("username", user.GetUsername().String(), 1)
-	if err != nil {
-		c.JSON(404, gin.H{"error": "Sender user not found"})
-		return
-	}
-	fromUser := foundUsers[0]
-
 	// Check sender balance
-	fromCurrency := fromUser.GetCredits()
+	fromCurrency := user.GetCredits()
 	if fromCurrency == 0 {
 		c.JSON(400, gin.H{"error": "Sender user has no currency"})
 		return
@@ -69,7 +61,7 @@ func escrowTransfer(c *gin.Context) {
 		newBal = 0
 	}
 
-	fromUser.SetBalance(newBal)
+	user.SetBalance(newBal)
 
 	// Add escrow transaction to sender
 	now := time.Now().UnixMilli()
@@ -81,7 +73,7 @@ func escrowTransfer(c *gin.Context) {
 		note = note[:50]
 	}
 
-	fromUser.addTransaction(Transaction{
+	user.addTransaction(Transaction{
 		Note:       note,
 		User:       Username("rotur").Id(),
 		Timestamp:  now,
@@ -95,7 +87,7 @@ func escrowTransfer(c *gin.Context) {
 
 	c.JSON(200, gin.H{
 		"message":     "Escrow transfer successful",
-		"from":        fromUser.GetUsername(),
+		"from":        user.GetUsername(),
 		"amount":      nAmount,
 		"petition_id": req.PetitionID,
 		"new_balance": newBal,
@@ -140,14 +132,13 @@ func escrowRelease(c *gin.Context) {
 		return
 	}
 
-	toUsername := strings.ToLower(req.ToUsername)
+	toUsername := Username(req.ToUsername)
 
-	toUsers, err := getAccountsBy("username", toUsername, 1)
+	toUser, err := getAccountByUsername(toUsername)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "Recipient user not found"})
 		return
 	}
-	toUser := toUsers[0]
 
 	// Get recipient balance
 	toCurrency := toUser.GetCredits()

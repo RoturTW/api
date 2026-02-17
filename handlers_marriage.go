@@ -21,13 +21,12 @@ func proposeMarriage(c *gin.Context) {
 		return
 	}
 
-	foundUsers, err := getAccountsBy("username", targetUsername.String(), 1)
+	targetUser, err := getAccountByUsername(targetUsername)
 	if err != nil {
 		c.JSON(404, ErrorResponse{Error: "Target user not found"})
 		return
 	}
 
-	targetUser := foundUsers[0]
 	targetMarriage := targetUser.GetMarriage()
 	if targetMarriage.Status != "single" {
 		c.JSON(400, ErrorResponse{Error: "Target user is already married or has a pending proposal"})
@@ -49,14 +48,14 @@ func proposeMarriage(c *gin.Context) {
 	user.SetMarriage(Marriage{
 		Status:    "proposed",
 		Partner:   targetUser.GetId(),
-		Timestamp: timestamp,
+		Timestamp: Timestamp(timestamp),
 		Proposer:  user.GetId(),
 	})
 
 	targetUser.SetMarriage(Marriage{
 		Status:    "proposed",
 		Partner:   user.GetId(),
-		Timestamp: timestamp,
+		Timestamp: Timestamp(timestamp),
 		Proposer:  user.GetId(),
 	})
 
@@ -87,12 +86,11 @@ func acceptMarriage(c *gin.Context) {
 		return
 	}
 
-	partners, err := getAccountsBy("username", partnerUsername.String(), 1)
+	partner, err := getAccountByUsername(partnerUsername)
 	if err != nil {
 		c.JSON(404, ErrorResponse{Error: "Partner not found"})
 		return
 	}
-	partner := partners[0]
 
 	// Update marriage status for both users
 	timestamp := time.Now().UnixMilli()
@@ -100,14 +98,14 @@ func acceptMarriage(c *gin.Context) {
 	user.SetMarriage(Marriage{
 		Status:    "married",
 		Partner:   partnerUsername.Id(),
-		Timestamp: timestamp,
+		Timestamp: Timestamp(timestamp),
 		Proposer:  proposerUsername.Id(),
 	})
 
 	partner.SetMarriage(Marriage{
 		Status:    "married",
 		Partner:   user.GetId(),
-		Timestamp: timestamp,
+		Timestamp: Timestamp(timestamp),
 		Proposer:  proposerUsername.Id(),
 	})
 
@@ -142,13 +140,12 @@ func rejectMarriage(c *gin.Context) {
 	}
 
 	// Find partner
-	partners, err := getAccountsBy("username", partnerUsername.String(), 1)
+	partner, err := getAccountByUsername(partnerUsername)
 
 	if err != nil {
 		c.JSON(404, ErrorResponse{Error: "Partner not found"})
 		return
 	}
-	partner := partners[0]
 
 	// Remove marriage data entirely for both users
 	user.DelKey("sys.marriage")
@@ -176,13 +173,12 @@ func divorceMarriage(c *gin.Context) {
 	}
 
 	// Find partner
-	partners, err := getAccountsBy("username", partnerUsername.String(), 1)
+	partner, err := getAccountByUsername(partnerUsername)
 
 	if err != nil {
 		c.JSON(404, ErrorResponse{Error: "Partner not found"})
 		return
 	}
-	partner := partners[0]
 
 	// Remove marriage data entirely
 	user.DelKey("sys.marriage")
@@ -214,13 +210,11 @@ func cancelMarriage(c *gin.Context) {
 	}
 
 	// Find partner
-	partners, err := getAccountsBy("username", partnerUsername.String(), 1)
-
+	partner, err := getAccountByUsername(partnerUsername)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "Partner not found"})
 		return
 	}
-	partner := partners[0]
 
 	// Remove marriage data entirely for both users
 	user.DelKey("sys.marriage")

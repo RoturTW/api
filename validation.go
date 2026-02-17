@@ -37,7 +37,7 @@ func loadBannedWordsLocal() ([]string, error) {
 }
 
 func ValidateUsername(username Username) (bool, string) {
-	usernameLower := username.ToLower().String()
+	usernameLower := string(username.ToLower())
 
 	if usernameLower == "" {
 		return false, "Username is required"
@@ -55,7 +55,7 @@ func ValidateUsername(username Username) (bool, string) {
 	words, err := loadBannedWordsLocal()
 	if err == nil {
 		for _, banned := range words {
-			u := strings.ReplaceAll(username.String(), "1", "l")
+			u := strings.ReplaceAll(usernameLower, "1", "l")
 			u = strings.ReplaceAll(u, "3", "e")
 			u = strings.ReplaceAll(u, "5", "s")
 			u = strings.ReplaceAll(u, "7", "t")

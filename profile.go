@@ -157,9 +157,9 @@ func renderBioRegex(bio string, profile User, otherKeys profileResp) string {
 }
 
 func getProfile(c *gin.Context) {
-	nameRaw := c.Query("username")
+	nameRaw := Username(c.Query("username"))
 	if nameRaw == "" {
-		nameRaw = c.Query("name")
+		nameRaw = Username(c.Query("name"))
 	}
 
 	discord_id := c.Query("discord_id")
@@ -176,7 +176,7 @@ func getProfile(c *gin.Context) {
 			c.JSON(404, gin.H{"error": "User not found"})
 			return
 		}
-		nameRaw = foundUser.GetUsername().String()
+		nameRaw = foundUser.GetUsername()
 	}
 
 	authKey := c.Query("auth")
@@ -197,17 +197,16 @@ func getProfile(c *gin.Context) {
 		name = foundUser.GetUsername()
 		nameLower = name.ToLower()
 	} else {
-		fmt.Println("Searching for", name.String())
-		foundUsers, err := getAccountsBy("username", name.String(), 1)
-		fmt.Println("Found", len(foundUsers), "users")
+		fmt.Println("Searching for", name)
+		user, err := getAccountByUsername(name)
 		if err != nil {
 			fmt.Println("Error", err.Error())
 			c.JSON(404, gin.H{"error": "User not found"})
 			return
 		}
-		foundUser = foundUsers[0]
+		foundUser = user
 	}
-	userIndex := getIdxOfAccountBy("username", nameLower.String())
+	userIndex := getIdxOfAccountBy("username", string(nameLower))
 
 	userId := foundUser.GetId()
 
@@ -324,7 +323,7 @@ func getProfile(c *gin.Context) {
 
 	profileData := profileResp{
 		Username:     foundUser.GetUsername(),
-		Avatar:       "https://avatars.rotur.dev/" + foundUser.GetUsername().String(),
+		Avatar:       "https://avatars.rotur.dev/" + string(foundUser.GetUsername()),
 		Followers:    followerCount,
 		Following:    followingCount,
 		Pronouns:     getStringOrEmpty(foundUser.Get("pronouns")),
@@ -353,7 +352,7 @@ func getProfile(c *gin.Context) {
 	profileData.Bio = bio
 
 	if foundUser.Get("sys.banner") != nil || foundUser.Get("banner") != nil {
-		profileData.Banner = "https://avatars.rotur.dev/.banners/" + foundUser.GetUsername().String()
+		profileData.Banner = "https://avatars.rotur.dev/.banners/" + string(foundUser.GetUsername())
 	}
 
 	if includePosts {

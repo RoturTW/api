@@ -37,10 +37,6 @@ type sub_benefits struct {
 
 type Username string
 
-func (u Username) String() string {
-	return string(u)
-}
-
 func (u Username) ToLower() Username {
 	return Username(strings.ToLower(string(u)))
 }
@@ -51,26 +47,28 @@ func (u Username) Id() UserId {
 
 type UserId string
 
-func (u UserId) String() string {
-	return string(u)
-}
-
 func (u UserId) User() User {
 	return idToUser[u]
 }
 
+type Timestamp int64
+
+func (t Timestamp) Time() time.Time {
+	return time.UnixMilli(int64(t))
+}
+
 type Marriage struct {
-	Status    string `json:"status"`
-	Partner   UserId `json:"partner"`
-	Timestamp int64  `json:"timestamp"`
-	Proposer  UserId `json:"proposer"`
+	Status    string    `json:"status"`
+	Partner   UserId    `json:"partner"`
+	Timestamp Timestamp `json:"timestamp"`
+	Proposer  UserId    `json:"proposer"`
 }
 
 type MarriageNet struct {
-	Status    string   `json:"status"`
-	Partner   Username `json:"partner"`
-	Timestamp int64    `json:"timestamp"`
-	Proposer  Username `json:"proposer"`
+	Status    string    `json:"status"`
+	Partner   Username  `json:"partner"`
+	Timestamp Timestamp `json:"timestamp"`
+	Proposer  Username  `json:"proposer"`
 }
 
 func (m Marriage) ToNet() MarriageNet {
@@ -662,7 +660,7 @@ func (u *User) GetMarriage() Marriage {
 		return Marriage{
 			Status:    getStringOrDefault(v["status"], "single"),
 			Partner:   UserId(getStringOrDefault(v["partner"], "")),
-			Timestamp: int64(getIntOrDefault(v["timestamp"], 0)),
+			Timestamp: Timestamp(getIntOrDefault(v["timestamp"], 0)),
 			Proposer:  UserId(getStringOrDefault(v["proposer"], "")),
 		}
 	}
@@ -677,10 +675,10 @@ func (u *User) GetMarriage() Marriage {
 
 func (u *User) SetMarriage(marriage Marriage) {
 	u.Set("sys.marriage", map[string]any{
-		"status":    marriage.Status,
-		"partner":   marriage.Partner.String(),
+		"status":    string(marriage.Status),
+		"partner":   string(marriage.Partner),
 		"timestamp": marriage.Timestamp,
-		"proposer":  marriage.Proposer.String(),
+		"proposer":  string(marriage.Proposer),
 	})
 }
 
@@ -1289,7 +1287,7 @@ func (s *System) Set(key string, value any) (string, error) {
 	case "owner":
 		if v, ok := value.(SystemOwner); ok {
 			s.Owner = v
-			return v.Name.String(), nil
+			return string(v.Name), nil
 		} else {
 			return "", fmt.Errorf("invalid owner value: %v", value)
 		}

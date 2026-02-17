@@ -80,7 +80,7 @@ func transferItem(c *gin.Context) {
 	})
 
 	c.JSON(200, gin.H{
-		"message": "Item '" + targetItem.Name + "' transferred successfully to " + targetUsername.String(),
+		"message": "Item '" + targetItem.Name + "' transferred successfully to " + string(targetUsername),
 	})
 }
 

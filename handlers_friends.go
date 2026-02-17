@@ -23,12 +23,11 @@ func sendFriendRequest(c *gin.Context) {
 		return
 	}
 
-	foundUsers, err := getAccountsBy("username", targetLower.String(), 1)
+	target, err := getAccountByUsername(targetLower)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "Account Does Not Exist"})
 		return
 	}
-	target := foundUsers[0]
 	if isUserBlockedBy(target, senderId) {
 		c.JSON(400, gin.H{"error": "You cant send friend requests to this user"})
 		return
@@ -72,13 +71,12 @@ func acceptFriendRequest(c *gin.Context) {
 		return
 	}
 
-	foundUsers, err := getAccountsBy("username", requesterName.String(), 1)
+	requester, err := getAccountByUsername(requesterName)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "Account Does Not Exist"})
 		return
 	}
 
-	requester := foundUsers[0]
 	found := current.RemoveRequest(requesterName)
 	if !found {
 		c.JSON(400, gin.H{"error": "No Pending Request"})
@@ -128,12 +126,11 @@ func removeFriend(c *gin.Context) {
 		return
 	}
 
-	foundUsers, err := getAccountsBy("username", otherName.String(), 1)
+	other, err := getAccountByUsername(otherName)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "Account Does Not Exist"})
 		return
 	}
-	other := foundUsers[0]
 
 	if !current.IsFriend(otherName) {
 		c.JSON(400, gin.H{"error": "Not Friends"})

@@ -508,8 +508,8 @@ func (fs *FileSystem) RenameUserFileSystem(oldUsername Username, newUsername Use
 		return
 	}
 
-	oldLocationPrefix := strings.ToLower("origin/(c) users/" + oldUsername.String())
-	newLocationPrefix := strings.ToLower("origin/(c) users/" + newUsername.String())
+	oldLocationPrefix := strings.ToLower("origin/(c) users/" + string(oldUsername))
+	newLocationPrefix := strings.ToLower("origin/(c) users/" + string(newUsername))
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	for path, uuid := range index {
@@ -671,7 +671,7 @@ func entryToLocation(entry FileEntry, username Username) string {
 		parts := strings.Split(location, "/")
 		if len(parts) >= 3 {
 			rest := parts[3:]
-			location = "origin/(c) users/" + username.ToLower().String()
+			location = "origin/(c) users/" + string(username.ToLower())
 			if len(rest) > 0 {
 				location += "/" + strings.Join(rest, "/")
 			}
@@ -739,6 +739,10 @@ func (fs *FileSystem) GetFileStats(username Username, uuids []string) ([]FileSta
 	return stats, nil
 }
 
+func (fs *FileSystem) GetUserPath(username Username) string {
+	return filepath.Join(fileDir, string(username))
+}
+
 func (fs *FileSystem) migrateFromLegacy(username Username) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -750,7 +754,7 @@ func (fs *FileSystem) migrateFromLegacy(username Username) error {
 		return nil
 	}
 	if !fileExists(legacyPath) {
-		copyAndReplace(defaultOFSF, legacyPath, "${USERNAME}", username.String())
+		copyAndReplace(defaultOFSF, legacyPath, "${USERNAME}", string(username))
 	}
 
 	fmt.Printf("\033[93m[~] OFSF\033[0m | Migrating %s from legacy format\n", username)
@@ -770,7 +774,7 @@ func (fs *FileSystem) migrateFromLegacy(username Username) error {
 		return err
 	}
 
-	userDir := filepath.Join(fileDir, username.String())
+	userDir := fs.GetUserPath(username)
 	if err := os.MkdirAll(userDir, 0755); err != nil {
 		return err
 	}
@@ -819,7 +823,7 @@ func (fs *FileSystem) migrateFromLegacy(username Username) error {
 
 // getFileByUUIDUnsafe assumes the lock is already held
 func (fs *FileSystem) getFileByUUIDUnsafe(username Username, uuid string) (FileEntry, error) {
-	userDir := filepath.Join(fileDir, username.String())
+	userDir := fs.GetUserPath(username)
 
 	filePath := filepath.Join(userDir, uuid+".json")
 
@@ -852,7 +856,7 @@ func (fs *FileSystem) GetFileByUUID(username Username, uuid string) (FileEntry, 
 
 // setFileByUUIDUnsafe assumes the lock is already held
 func (fs *FileSystem) setFileByUUIDUnsafe(username Username, uuid string, file FileEntry) error {
-	userDir := filepath.Join(fileDir, username.String())
+	userDir := fs.GetUserPath(username)
 
 	filePath := filepath.Join(userDir, uuid+".json")
 
@@ -890,7 +894,7 @@ func (fs *FileSystem) calculateTotalSize(username Username) (int, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 
-	userDir := filepath.Join(fileDir, username.String())
+	userDir := fs.GetUserPath(username)
 	totalSize := 0
 
 	entries, err := os.ReadDir(userDir)
@@ -925,7 +929,7 @@ func (fs *FileSystem) GetFilesByUUIDs(username Username, uuids []string) (map[st
 	defer fs.mu.RUnlock()
 
 	result := make(map[string]FileEntry)
-	userDir := filepath.Join(fileDir, username.String())
+	userDir := fs.GetUserPath(username)
 
 	for _, uuid := range uuids {
 		filePath := filepath.Join(userDir, uuid+".json")
@@ -951,7 +955,7 @@ func (fs *FileSystem) DeleteUserFileSystem(username Username) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
-	userDir := filepath.Join(fileDir, username.String())
+	userDir := fs.GetUserPath(username)
 
 	if err := os.RemoveAll(userDir); err != nil {
 		if os.IsNotExist(err) {
@@ -961,7 +965,7 @@ func (fs *FileSystem) DeleteUserFileSystem(username Username) error {
 		return err
 	}
 
-	legacyPath := filepath.Join(fileDir, username.String()+".ofsf")
+	legacyPath := filepath.Join(fileDir, string(username)+".ofsf")
 	os.Remove(legacyPath)
 
 	fmt.Printf("Successfully deleted files for user %s\n", username)
@@ -993,7 +997,7 @@ func (fs *FileSystem) GetFilesIndexWithThreshold(username Username, sizeThreshol
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 
-	userDir := filepath.Join(fileDir, username.String())
+	userDir := fs.GetUserPath(username)
 	entries, err := os.ReadDir(userDir)
 	if err != nil {
 		if os.IsNotExist(err) {

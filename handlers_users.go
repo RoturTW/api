@@ -51,6 +51,36 @@ func getAccountsBy(key string, value string, max int) ([]User, error) {
 	return matches, nil
 }
 
+func getAccountByUserId[T UserId | string](id T) (User, error) {
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
+	name := UserId(id).User().GetUsername().ToLower()
+
+	for _, user := range users {
+		if user.GetUsername().ToLower() == name {
+			return user, nil
+		}
+	}
+
+	return nil, fmt.Errorf("account not found for id=%q", id)
+}
+
+func getAccountByUsername[T Username | string](username T) (User, error) {
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+
+	name := Username(username).ToLower()
+
+	for _, user := range users {
+		if user.GetUsername().ToLower() == name {
+			return user, nil
+		}
+	}
+
+	return nil, fmt.Errorf("account not found for username=%q", username)
+}
+
 func findAccountByLogin(username string, password string) (User, error) {
 	usersMutex.RLock()
 	defer usersMutex.RUnlock()
@@ -90,7 +120,7 @@ func getIdxOfAccountBy(key string, value string) int {
 // helper function to update user keys
 func setAccountKey(username Username, key string, value any) error {
 
-	i := getIdxOfAccountBy("username", username.String())
+	i := getIdxOfAccountBy("username", string(username))
 
 	if i != -1 {
 		usersMutex.Lock()
@@ -514,16 +544,15 @@ func uploadUserImage(imageType, imageData, token string) (*http.Response, error)
 	return resp, nil
 }
 
-func canUpdateUsernameUnsafe(username string) (bool, string) {
+func canUpdateUsernameUnsafe(username Username) (bool, string) {
 	if username == "" {
 		return false, "Invalid username"
 	}
-	name := Username(username)
-	ok, msg := ValidateUsername(name)
+	ok, msg := ValidateUsername(username)
 	if !ok {
 		return false, msg
 	}
-	usernameLower := name.ToLower()
+	usernameLower := username.ToLower()
 	for _, user := range users {
 		if user.GetUsername().ToLower() == usernameLower {
 			return false, "Username already in use"
@@ -590,7 +619,7 @@ func updateUser(c *gin.Context) {
 			c.JSON(400, gin.H{"error": "Banner must be a valid data URI"})
 			return
 		}
-		userIndex := getIdxOfAccountBy("username", username.String())
+		userIndex := getIdxOfAccountBy("username", string(username))
 		if userIndex == -1 {
 			c.JSON(403, gin.H{"error": "User not found"})
 			return
@@ -736,7 +765,7 @@ func updateUser(c *gin.Context) {
 	}
 	if key == "username" {
 		usersMutex.RLock()
-		ok, msg := canUpdateUsernameUnsafe(getStringOrEmpty(value))
+		ok, msg := canUpdateUsernameUnsafe(Username(getStringOrEmpty(value)))
 		usersMutex.RUnlock()
 		if !ok {
 			c.JSON(400, gin.H{"error": msg})
@@ -818,13 +847,13 @@ func updateUserAdmin(c *gin.Context) {
 			switch key {
 			case "username":
 				username := Username(getStringOrEmpty(value))
-				if ok, msg := canUpdateUsernameUnsafe(username.String()); !ok {
+				if ok, msg := canUpdateUsernameUnsafe(username); !ok {
 					c.JSON(400, gin.H{"error": msg})
 					return
 				}
 				oldUsername := user.GetUsername()
 				updateUsername(oldUsername, username)
-				user.Set("username", username.String())
+				user.Set("username", username)
 			case "sys.currency":
 				user.SetBalance(value)
 			default:
@@ -961,17 +990,15 @@ func PerformCreditTransfer(fromUsername, toUsername Username, amount float64, no
 		return fmt.Errorf("minimum amount is 0.01")
 	}
 
-	fromUsers, err := getAccountsBy("username", fromUsername.String(), 1)
+	fromUser, err := getAccountByUsername(fromUsername)
 	if err != nil {
 		return fmt.Errorf("sender user not found")
 	}
-	fromUser := fromUsers[0]
 
-	toUsers, err := getAccountsBy("username", toUsername.String(), 1)
+	toUser, err := getAccountByUsername(toUsername)
 	if err != nil {
 		return fmt.Errorf("recipient user not found")
 	}
-	toUser := toUsers[0]
 
 	if fromUser.GetUsername().ToLower() == toUser.GetUsername().ToLower() {
 		return fmt.Errorf("cannot send credits to yourself")
@@ -1012,7 +1039,7 @@ func PerformCreditTransfer(fromUsername, toUsername Username, amount float64, no
 		systemsMutex.RUnlock()
 
 		// Apply tax to taxRecipient if exists
-		if idx := getIdxOfAccountBy("username", taxRecipient.String()); taxRecipient != toUser.GetUsername() && idx != -1 {
+		if idx := getIdxOfAccountBy("username", string(taxRecipient)); taxRecipient != toUser.GetUsername() && idx != -1 {
 			taxUser, _ := getUserByIdx(idx)
 			newBalance := roundVal(taxUser.GetCredits() + taxRecipientShare)
 			taxUser.SetBalance(newBalance)
@@ -1273,7 +1300,7 @@ func reconnectFriends(_ any) {
 func performUserDeletion(username Username, isAdmin bool, ban bool) error {
 	usernameLower := username.ToLower()
 
-	idx := getIdxOfAccountBy("username", usernameLower.String())
+	idx := getIdxOfAccountBy("username", string(usernameLower))
 	if idx == -1 {
 		return fmt.Errorf("user not found")
 	}
@@ -1349,9 +1376,7 @@ func performUserDeletion(username Username, isAdmin bool, ban bool) error {
 		go savePosts()
 
 		// remove avatar and banner
-		if err := deleteUserAvatar(username); err != nil {
-			log.Printf("Error deleting user avatar: %v", err)
-		}
+		deleteUserAvatar(username)
 
 		// Remove user storage
 		userDir := string("rotur/user_storage/" + target)
@@ -1367,50 +1392,43 @@ func performUserDeletion(username Username, isAdmin bool, ban bool) error {
 	return nil
 }
 
-func deleteUserAvatar(username Username) error {
+func deleteUserAvatar(username Username) {
 	usernameLower := username.ToLower()
 
-	pfpPath := string("rotur/avatars/" + usernameLower.String() + ".jpg")
-	if _, err := os.Stat(pfpPath); err == nil {
-		if err := os.Remove(pfpPath); err != nil {
-			return fmt.Errorf("error removing user avatar %s: %v", pfpPath, err)
+	types := []string{".jpg", ".gif", ".png"}
+
+	for _, fileType := range types {
+		filePath := "rotur/avatars/" + string(usernameLower) + fileType
+		if fileExists(filePath) {
+			os.Remove(filePath)
+		}
+
+		bannerPath := "rotur/banners/" + string(usernameLower) + fileType
+		if fileExists(bannerPath) {
+			os.Remove(bannerPath)
 		}
 	}
-
-	bannerPath := string("rotur/banners/" + usernameLower.String() + ".jpg")
-	if _, err := os.Stat(bannerPath); err == nil {
-		if err := os.Remove(bannerPath); err != nil {
-			return fmt.Errorf("error removing user banner %s: %v", bannerPath, err)
-		}
-	}
-
-	return nil
 }
 
-func renameUserAvatar(oldUsername, newUsername Username) error {
-	usernameLower := oldUsername.ToLower()
-	newUsernameLower := newUsername.ToLower()
+func renameUserAvatar(oldUsername, newUsername Username) {
+	usernameLower := string(oldUsername.ToLower())
+	newUsernameLower := string(newUsername.ToLower())
 
-	fileTypes := []string{".jpg", ".gif"}
+	fileTypes := []string{".jpg", ".gif", ".png"}
 
 	for _, fileType := range fileTypes {
-		filePath := "rotur/avatars/" + usernameLower.String() + fileType
+		filePath := "rotur/avatars/" + usernameLower + fileType
 		if _, err := os.Stat(filePath); err == nil {
-			newFilePath := "rotur/avatars/" + newUsernameLower.String() + fileType
-			if err := os.Rename(filePath, newFilePath); err != nil {
-				return fmt.Errorf("error renaming user avatar %s: %v", filePath, err)
-			}
+			newFilePath := "rotur/avatars/" + newUsernameLower + fileType
+			os.Rename(filePath, newFilePath)
 		}
 
-		bannerPath := "rotur/banners/" + usernameLower.String() + fileType
+		bannerPath := "rotur/banners/" + usernameLower + fileType
 		if _, err := os.Stat(bannerPath); err == nil {
-			newBannerPath := string("rotur/banners/" + newUsernameLower.String() + fileType)
-			if err := os.Rename(bannerPath, newBannerPath); err != nil {
-				return fmt.Errorf("error renaming user banner %s: %v", bannerPath, err)
-			}
+			newBannerPath := string("rotur/banners/" + newUsernameLower + fileType)
+			os.Rename(bannerPath, newBannerPath)
 		}
 	}
-	return nil
 }
 
 var dailyClaimMutex sync.Mutex
