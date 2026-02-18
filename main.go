@@ -38,6 +38,7 @@ func main() {
 	go watchBadgesFile()
 	go cleanExpiredStatuses()
 	// go enactInactivityTax()
+	go startStandingRecoveryChecker()
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
@@ -45,10 +46,10 @@ func main() {
 	r.Use(corsMiddleware())
 
 	// Posts endpoints
-	r.GET("/post", rateLimit("default"), requiresAuth, createPost)
+	r.GET("/post", rateLimit("default"), requiresAuth, requireStanding(StandingGood), createPost)
 	r.GET("/limits", getLimits)
-	r.GET("/reply", rateLimit("default"), requiresAuth, replyToPost)
-	r.GET("/follow", rateLimit("follow"), requiresAuth, followUser)
+	r.GET("/reply", rateLimit("default"), requiresAuth, requireStanding(StandingGood), replyToPost)
+	r.GET("/follow", rateLimit("follow"), requiresAuth, requireStanding(StandingWarning), followUser)
 	r.GET("/unfollow", rateLimit("follow"), requiresAuth, unfollowUser)
 	r.GET("/followers", rateLimit("profile"), getFollowers)
 	r.GET("/following", rateLimit("profile"), getFollowing)
@@ -59,7 +60,7 @@ func main() {
 	r.GET("/following_feed", rateLimit("default"), requiresAuth, getFollowingFeed)
 	r.GET("/delete", requiresAuth, deletePost)
 	r.GET("/rate", requiresAuth, ratePost)
-	r.GET("/repost", rateLimit("default"), requiresAuth, repost)
+	r.GET("/repost", rateLimit("default"), requiresAuth, requireStanding(StandingGood), repost)
 	r.GET("/pin_post", requiresAuth, pinPost)
 	r.GET("/unpin_post", requiresAuth, unpinPost)
 	r.GET("/top_posts", rateLimit("search"), getTopPosts)
@@ -89,14 +90,14 @@ func main() {
 	// Items endpoints
 	items := r.Group("/items")
 	{
-		items.GET("/create", requiresAuth, createItem)
+		items.GET("/create", requiresAuth, requireStanding(StandingGood), createItem)
 		items.GET("/get/:name", getItem)
 		items.GET("/list/:username", listItems)
 		items.GET("/selling", getSellingItems)
 
-		items.GET("/buy/:name", requiresAuth, buyItem)
-		items.GET("/transfer/:name", requiresAuth, transferItem)
-		items.GET("/sell/:name", requiresAuth, sellItem)
+		items.GET("/buy/:name", requiresAuth, requireStanding(StandingWarning), buyItem)
+		items.GET("/transfer/:name", requiresAuth, requireStanding(StandingGood), transferItem)
+		items.GET("/sell/:name", requiresAuth, requireStanding(StandingGood), sellItem)
 		items.GET("/stop_selling/:name", requiresAuth, stopSellingItem)
 		items.GET("/set_price/:name", requiresAuth, setItemPrice)
 
@@ -134,7 +135,13 @@ func main() {
 		admin.POST("/transfer_credits", transferCreditsAdmin)
 		admin.POST("/kofi", handleKofiTransaction)
 		admin.POST("/set_sub", setSubscription)
+		admin.POST("/set_standing", setStandingAdmin)
+		admin.POST("/get_standing_history", getStandingHistoryAdmin)
+		admin.POST("/recover_standing", recoverStandingAdmin)
 	}
+
+	// Standing endpoints
+	r.GET("/get_standing", GetUserStanding)
 
 	// Users endpoints
 	r.GET("/me", rateLimit("profile"), getUser)
@@ -171,7 +178,7 @@ func main() {
 	{
 		groups.GET("/mine", requiresAuth, getMyGroups)
 		groups.GET("/search", requiresAuth, searchGroups)
-		groups.POST("/create", requiresAuth, createGroup)
+		groups.POST("/create", requiresAuth, requireStanding(StandingGood), createGroup)
 		groups.POST("/:grouptag/rep", requiresAuth, representGroup)
 		groups.POST("/:grouptag/disrep", requiresAuth, disrepresentGroup)
 		groups.POST("/:grouptag/report", requiresAuth, reportGroup)
@@ -235,8 +242,8 @@ func main() {
 	friends := r.Group("/friends")
 	{
 		friends.GET("", requiresAuth, getFriends)
-		friends.POST("/request/:username", requiresAuth, sendFriendRequest)
-		friends.POST("/accept/:username", requiresAuth, acceptFriendRequest)
+		friends.POST("/request/:username", requiresAuth, requireStanding(StandingGood), sendFriendRequest)
+		friends.POST("/accept/:username", requiresAuth, requireStanding(StandingGood), acceptFriendRequest)
 		friends.POST("/reject/:username", requiresAuth, rejectFriendRequest)
 		friends.POST("/remove/:username", requiresAuth, removeFriend)
 	}
@@ -245,8 +252,8 @@ func main() {
 	marriage := r.Group("/marriage")
 	{
 		marriage.GET("/status", requiresAuth, getMarriageStatus)
-		marriage.POST("/propose/:username", requiresAuth, proposeMarriage)
-		marriage.POST("/accept", requiresAuth, acceptMarriage)
+		marriage.POST("/propose/:username", requiresAuth, requireStanding(StandingGood), proposeMarriage)
+		marriage.POST("/accept", requiresAuth, requireStanding(StandingGood), acceptMarriage)
 		marriage.POST("/reject", requiresAuth, rejectMarriage)
 		marriage.POST("/cancel", requiresAuth, cancelMarriage)
 		marriage.POST("/divorce", requiresAuth, divorceMarriage)
@@ -278,7 +285,7 @@ func main() {
 	}
 
 	// Other endpoints
-	r.GET("/claim_daily", rateLimit("default"), requiresAuth, claimDaily)
+	r.GET("/claim_daily", rateLimit("default"), requiresAuth, requireStanding(StandingGood), claimDaily)
 	r.GET("/claim_time", rateLimit("default"), requiresAuth, timeUntilNextClaim)
 	r.GET("/supporters", rateLimit("default"), getSupporters)
 	r.GET("/badges", rateLimit("default"), requiresAuth, getBadges)

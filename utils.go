@@ -127,6 +127,33 @@ func hasTierOrHigher(tier string, required string) bool {
 	return false
 }
 
+func hasRequiredStanding(current StandingLevel, required StandingLevel) bool {
+	switch required {
+	case StandingBanned:
+		return true
+	case StandingSuspended:
+		return current == StandingGood || current == StandingWarning || current == StandingSuspended
+	case StandingWarning:
+		return current == StandingGood || current == StandingWarning
+	case StandingGood:
+		return current == StandingGood
+	}
+	return false
+}
+
+func requireStanding(minLevel StandingLevel) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := c.MustGet("user").(*User)
+		if user.HasStandingOrHigher(minLevel) {
+			c.Next()
+			return
+		}
+		current := user.GetStanding()
+		c.JSON(403, gin.H{"error": fmt.Sprintf("Your account standing does not allow this action. Current: %s", current)})
+		c.Abort()
+	}
+}
+
 func loadBannedWords() {
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(BANNED_WORDS_URL)

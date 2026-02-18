@@ -197,7 +197,6 @@ func getProfile(c *gin.Context) {
 		name = foundUser.GetUsername()
 		nameLower = name.ToLower()
 	} else {
-		fmt.Println("Searching for", name)
 		user, err := getAccountByUsername(name)
 		if err != nil {
 			fmt.Println("Error", err.Error())

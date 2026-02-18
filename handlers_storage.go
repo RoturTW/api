@@ -35,6 +35,18 @@ func loadUsers() {
 		log.Printf("Error unmarshaling users (keeping existing %d users): %v", len(users), err)
 		return
 	}
+
+	migratedCount := 0
+	for i := range loaded {
+		if loaded[i].IsBanned() && loaded[i].Get("sys.standing") == nil {
+			loaded[i].Set("sys.standing", string(StandingBanned))
+			migratedCount++
+		}
+	}
+	if migratedCount > 0 {
+		log.Printf("Migrated %d users to standing system", migratedCount)
+	}
+
 	usernameToIdInner := make(map[Username]UserId, len(loaded))
 	idToUserInner := make(map[UserId]User, len(loaded))
 	for _, u := range loaded {

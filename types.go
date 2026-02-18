@@ -1614,6 +1614,160 @@ type RateLimitConfig struct {
 	Period int
 }
 
+type StandingLevel string
+
+const (
+	StandingGood      StandingLevel = "good"
+	StandingWarning   StandingLevel = "warning"
+	StandingSuspended StandingLevel = "suspended"
+	StandingBanned    StandingLevel = "banned"
+)
+
+type StandingHistoryEntry struct {
+	Level     StandingLevel `json:"level"`
+	Previous  StandingLevel `json:"previous"`
+	Reason    string        `json:"reason"`
+	AdminId   UserId        `json:"admin_id"`
+	Timestamp int64         `json:"timestamp"`
+}
+
+func (u User) GetStanding() StandingLevel {
+	standing := u.Get("sys.standing")
+	if standing != nil {
+		if str, ok := standing.(string); ok {
+			return StandingLevel(str)
+		}
+	}
+	return StandingGood
+}
+
+func (u User) SetStanding(level StandingLevel, reason string, adminId UserId) {
+	current := u.GetStanding()
+	if current == level {
+		return
+	}
+
+	u.Set("sys.standing", string(level))
+
+	history := u.GetStandingHistory()
+	newEntry := StandingHistoryEntry{
+		Level:     level,
+		Previous:  current,
+		Reason:    reason,
+		AdminId:   adminId,
+		Timestamp: time.Now().Unix(),
+	}
+	history = append(history, newEntry)
+	u.Set("sys.standing_history", history)
+
+	switch level {
+	case StandingGood:
+		u.Set("sys.standing_recover_at", nil)
+	case StandingWarning:
+		u.Set("sys.standing_recover_at", time.Now().Add(7*24*time.Hour).Unix())
+	case StandingSuspended:
+		u.Set("sys.standing_recover_at", time.Now().Add(30*24*time.Hour).Unix())
+	case StandingBanned:
+		u.Set("sys.standing_recover_at", nil)
+		u.Set("sys.banned", true)
+	}
+}
+
+func (u User) GetStandingHistory() []StandingHistoryEntry {
+	history := u.Get("sys.standing_history")
+	if history == nil {
+		return []StandingHistoryEntry{}
+	}
+	entries, ok := history.([]any)
+	if !ok {
+		return []StandingHistoryEntry{}
+	}
+	out := make([]StandingHistoryEntry, 0, len(entries))
+	for _, e := range entries {
+		if entryMap, ok := e.(map[string]any); ok {
+			entry := StandingHistoryEntry{
+				Level:     StandingLevel(getStringOrDefault(entryMap["level"], "good")),
+				Previous:  StandingLevel(getStringOrDefault(entryMap["previous"], "good")),
+				Reason:    getStringOrEmpty(entryMap["reason"]),
+				AdminId:   UserId(getStringOrEmpty(entryMap["admin_id"])),
+				Timestamp: int64(getIntOrDefault(entryMap["timestamp"], 0)),
+			}
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
+func (u User) GetStandingRecoverAt() int64 {
+	recoverAt := u.Get("sys.standing_recover_at")
+	if recoverAt != nil {
+		switch v := recoverAt.(type) {
+		case int64:
+			return v
+		case float64:
+			return int64(v)
+		case int:
+			return int64(v)
+		}
+	}
+	return 0
+}
+
+func (u User) CanCreatePost() bool {
+	standing := u.GetStanding()
+	return standing == StandingGood
+}
+
+func (u User) CanCreateReply() bool {
+	standing := u.GetStanding()
+	return standing == StandingGood
+}
+
+func (u User) CanRepost() bool {
+	standing := u.GetStanding()
+	return standing == StandingGood
+}
+
+func (u User) CanTradeBuy() bool {
+	standing := u.GetStanding()
+	return standing == StandingGood || standing == StandingWarning
+}
+
+func (u User) CanTradeSell() bool {
+	standing := u.GetStanding()
+	return standing == StandingGood
+}
+
+func (u User) CanTradeTransfer() bool {
+	standing := u.GetStanding()
+	return standing == StandingGood
+}
+
+func (u User) CanInteractFriend() bool {
+	standing := u.GetStanding()
+	return standing == StandingGood
+}
+
+func (u User) CanFollow() bool {
+	standing := u.GetStanding()
+	return standing == StandingGood || standing == StandingWarning
+}
+
+func (u User) HasStandingOrHigher(required StandingLevel) bool {
+	current := u.GetStanding()
+	switch required {
+	case StandingBanned:
+		return true
+	case StandingSuspended:
+		return current == StandingGood || current == StandingWarning || current == StandingSuspended
+	case StandingWarning:
+		return current == StandingGood || current == StandingWarning
+	case StandingGood:
+		return current == StandingGood
+	}
+	return false
+}
+
 // Global variables
 var (
 	startTime = time.Now()
