@@ -19,11 +19,9 @@ func authenticateWithKey(key string) *User {
 	return nil
 }
 
-func doesUserOwnKey(username Username, key string) bool {
+func doesUserOwnKey(userId UserId, key string) bool {
 	keyOwnershipCacheMutex.Lock()
 	defer keyOwnershipCacheMutex.Unlock()
-
-	userId := username.Id()
 
 	keysMutex.RLock()
 	defer keysMutex.RUnlock()
@@ -40,11 +38,9 @@ func doesUserOwnKey(username Username, key string) bool {
 	return false
 }
 
-func getKeyNextBilling(username Username, key string) int64 {
+func getKeyNextBilling(userId UserId, key string) int64 {
 	keyOwnershipCacheMutex.Lock()
 	defer keyOwnershipCacheMutex.Unlock()
-
-	userId := username.Id()
 
 	var success bool = keysMutex.TryRLock()
 	if success {

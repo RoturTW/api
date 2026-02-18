@@ -159,6 +159,7 @@ func getMyKeys(c *gin.Context) {
 
 func checkKey(c *gin.Context) {
 	username := Username(c.Param("username"))
+	userId := username.Id()
 	keyToCheck := c.Query("key")
 
 	if keyToCheck == "" {
@@ -166,7 +167,7 @@ func checkKey(c *gin.Context) {
 		return
 	}
 
-	hasKey := doesUserOwnKey(username, keyToCheck)
+	hasKey := doesUserOwnKey(userId, keyToCheck)
 
 	c.JSON(200, gin.H{
 		"owned":    hasKey,

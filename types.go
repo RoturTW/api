@@ -957,7 +957,7 @@ func (u User) GetSubscription() subscription {
 		Next_billing: 0,
 	}
 	checkExternalBilling := func() (ok bool) {
-		next := getKeyNextBilling(username, "4f229157f0c40f5a98cbf28efd39cfe8")
+		next := getKeyNextBilling(u.GetId(), "4f229157f0c40f5a98cbf28efd39cfe8")
 		if next == 0 {
 			return false
 		}

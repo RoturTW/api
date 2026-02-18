@@ -64,7 +64,7 @@ func createPost(c *gin.Context) {
 
 	// claw key id, this is not a security issue
 	chars := postLimits["content_length"]
-	if doesUserOwnKey(user.GetUsername(), "bd6249d2b87796a25c30b1f1722f784f") {
+	if doesUserOwnKey(user.GetId(), "bd6249d2b87796a25c30b1f1722f784f") {
 		chars = postLimits["content_length_premium"]
 	}
 
@@ -178,7 +178,7 @@ func replyToPost(c *gin.Context) {
 
 	// Check content length
 	postLimit := postLimits["content_length"]
-	if doesUserOwnKey(user.GetUsername(), "bd6249d2b87796a25c30b1f1722f784f") {
+	if doesUserOwnKey(user.GetId(), "bd6249d2b87796a25c30b1f1722f784f") {
 		postLimit = postLimits["content_length_premium"]
 	}
 
