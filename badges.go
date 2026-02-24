@@ -109,14 +109,6 @@ func calculateUserBadges(user User) []Badge {
 		})
 	}
 
-	if marriage := user.GetMarriage(); marriage.Status == "married" {
-		badges = append(badges, Badge{
-			Name:        "married",
-			Icon:        "scale 0.9 c #f33 w 3 cutcircle -4.5 4 5 -3 90 cutcircle 4.5 4 5 3 90 line -8.5 1 0 -9 line 8.5 1 0 -9 w 9 line -4.5 4 0 -1 cont 4.5 4 dot 0 -2.5",
-			Description: "This user got married, how cute!",
-		})
-	}
-
 	subscription := user.GetSubscription()
 	if subscription.Tier == "Pro" || subscription.Tier == "Max" {
 		badges = append(badges, Badge{

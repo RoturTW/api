@@ -254,9 +254,6 @@ func userToNet(user User) User {
 	userCopy := copyUser(user)
 	userCopy["sys.friends"] = user.GetFriendUsers()
 	userCopy["sys.requests"] = user.GetRequestedUsers()
-	if user.GetMarriage().Status != "single" {
-		userCopy["sys.marriage"] = user.GetMarriage().ToNet()
-	}
 	userCopy["sys.blocked"] = user.GetBlockedUsers()
 	transactions := user.GetTransactions()
 	netTransactions := make([]TransactionNet, len(transactions))

@@ -248,17 +248,6 @@ func main() {
 		friends.POST("/remove/:username", requiresAuth, removeFriend)
 	}
 
-	// Marriage endpoints
-	marriage := r.Group("/marriage")
-	{
-		marriage.GET("/status", requiresAuth, getMarriageStatus)
-		marriage.POST("/propose/:username", requiresAuth, requireStanding(StandingGood), proposeMarriage)
-		marriage.POST("/accept", requiresAuth, requireStanding(StandingGood), acceptMarriage)
-		marriage.POST("/reject", requiresAuth, rejectMarriage)
-		marriage.POST("/cancel", requiresAuth, cancelMarriage)
-		marriage.POST("/divorce", requiresAuth, divorceMarriage)
-	}
-
 	// Linking endpoints
 	link := r.Group("/link")
 	{

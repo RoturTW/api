@@ -125,14 +125,6 @@ All endpoints are served on port 5602 (example: `http://localhost:5602`). Unless
 - `POST /friends/remove/:username` Remove friend
 - `GET /friends` List friends & pending
 
-### Marriage
-- `POST /marriage/propose/:username` Propose marriage
-- `POST /marriage/accept` Accept marriage proposal
-- `POST /marriage/reject` Reject marriage proposal
-- `POST /marriage/cancel` Cancel marriage proposal
-- `POST /marriage/divorce` Divorce spouse
-- `GET /marriage/status` Get marriage status
-
 ### Linking External Accounts
 - `GET /link/code` Request a link code
 - `POST /link/code` Link code to account

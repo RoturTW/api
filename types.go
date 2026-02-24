@@ -57,29 +57,6 @@ func (t Timestamp) Time() time.Time {
 	return time.UnixMilli(int64(t))
 }
 
-type Marriage struct {
-	Status    string    `json:"status"`
-	Partner   UserId    `json:"partner"`
-	Timestamp Timestamp `json:"timestamp"`
-	Proposer  UserId    `json:"proposer"`
-}
-
-type MarriageNet struct {
-	Status    string    `json:"status"`
-	Partner   Username  `json:"partner"`
-	Timestamp Timestamp `json:"timestamp"`
-	Proposer  Username  `json:"proposer"`
-}
-
-func (m Marriage) ToNet() MarriageNet {
-	return MarriageNet{
-		Status:    m.Status,
-		Partner:   m.Partner.User().GetUsername(),
-		Timestamp: m.Timestamp,
-		Proposer:  m.Proposer.User().GetUsername(),
-	}
-}
-
 type GroupId string
 
 type JoinPolicy string
@@ -643,43 +620,6 @@ func (u User) IsBanned() bool {
 func (u User) IsPrivate() bool {
 	private := u.Get("private")
 	return private == true
-}
-
-func (u *User) GetMarriage() Marriage {
-	marriage := u.Get("sys.marriage")
-	if marriage == nil {
-		return Marriage{
-			Status:    "single",
-			Partner:   UserId(""),
-			Timestamp: 0,
-			Proposer:  UserId(""),
-		}
-	}
-	switch v := marriage.(type) {
-	case map[string]any:
-		return Marriage{
-			Status:    getStringOrDefault(v["status"], "single"),
-			Partner:   UserId(getStringOrDefault(v["partner"], "")),
-			Timestamp: Timestamp(getIntOrDefault(v["timestamp"], 0)),
-			Proposer:  UserId(getStringOrDefault(v["proposer"], "")),
-		}
-	}
-	// fallback to empty marriage
-	return Marriage{
-		Status:    "single",
-		Partner:   UserId(""),
-		Timestamp: 0,
-		Proposer:  UserId(""),
-	}
-}
-
-func (u *User) SetMarriage(marriage Marriage) {
-	u.Set("sys.marriage", map[string]any{
-		"status":    string(marriage.Status),
-		"partner":   string(marriage.Partner),
-		"timestamp": marriage.Timestamp,
-		"proposer":  string(marriage.Proposer),
-	})
 }
 
 func (u User) SetFriends(friends []UserId) {

@@ -41,7 +41,6 @@ type profileResp struct {
 	Theme        map[string]any `json:"theme,omitempty"`
 	Followed     bool           `json:"followed,omitempty"`
 	FollowsMe    bool           `json:"follows_me,omitempty"`
-	MarriedTo    Username       `json:"married_to,omitempty"`
 	Id           UserId         `json:"id"`
 }
 
@@ -372,10 +371,6 @@ func getProfile(c *gin.Context) {
 	if authKey != "" && isFollowing != nil {
 		profileData.Followed = *isFollowing
 		profileData.FollowsMe = *isFollowedBy
-	}
-
-	if marriage := foundUser.GetMarriage(); marriage.Status == "married" {
-		profileData.MarriedTo = getUserById(marriage.Partner).GetUsername()
 	}
 
 	c.JSON(200, profileData)
