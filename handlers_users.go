@@ -1385,6 +1385,25 @@ func performUserDeletion(username Username, isAdmin bool, ban bool) error {
 		if err := fs.DeleteUserFileSystem(username); err != nil {
 			log.Printf("Error deleting user file system: %v", err)
 		}
+
+		// Remove user from followers data
+		followersMutex.Lock()
+		delete(followersData, target)
+		for userId, data := range followersData {
+			newFollowers := make([]UserId, 0)
+			for _, follower := range data.Followers {
+				if follower != target {
+					newFollowers = append(newFollowers, follower)
+				}
+			}
+			followersData[userId] = FollowerData{
+				Followers: newFollowers,
+				Username:  data.Username,
+				UserId:    data.UserId,
+			}
+		}
+		followersMutex.Unlock()
+		saveFollowers()
 	}(uId, usernameLower)
 	return nil
 }

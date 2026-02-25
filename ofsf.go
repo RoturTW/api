@@ -522,8 +522,8 @@ func (fs *FileSystem) RenameUserFileSystem(oldUsername Username, newUsername Use
 		fs.handleReplaceUnsafe(oldUsername, UpdateChange{
 			Command: "UUIDr",
 			UUID:    uuid,
-			Dta:     []any{newPath},
-			Idx:     2,
+			Dta:     newPath,
+			Idx:     3,
 		})
 		delete(index, path)
 	}

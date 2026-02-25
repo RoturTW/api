@@ -272,16 +272,27 @@ func loadFollowers() {
 		return
 	}
 
-	followersData = make(map[UserId]FollowerData)
+	followersMutex.Unlock()
+
+	validFollowersData := make(map[UserId]FollowerData)
 	for k, v := range tempData {
-		followers := make([]UserId, len(v.Followers))
-		copy(followers, v.Followers)
-		followersData[k] = FollowerData{
-			Followers: followers,
-			Username:  getUserById(k).GetUsername(),
-			UserId:    k,
+		validFollowers := make([]UserId, 0)
+		for _, follower := range v.Followers {
+			if accountExists(follower) {
+				validFollowers = append(validFollowers, follower)
+			}
+		}
+		if accountExists(k) && len(validFollowers) > 0 {
+			validFollowersData[k] = FollowerData{
+				Followers: validFollowers,
+				Username:  getUserById(k).GetUsername(),
+				UserId:    k,
+			}
 		}
 	}
+
+	followersMutex.Lock()
+	followersData = validFollowersData
 
 	log.Printf("Loaded %d followers", len(followersData))
 }
