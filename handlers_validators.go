@@ -74,7 +74,9 @@ func validateToken(c *gin.Context) {
 	encryptedData := parts[1]
 
 	// Find the user in the users list
+	idToUserMutex.RLock()
 	foundUser, ok := idToUser[userId]
+	idToUserMutex.RUnlock()
 	if !ok {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return

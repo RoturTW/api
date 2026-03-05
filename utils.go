@@ -203,8 +203,8 @@ func containsDerogatory(text string) bool {
 }
 
 func accountExists(userId UserId) bool {
-	usersMutex.RLock()
-	defer usersMutex.RUnlock()
+	idToUserMutex.RLock()
+	defer idToUserMutex.RUnlock()
 
 	_, ok := idToUser[userId]
 	return ok

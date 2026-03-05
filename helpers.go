@@ -46,7 +46,7 @@ func getStatus(c *gin.Context) {
 }
 
 func getStringSlice(u User, key string) []string {
-	mu := getUserMutex(u.GetUsername())
+	mu := getMutexForUser(u)
 	mu.Lock()
 	defer mu.Unlock()
 	if v, ok := u[key]; ok {

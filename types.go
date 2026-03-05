@@ -48,6 +48,8 @@ func (u Username) Id() UserId {
 type UserId string
 
 func (u UserId) User() User {
+	idToUserMutex.RLock()
+	idToUserMutex.RUnlock()
 	return idToUser[u]
 }
 
@@ -412,6 +414,7 @@ type GroupData struct {
 
 var userMutexesLock sync.Mutex
 var userMutexes = map[Username]*sync.Mutex{}
+var userPtrMutexes = map[uintptr]*sync.Mutex{}
 
 func getUserMutex(username Username) *sync.Mutex {
 	userMutexesLock.Lock()
@@ -420,6 +423,18 @@ func getUserMutex(username Username) *sync.Mutex {
 	if !ok {
 		mu = &sync.Mutex{}
 		userMutexes[username] = mu
+	}
+	return mu
+}
+
+func getMutexForUser(u User) *sync.Mutex {
+	ptr := reflect.ValueOf(u).Pointer()
+	userMutexesLock.Lock()
+	defer userMutexesLock.Unlock()
+	mu, ok := userPtrMutexes[ptr]
+	if !ok {
+		mu = &sync.Mutex{}
+		userPtrMutexes[ptr] = mu
 	}
 	return mu
 }
@@ -498,16 +513,21 @@ type User map[string]any
 
 // Helper methods for User
 func (u User) GetUsername() Username {
-	if username, ok := u["username"]; ok {
-		if str, ok := username.(string); ok {
+	mu := getMutexForUser(u)
+	mu.Lock()
+	defer mu.Unlock()
+	if v, ok := u["username"]; ok {
+		if str, ok := v.(string); ok {
 			return Username(str)
 		}
-		return ""
 	}
 	return ""
 }
 
 func (u User) GetTheme() map[string]any {
+	mu := getMutexForUser(u)
+	mu.Lock()
+	defer mu.Unlock()
 	if theme, ok := u["theme"]; ok {
 		if m, ok := theme.(map[string]any); ok {
 			return m
@@ -517,17 +537,22 @@ func (u User) GetTheme() map[string]any {
 }
 
 func (u User) GetId() UserId {
+	mu := getMutexForUser(u)
+	mu.Lock()
+	defer mu.Unlock()
 	if id, ok := u["sys.id"]; ok {
 		if str, ok := id.(string); ok {
 			return UserId(str)
 		}
 		return ""
 	}
-	// fallback to username
 	return ""
 }
 
 func (u User) GetKey() string {
+	mu := getMutexForUser(u)
+	mu.Lock()
+	defer mu.Unlock()
 	if key, ok := u["key"]; ok {
 		if str, ok := key.(string); ok {
 			return str
@@ -537,6 +562,9 @@ func (u User) GetKey() string {
 }
 
 func (u User) GetPassword() string {
+	mu := getMutexForUser(u)
+	mu.Lock()
+	defer mu.Unlock()
 	if password, ok := u["password"]; ok {
 		if str, ok := password.(string); ok {
 			return str
@@ -715,6 +743,8 @@ func getIdByUsername(username Username) UserId {
 }
 
 func getUserById(id UserId) User {
+	idToUserMutex.RLock()
+	defer idToUserMutex.RUnlock()
 	return idToUser[id]
 }
 
@@ -763,6 +793,9 @@ func (u User) GetRequestedUsers() []Username {
 }
 
 func (u User) GetCreated() int64 {
+	mu := getMutexForUser(u)
+	mu.Lock()
+	defer mu.Unlock()
 	if created, ok := u["created"]; ok {
 		switch v := created.(type) {
 		case int64:
@@ -811,6 +844,9 @@ func (u User) RemoveNote(username Username) {
 }
 
 func (u User) GetCredits() float64 {
+	mu := getMutexForUser(u)
+	mu.Lock()
+	defer mu.Unlock()
 	if credits, ok := u["sys.currency"]; ok {
 		switch v := credits.(type) {
 		case float64:
@@ -1027,7 +1063,7 @@ func (u User) SetLogins(logins []Login) {
 }
 
 func (u User) Has(key string) bool {
-	mu := getUserMutex(u.GetUsername())
+	mu := getMutexForUser(u)
 	mu.Lock()
 	defer mu.Unlock()
 	_, ok := u[key]
@@ -1035,7 +1071,7 @@ func (u User) Has(key string) bool {
 }
 
 func (u User) Get(key string) any {
-	mu := getUserMutex(u.GetUsername())
+	mu := getMutexForUser(u)
 	mu.Lock()
 	defer mu.Unlock()
 	value, ok := u[key]
@@ -1046,7 +1082,7 @@ func (u User) Get(key string) any {
 }
 
 func (u User) GetString(key string) string {
-	mu := getUserMutex(u.GetUsername())
+	mu := getMutexForUser(u)
 	mu.Lock()
 	defer mu.Unlock()
 	value, ok := u[key]
@@ -1064,7 +1100,7 @@ func (u User) GetString(key string) string {
 }
 
 func (u User) GetInt(key string) int {
-	mu := getUserMutex(u.GetUsername())
+	mu := getMutexForUser(u)
 	mu.Lock()
 	defer mu.Unlock()
 	value, ok := u[key]
@@ -1086,19 +1122,25 @@ func (u User) GetInt(key string) int {
 }
 
 func (u User) DelKey(key string) error {
-	mu := getUserMutex(u.GetUsername())
+	mu := getMutexForUser(u)
 	mu.Lock()
 	defer mu.Unlock()
+	var username Username
+	if v, ok := u["username"]; ok {
+		if str, ok := v.(string); ok {
+			username = Username(str)
+		}
+	}
 	delete(u, key)
 	go notify("sys.delete", map[string]any{
-		"username": u.GetUsername(),
+		"username": username,
 		"key":      key,
 	})
 	return nil
 }
 
 func (u User) Set(key string, value any) {
-	mu := getUserMutex(u.GetUsername())
+	mu := getMutexForUser(u)
 	mu.Lock()
 	defer mu.Unlock()
 	oldValue := u[key]
@@ -1108,7 +1150,12 @@ func (u User) Set(key string, value any) {
 	u[key] = value
 	valueCopy := deepCopyValue(value)
 	if key != "key" && key != "password" {
-		username := u.GetUsername()
+		var username Username
+		if v, ok := u["username"]; ok {
+			if str, ok := v.(string); ok {
+				username = Username(str)
+			}
+		}
 		go broadcastUserUpdate(username, key, valueCopy)
 	}
 }
@@ -1712,10 +1759,11 @@ func (u User) HasStandingOrHigher(required StandingLevel) bool {
 var (
 	startTime = time.Now()
 
-	users        []User
-	usernameToId map[Username]UserId
-	idToUser     map[UserId]User
-	usersMutex   sync.RWMutex
+	users         []User
+	usernameToId  map[Username]UserId
+	idToUser      map[UserId]User
+	idToUserMutex sync.RWMutex
+	usersMutex    sync.RWMutex
 
 	groupsData      map[string]*GroupData
 	groupsDataMutex sync.RWMutex

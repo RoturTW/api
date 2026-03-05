@@ -170,7 +170,9 @@ func getProfile(c *gin.Context) {
 	}
 
 	if id != "" {
+		idToUserMutex.RLock()
 		foundUser, ok := idToUser[id]
+		idToUserMutex.RUnlock()
 		if !ok {
 			c.JSON(404, gin.H{"error": "User not found"})
 			return
