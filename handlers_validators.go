@@ -11,13 +11,59 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const validatorWindowSeconds = int64(300)
+
 type ValidatorInfo struct {
 	Value     string
 	Timestamp int64
 }
 
-var validatorInfos = make(map[UserId]ValidatorInfo)
+var validatorInfos = make(map[UserId][]ValidatorInfo)
 var validatorMutex sync.RWMutex
+
+func windowStart(t int64) int64 {
+	return t / validatorWindowSeconds * validatorWindowSeconds
+}
+
+func windowEnd(t int64) int64 {
+	return windowStart(t) + validatorWindowSeconds
+}
+
+func hashValidator(key, authKey string, roundedTs int64) string {
+	hasher := sha256.New()
+	hasher.Write([]byte(key + authKey + fmt.Sprintf("%d", roundedTs)))
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
+func pruneExpired(id UserId) {
+	now := time.Now().Unix()
+	infos := validatorInfos[id]
+	valid := infos[:0]
+	for _, info := range infos {
+		if now < windowEnd(info.Timestamp) {
+			valid = append(valid, info)
+		}
+	}
+	if len(valid) == 0 {
+		delete(validatorInfos, id)
+	} else {
+		validatorInfos[id] = valid
+	}
+}
+
+func StartValidatorCleanup() {
+	go func() {
+		ticker := time.NewTicker(time.Duration(validatorWindowSeconds) * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			validatorMutex.Lock()
+			for id := range validatorInfos {
+				pruneExpired(id)
+			}
+			validatorMutex.Unlock()
+		}
+	}()
+}
 
 func generateValidator(c *gin.Context) {
 	authKey := c.Query("auth")
@@ -28,28 +74,25 @@ func generateValidator(c *gin.Context) {
 		return
 	}
 
-	// Hash the key with sha256
-	hasher := sha256.New()
-	timestamp := int64(time.Now().Unix())
-	roundedTimestamp := timestamp / 300 * 300
-	hasher.Write([]byte(key + authKey + fmt.Sprintf("%d", roundedTimestamp)))
-	hashedKey := hex.EncodeToString(hasher.Sum(nil))
+	id := user.GetId()
+	timestamp := time.Now().Unix()
+	hashedKey := hashValidator(key, authKey, windowStart(timestamp))
 
-	// Store the validator and timestamp for this user
 	validatorMutex.Lock()
-	defer validatorMutex.Unlock()
-	validatorInfos[user.GetId()] = ValidatorInfo{
+	pruneExpired(id)
+	validatorInfos[id] = append(validatorInfos[id], ValidatorInfo{
 		Value:     hashedKey,
 		Timestamp: timestamp,
-	}
+	})
+	validatorMutex.Unlock()
 
 	c.JSON(200, gin.H{
-		"validator": string(user.GetId()) + "," + hashedKey,
+		"validator": string(id) + "," + hashedKey,
 	})
 }
 
 func validateToken(c *gin.Context) {
-	validator := c.Query("v")
+	validator := strings.TrimSpace(c.Query("v"))
 	if validator == "" {
 		c.JSON(400, gin.H{"error": "Validator is required"})
 		return
@@ -61,9 +104,6 @@ func validateToken(c *gin.Context) {
 		return
 	}
 
-	// Strip any whitespace from the validator
-	validator = strings.TrimSpace(validator)
-
 	parts := strings.SplitN(validator, ",", 2)
 	if len(parts) != 2 {
 		c.JSON(400, gin.H{"error": "Invalid validator format"})
@@ -73,7 +113,6 @@ func validateToken(c *gin.Context) {
 	userId := UserId(parts[0])
 	encryptedData := parts[1]
 
-	// Find the user in the users list
 	idToUserMutex.RLock()
 	foundUser, ok := idToUser[userId]
 	idToUserMutex.RUnlock()
@@ -81,31 +120,41 @@ func validateToken(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
-	// Get the user's key (token)
+
 	userKey := foundUser.GetKey()
 	if userKey == "" {
 		c.JSON(400, gin.H{"error": "User has no token"})
 		return
 	}
 
-	// Check if validator matches latest and is not expired
+	now := time.Now().Unix()
+
 	validatorMutex.RLock()
-	info, ok := validatorInfos[userId]
+	infos := validatorInfos[userId]
+	var matched *ValidatorInfo
+	for i := range infos {
+		info := &infos[i]
+		if info.Value == encryptedData && now < windowEnd(info.Timestamp) {
+			matched = info
+			break
+		}
+	}
 	validatorMutex.RUnlock()
-	if !ok || info.Value != encryptedData || time.Now().Unix()-info.Timestamp > 300 {
-		c.JSON(200, gin.H{"valid": false, "error": "Validator expired or invalid"})
+
+	if matched == nil {
+		c.JSON(200, gin.H{"valid": false, "error": "Validator expired or not found"})
 		return
 	}
 
-	// Hash the key with sha256 and check equality
-	hasher := sha256.New()
-	timestamp := info.Timestamp / 300 * 300
-	hasher.Write([]byte(key + userKey + fmt.Sprintf("%d", timestamp)))
-	hashedKey := hex.EncodeToString(hasher.Sum(nil))
-
-	if hashedKey == encryptedData {
-		c.JSON(200, gin.H{"valid": true, "username": foundUser.GetUsername(), "id": foundUser.GetId()})
-	} else {
+	expected := hashValidator(key, userKey, windowStart(matched.Timestamp))
+	if expected != encryptedData {
 		c.JSON(200, gin.H{"valid": false, "error": "Invalid validator"})
+		return
 	}
+
+	c.JSON(200, gin.H{
+		"valid":    true,
+		"username": foundUser.GetUsername(),
+		"id":       foundUser.GetId(),
+	})
 }
