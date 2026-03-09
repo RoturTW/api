@@ -23,6 +23,7 @@ func main() {
 	loadKeys()
 	loadSystems()
 	loadEventsHistory()
+	loadGifts()
 
 	// doAfter(reconnectFriends, nil, time.Second*20)
 
@@ -37,6 +38,7 @@ func main() {
 	go watchUsersFile()
 	go watchBadgesFile()
 	go cleanExpiredStatuses()
+	go cleanExpiredGifts()
 	// go enactInactivityTax()
 	go startStandingRecoveryChecker()
 
@@ -271,6 +273,16 @@ func main() {
 	{
 		devfund.POST("/escrow_transfer", requiresAuth, escrowTransfer)
 		devfund.POST("/escrow_release", requiresAuth, escrowRelease)
+	}
+
+	// Gifts endpoints
+	gifts := r.Group("/gifts")
+	{
+		gifts.POST("/create", rateLimit("default"), requiresAuth, requireStanding(StandingGood), createGift)
+		gifts.GET("/:code", getGift)
+		gifts.POST("/claim/:code", rateLimit("default"), requiresAuth, requireStanding(StandingWarning), claimGift)
+		gifts.POST("/cancel/:id", requiresAuth, cancelGift)
+		gifts.GET("/mine", requiresAuth, getMyGifts)
 	}
 
 	// Other endpoints

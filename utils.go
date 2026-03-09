@@ -535,3 +535,133 @@ func deleteAccountAtIndexFast(idx int) error {
 	go saveUsers()
 	return nil
 }
+
+func loadGifts() {
+	file, err := os.Open("gifts.json")
+	if err != nil {
+		if os.IsNotExist(err) {
+			gifts = []Gift{}
+			return
+		}
+		log.Printf("Error opening gifts.json: %v", err)
+		gifts = []Gift{}
+		return
+	}
+	defer file.Close()
+
+	var loaded []Gift
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&loaded); err != nil {
+		log.Printf("Error decoding gifts.json: %v", err)
+		gifts = []Gift{}
+		return
+	}
+
+	gifts = loaded
+	log.Printf("Loaded %d gifts", len(gifts))
+}
+
+func saveGifts() {
+	giftsMutex.RLock()
+	defer giftsMutex.RUnlock()
+
+	data, err := json.MarshalIndent(gifts, "", "  ")
+	if err != nil {
+		log.Printf("Error marshaling gifts: %v", err)
+		return
+	}
+
+	tmpFile := "gifts.json.tmp"
+	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+		log.Printf("Error writing gifts temp file: %v", err)
+		return
+	}
+
+	if err := os.Rename(tmpFile, "gifts.json"); err != nil {
+		log.Printf("Error renaming gifts file: %v", err)
+	}
+}
+
+func cleanExpiredGifts() {
+	for {
+		time.Sleep(1 * time.Hour)
+
+		giftsMutex.Lock()
+		now := time.Now().UnixMilli()
+		changed := false
+
+		for i := range gifts {
+			gift := &gifts[i]
+			if gift.IsActive() && gift.IsExpired() {
+				creator := getUserById(gift.CreatorId)
+				if len(creator) > 0 {
+					newBal := roundVal(creator.GetCredits() + gift.Amount)
+					creator.SetBalance(newBal)
+					nowTs := now
+					creator.addTransaction(Transaction{
+						Note:      "Gift expired: " + gift.Code,
+						User:      UserId(""),
+						Amount:    gift.Amount,
+						Type:      "gift_refund",
+						Timestamp: nowTs,
+						NewTotal:  newBal,
+						GiftId:    gift.Id,
+						GiftCode:  gift.Code,
+					})
+				}
+
+				cancelledAt := now
+				gift.CancelledAt = &cancelledAt
+				changed = true
+			}
+		}
+
+		giftsMutex.Unlock()
+
+		if changed {
+			go saveGifts()
+			go saveUsers()
+		}
+	}
+}
+
+func generateGiftCode() string {
+	return generateShortToken() + generateShortToken()
+}
+
+func getGiftByCode(code string) (*Gift, bool) {
+	giftsMutex.RLock()
+	defer giftsMutex.RUnlock()
+
+	for i := range gifts {
+		if gifts[i].Code == code {
+			return &gifts[i], true
+		}
+	}
+	return nil, false
+}
+
+func getGiftById(id string) (*Gift, bool) {
+	giftsMutex.RLock()
+	defer giftsMutex.RUnlock()
+
+	for i := range gifts {
+		if gifts[i].Id == id {
+			return &gifts[i], true
+		}
+	}
+	return nil, false
+}
+
+func getGiftsByCreator(creatorId UserId) []Gift {
+	giftsMutex.RLock()
+	defer giftsMutex.RUnlock()
+
+	result := make([]Gift, 0)
+	for _, gift := range gifts {
+		if gift.CreatorId == creatorId {
+			result = append(result, gift)
+		}
+	}
+	return result
+}

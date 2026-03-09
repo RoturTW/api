@@ -49,7 +49,7 @@ type UserId string
 
 func (u UserId) User() User {
 	idToUserMutex.RLock()
-	idToUserMutex.RUnlock()
+	defer idToUserMutex.RUnlock()
 	return idToUser[u]
 }
 
@@ -1313,6 +1313,93 @@ type Transaction struct {
 	PetitionId string  `json:"petition_id,omitempty"`
 	KeyName    string  `json:"key_name,omitempty"`
 	KeyId      string  `json:"key_id,omitempty"`
+	GiftId     string  `json:"gift_id,omitempty"`
+	GiftCode   string  `json:"gift_code,omitempty"`
+}
+
+type Gift struct {
+	Id          string  `json:"id"`
+	Code        string  `json:"code"`
+	Amount      float64 `json:"amount"`
+	Note        string  `json:"note"`
+	CreatorId   UserId  `json:"creator_id"`
+	CreatedAt   int64   `json:"created_at"`
+	ExpiresAt   int64   `json:"expires_at"`
+	ClaimedAt   *int64  `json:"claimed_at,omitempty"`
+	ClaimedBy   *UserId `json:"claimed_by,omitempty"`
+	CancelledAt *int64  `json:"cancelled_at,omitempty"`
+}
+
+func (g Gift) ToNet() GiftNet {
+	var claimedAt *int64
+	var claimedBy *Username
+	if g.ClaimedAt != nil {
+		claimedAt = g.ClaimedAt
+	}
+	if g.ClaimedBy != nil {
+		username := g.ClaimedBy.User().GetUsername()
+		claimedBy = &username
+	}
+	return GiftNet{
+		Id:        g.Id,
+		Code:      g.Code,
+		Amount:    g.Amount,
+		Note:      g.Note,
+		CreatorId: g.CreatorId.User().GetUsername(),
+		CreatedAt: g.CreatedAt,
+		ExpiresAt: g.ExpiresAt,
+		ClaimedAt: claimedAt,
+		ClaimedBy: claimedBy,
+	}
+}
+
+func (g Gift) ToPublic() GiftPublic {
+	return GiftPublic{
+		Code:      g.Code,
+		Amount:    g.Amount,
+		Note:      g.Note,
+		CreatorId: g.CreatorId.User().GetUsername(),
+		ExpiresAt: g.ExpiresAt,
+	}
+}
+
+func (g Gift) IsActive() bool {
+	return g.ClaimedAt == nil && g.CancelledAt == nil
+}
+
+func (g Gift) IsExpired() bool {
+	if g.ExpiresAt == 0 {
+		return false
+	}
+	return time.Now().UnixMilli() > g.ExpiresAt
+}
+
+func (g Gift) CanBeClaimed() bool {
+	return g.IsActive() && !g.IsExpired()
+}
+
+func (g Gift) CanBeCancelled() bool {
+	return g.IsActive() && !g.IsExpired()
+}
+
+type GiftNet struct {
+	Id        string    `json:"id"`
+	Code      string    `json:"code"`
+	Amount    float64   `json:"amount"`
+	Note      string    `json:"note"`
+	CreatorId Username  `json:"creator_id"`
+	CreatedAt int64     `json:"created_at"`
+	ExpiresAt int64     `json:"expires_at"`
+	ClaimedAt *int64    `json:"claimed_at,omitempty"`
+	ClaimedBy *Username `json:"claimed_by,omitempty"`
+}
+
+type GiftPublic struct {
+	Code      string   `json:"code"`
+	Amount    float64  `json:"amount"`
+	Note      string   `json:"note"`
+	CreatorId Username `json:"creator_id"`
+	ExpiresAt int64    `json:"expires_at"`
 }
 
 func (t Transaction) ToNet() TransactionNet {
@@ -1790,6 +1877,9 @@ var (
 	rateLimitMutex   sync.RWMutex
 
 	keyOwnershipCacheMutex sync.RWMutex
+
+	gifts      []Gift
+	giftsMutex sync.RWMutex
 
 	derogatoryTerms = make([]string, 0)
 )
