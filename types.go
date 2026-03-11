@@ -98,6 +98,9 @@ func getGroupByName(name string) (*Group, bool) {
 		return &Group{}, false
 	}
 
+	groupsDataMutex.RLock()
+	defer groupsDataMutex.RUnlock()
+
 	for _, data := range groupsData {
 		if data.Group.Name == name {
 			return &data.Group, true
@@ -686,9 +689,12 @@ func (u User) RemoveRequest(username Username) bool {
 }
 
 func (u User) HasRequest(username Username) bool {
-	requests := u.GetRequests()
-	for _, r := range requests {
-		if strings.EqualFold(string(r), string(username)) {
+	userId := username.Id()
+	if userId == "" {
+		return false
+	}
+	for _, r := range u.GetRequests() {
+		if r == userId {
 			return true
 		}
 	}
@@ -725,9 +731,12 @@ func (u User) RemoveFriend(username Username) bool {
 }
 
 func (u User) IsFriend(username Username) bool {
-	friends := u.GetFriends()
-	for _, f := range friends {
-		if strings.EqualFold(string(f), string(username)) {
+	userId := username.Id()
+	if userId == "" {
+		return false
+	}
+	for _, f := range u.GetFriends() {
+		if f == userId {
 			return true
 		}
 	}

@@ -190,7 +190,7 @@ func getUser(c *gin.Context) {
 	if username != "" && password != "" && foundUser == nil {
 		var err error = nil
 		foundUser, err = findAccountByLogin(username, password)
-		if err != nil && foundUser != nil {
+		if err != nil || foundUser == nil {
 			addLogin(c, foundUser, "Failed login")
 			c.JSON(403, gin.H{"error": "Invalid authentication credentials"})
 			return
@@ -206,6 +206,7 @@ func getUser(c *gin.Context) {
 				"error":    "User is banned",
 				"username": foundUser.GetUsername(),
 			})
+			return
 		}
 		if foundUser.Get("sys.tos_accepted") != true {
 			// early return - TOS not accepted

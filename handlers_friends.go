@@ -33,15 +33,16 @@ func sendFriendRequest(c *gin.Context) {
 		return
 	}
 
-	if sender.IsFriend(targetUsername) {
+	if sender.IsFriend(targetLower) {
 		c.JSON(400, gin.H{"error": "Already Friends"})
 		return
 	}
-	// if we find the sender in the target's friends list,
-	// we add them automatically because they arent friends with each other
+	// target already considers sender a friend (one-sided) — auto-accept both ways
 	if target.IsFriend(senderName) {
-		sender.AddFriend(targetUsername)
-		c.JSON(400, gin.H{"error": "Already Friends"})
+		sender.AddFriend(targetLower)
+		sender.RemoveRequest(targetLower)
+		go saveUsers()
+		c.JSON(200, gin.H{"message": "Friend request accepted automatically"})
 		return
 	}
 	if target.HasRequest(senderName) {
@@ -80,6 +81,13 @@ func acceptFriendRequest(c *gin.Context) {
 	found := current.RemoveRequest(requesterName)
 	if !found {
 		c.JSON(400, gin.H{"error": "No Pending Request"})
+		return
+	}
+
+	if current.IsFriend(requesterName) {
+		// stale request — already friends, just discard it
+		go saveUsers()
+		c.JSON(200, gin.H{"message": "Friend request accepted"})
 		return
 	}
 
@@ -132,13 +140,16 @@ func removeFriend(c *gin.Context) {
 		return
 	}
 
-	if !current.IsFriend(otherName) {
+	// clean up friends and pending requests on both sides
+	removedCurrent := current.RemoveFriend(otherName)
+	current.RemoveRequest(otherName)
+	other.RemoveFriend(currentName)
+	other.RemoveRequest(currentName)
+
+	if !removedCurrent {
 		c.JSON(400, gin.H{"error": "Not Friends"})
 		return
 	}
-
-	current.RemoveFriend(otherName)
-	other.RemoveFriend(currentName)
 
 	go saveUsers()
 

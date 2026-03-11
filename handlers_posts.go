@@ -570,7 +570,7 @@ func getTopPosts(c *gin.Context) {
 	postsMutex.RLock()
 	for _, post := range posts {
 		postTime := post.Timestamp / 1000 // Convert milliseconds to seconds
-		if (currentTime-postTime) <= int64(timePeriod*3600) && !post.ProfileOnly {
+		if (currentTime-postTime) <= int64(timePeriod)*3600 && !post.ProfileOnly {
 			postsWithinPeriod = append(postsWithinPeriod, post.ToNet())
 		}
 	}
@@ -700,10 +700,10 @@ func getFollowingFeed(c *gin.Context) {
 		return followingPosts[i].Timestamp > followingPosts[j].Timestamp
 	})
 
-	// Apply limit - get last 'limit' posts and reverse
+	// Apply limit - take the first (newest) entries after sorting
 	var result = make([]NetPost, 0)
 	if len(followingPosts) > limit {
-		result = followingPosts[len(followingPosts)-limit:]
+		result = followingPosts[:limit]
 	} else {
 		result = followingPosts
 	}

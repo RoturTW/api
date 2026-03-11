@@ -135,11 +135,11 @@ func saveGroupFile(groupTag string, groupData *GroupData) {
 }
 
 func saveGroupData(groupTag string) {
-	for tag, groupData := range groupsData {
-		if groupTag != tag {
-			continue
-		}
-		saveGroupFile(tag, groupData)
+	groupsDataMutex.RLock()
+	groupData, ok := groupsData[groupTag]
+	groupsDataMutex.RUnlock()
+	if ok {
+		saveGroupFile(groupTag, groupData)
 	}
 }
 
@@ -251,10 +251,10 @@ func deepCopyValue(v any) any {
 
 func loadFollowers() {
 	followersMutex.Lock()
-	defer followersMutex.Unlock()
 
 	if _, err := os.Stat(FOLLOWERS_FILE_PATH); os.IsNotExist(err) {
 		followersData = make(map[UserId]FollowerData)
+		followersMutex.Unlock()
 		return
 	}
 
@@ -262,6 +262,7 @@ func loadFollowers() {
 	if err != nil {
 		log.Printf("Error reading followers file: %v", err)
 		followersData = make(map[UserId]FollowerData)
+		followersMutex.Unlock()
 		return
 	}
 
@@ -269,6 +270,7 @@ func loadFollowers() {
 	if err := json.Unmarshal(data, &tempData); err != nil {
 		log.Printf("Error unmarshaling followers: %v", err)
 		followersData = make(map[UserId]FollowerData)
+		followersMutex.Unlock()
 		return
 	}
 
@@ -293,6 +295,7 @@ func loadFollowers() {
 
 	followersMutex.Lock()
 	followersData = validFollowersData
+	followersMutex.Unlock()
 
 	log.Printf("Loaded %d followers", len(followersData))
 }
@@ -422,8 +425,8 @@ func loadSystems() {
 }
 
 func saveSystems() {
-	systemsMutex.Lock()
-	defer systemsMutex.Unlock()
+	systemsMutex.RLock()
+	defer systemsMutex.RUnlock()
 	saveJsonFile(SYSTEMS_FILE_PATH, systems)
 }
 

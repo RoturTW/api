@@ -68,7 +68,7 @@ func createKey(c *gin.Context) {
 			total_keys++
 		}
 	}
-	if total_keys > max_keys {
+	if total_keys >= max_keys {
 		c.JSON(400, ErrorResponse{Error: fmt.Sprintf("You can only have up to %d free keys", max_keys)})
 		return
 	}
@@ -529,7 +529,7 @@ func buyKey(c *gin.Context) {
 					})
 				}
 
-				if len(*keys[i].Webhook) > 0 {
+				if keys[i].Webhook != nil && len(*keys[i].Webhook) > 0 {
 					username := user.GetUsername()
 					_ = sendWebhook(*keys[i].Webhook, map[string]any{
 						"username":  username,    // purchaser

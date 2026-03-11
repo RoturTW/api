@@ -163,6 +163,11 @@ func claimGift(c *gin.Context) {
 
 	gift := &gifts[giftIdx]
 
+	if gift.CreatorId == user.GetId() {
+		c.JSON(400, gin.H{"error": "You cannot claim your own gift"})
+		return
+	}
+
 	if !gift.CanBeClaimed() {
 		if gift.ClaimedAt != nil {
 			c.JSON(400, gin.H{"error": "This gift has already been claimed"})
@@ -317,10 +322,11 @@ func getMyGifts(c *gin.Context) {
 
 func trimAndCapNote(note string, maxLen int) string {
 	note = trim(note)
-	if len(note) > maxLen {
-		note = note[:maxLen]
+	runes := []rune(note)
+	if len(runes) > maxLen {
+		runes = runes[:maxLen]
 	}
-	return note
+	return string(runes)
 }
 
 func trim(s string) string {

@@ -59,7 +59,7 @@ func followUser(c *gin.Context) {
 	go saveFollowers()
 
 	addUserEvent(targetId, "follow", map[string]any{
-		"followers": data.Followers,
+		"follower": string(currentId),
 	})
 
 	c.JSON(200, gin.H{"message": "You are now following " + targetUsername})
@@ -72,9 +72,13 @@ func unfollowUser(c *gin.Context) {
 	if targetUsername == "" {
 		targetUsername = Username(c.Query("name"))
 	}
+	if targetUsername == "" {
+		c.JSON(400, gin.H{"error": "Target username is required"})
+		return
+	}
 	targetId := targetUsername.Id()
 	if !accountExists(targetId) {
-		c.JSON(400, gin.H{"error": "Target username is required"})
+		c.JSON(404, gin.H{"error": "User not found"})
 		return
 	}
 	currentId := user.GetId()
@@ -122,9 +126,9 @@ func unfollowUser(c *gin.Context) {
 	if userEvents, exists := eventsHistory[targetId]; exists {
 		newEvents := make([]Event, 0)
 		for _, event := range userEvents {
-			if !(event.Type == "follow" &&
-				event.Data["follower"] != nil &&
-				event.Data["follower"].(UserId) == currentId) {
+			// event.Data["follower"] may be a string after JSON round-trip
+			follower, _ := event.Data["follower"].(string)
+			if !(event.Type == "follow" && UserId(follower) == currentId) {
 				newEvents = append(newEvents, event)
 			}
 		}
@@ -194,7 +198,7 @@ func getFollowers(c *gin.Context) {
 
 	data, exists := followersData[targetId]
 	if !exists {
-		c.JSON(404, gin.H{"error": "User not found"})
+		c.JSON(200, gin.H{"followers": []Username{}})
 		return
 	}
 	for _, follower := range data.Followers {
