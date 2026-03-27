@@ -55,8 +55,10 @@ func loadUsers() {
 		idToUserInner[id] = u
 	}
 	fmt.Println("Loaded", len(loaded), "users")
+	idToUserMutex.Lock()
 	usernameToId = usernameToIdInner
 	idToUser = idToUserInner
+	idToUserMutex.Unlock()
 	users = loaded
 }
 

@@ -744,6 +744,8 @@ func (u User) IsFriend(username Username) bool {
 }
 
 func getIdByUsername(username Username) UserId {
+	idToUserMutex.RLock()
+	defer idToUserMutex.RUnlock()
 	val, ok := usernameToId[username.ToLower()]
 	if ok {
 		return val
