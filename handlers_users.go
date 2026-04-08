@@ -1,13 +1,12 @@
 package main
 
 import (
-	"crypto/md5"
-	"encoding/hex"
+	crypto_rand "crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"math"
-	"math/rand"
 	"net/http"
 	"os"
 	"slices"
@@ -318,28 +317,16 @@ func addLogin(c *gin.Context, user User, message string) {
 }
 
 func generateAccountToken() string {
-	currentTimestamp := time.Now().UnixMilli()
-
-	randomNumber := rand.Int63n(999999999999999) + 1
-
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	randomString1000 := make([]byte, 1000)
-	for i := range randomString1000 {
-		randomString1000[i] = charset[rand.Intn(len(charset))]
+	randomBytes := make([]byte, 64)
+	_, err := crypto_rand.Read(randomBytes)
+	if err != nil {
+		log.Printf("CRITICAL: Failed to generate secure random token: %v", err)
+		panic("failed to generate secure random token")
 	}
 
-	hasher := md5.New()
-	hasher.Write(randomString1000)
-	md5Hash := hex.EncodeToString(hasher.Sum(nil))
+	token := base64.URLEncoding.EncodeToString(randomBytes)
 
-	randomString128 := make([]byte, 128)
-	for i := range randomString128 {
-		randomString128[i] = charset[rand.Intn(len(charset))]
-	}
-
-	finalToken := fmt.Sprintf("%d_%d_%s_%s", currentTimestamp, randomNumber, md5Hash, string(randomString128))
-
-	return finalToken
+	return token
 }
 
 func refreshToken(c *gin.Context) {
@@ -391,7 +378,11 @@ func registerUser(c *gin.Context) {
 			"Take a shower",
 			"even a toddler could do this better",
 		}
-		c.JSON(403, gin.H{"error": randomResponses[rand.Intn(len(randomResponses))]})
+		var idx int
+		idxBytes := make([]byte, 1)
+		crypto_rand.Read(idxBytes)
+		idx = int(idxBytes[0]) % len(randomResponses)
+		c.JSON(403, gin.H{"error": randomResponses[idx]})
 		return
 	}
 

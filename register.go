@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
+	crypto_rand "crypto/rand"
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"mime"
 	"net/http"
 	"net/url"
@@ -332,13 +332,21 @@ func generateUsernameFromGoogle(payload *idtoken.Payload) (Username, error) {
 func generateRandomMD5LikePasswordHash() string {
 	const hexChars = "0123456789abcdef"
 	b := make([]byte, 32)
-	for i := range b {
-		b[i] = hexChars[rand.Intn(len(hexChars))]
+
+	_, err := crypto_rand.Read(b)
+	if err != nil {
+		panic("failed to generate random password hash")
 	}
-	s := string(b)
+
+	result := make([]byte, 32)
+	for i := range result {
+		result[i] = hexChars[int(b[i])%len(hexChars)]
+	}
+
+	s := string(result)
 	if s == "d41d8cd98f00b204e9800998ecf8427e" {
-		b[0] = '0'
-		return string(b)
+		result[0] = '0'
+		return string(result)
 	}
 	return s
 }
