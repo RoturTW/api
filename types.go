@@ -1557,6 +1557,10 @@ type TransferHistory struct {
 func (t TransferHistory) ToNet() NetTransferHistory {
 	var from *Username
 
+	if t.From == nil {
+		return NetTransferHistory{}
+	}
+
 	username := t.From.User().GetUsername()
 	if username != "" {
 		from = &username

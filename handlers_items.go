@@ -342,6 +342,7 @@ func getItem(c *gin.Context) {
 	name := strings.ToLower(c.Param("name"))
 
 	itemsMutex.RLock()
+	defer itemsMutex.RUnlock()
 	var targetItem *Item
 	for _, item := range items {
 		if strings.ToLower(item.Name) == name {
@@ -349,7 +350,6 @@ func getItem(c *gin.Context) {
 			break
 		}
 	}
-	itemsMutex.RUnlock()
 
 	if targetItem == nil {
 		c.JSON(404, gin.H{"error": "Item not found"})
@@ -411,6 +411,7 @@ func listItems(c *gin.Context) {
 	username := Username(c.Param("username")).Id()
 
 	itemsMutex.RLock()
+	defer itemsMutex.RUnlock()
 	userItems := make([]NetItem, 0)
 	for _, item := range items {
 		if item.Owner == username {
@@ -420,7 +421,6 @@ func listItems(c *gin.Context) {
 			userItems = append(userItems, itemCopy.ToNet())
 		}
 	}
-	itemsMutex.RUnlock()
 
 	c.JSON(200, userItems)
 }
