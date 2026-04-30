@@ -37,7 +37,7 @@ type profileResp struct {
 	Balance      any            `json:"balance,omitempty"`
 	Blocked      []string       `json:"blocked,omitempty"`
 	Posts        []NetPost      `json:"posts,omitempty"`
-	Status       *UserStatus    `json:"status,omitempty"`
+	Status       *RoomMember    `json:"status,omitempty"`
 	Theme        map[string]any `json:"theme,omitempty"`
 	Followed     bool           `json:"followed,omitempty"`
 	FollowsMe    bool           `json:"follows_me,omitempty"`
@@ -316,10 +316,7 @@ func getProfile(c *gin.Context) {
 	// Calculate dynamic badges
 	calculatedBadges := calculateUserBadges(foundUser)
 
-	st, err := loadUserStatus(foundUser.GetUsername())
-	if err != nil {
-		st = nil
-	}
+	st := hub.getUserStatus(foundUser.GetId())
 
 	profileData := profileResp{
 		Username:     foundUser.GetUsername(),

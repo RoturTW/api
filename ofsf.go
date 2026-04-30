@@ -350,6 +350,155 @@ func NewFileSystem() *FileSystem {
 	return &FileSystem{}
 }
 
+func formatOFSPath(username Username, dir string) string {
+	basePath := "origin/(c) users/" + string(username) + "/"
+	formatted := strings.Trim(dir, "/")
+	return strings.TrimSuffix(basePath+formatted, "/")
+}
+
+func (fs *FileSystem) ensureFoldersUnsafe(username Username, dir string) error {
+	dir = strings.TrimSuffix(strings.TrimSuffix(dir, "/"), " ")
+	if dir == "" || dir == "/" {
+		return nil
+	}
+
+	parts := strings.Split(strings.TrimPrefix(dir, "/"), "/")
+	index, _ := fs.loadPathIndexUnsafe(username)
+
+	for i := 1; i <= len(parts); i++ {
+		subPath := strings.ToLower("/" + strings.Join(parts[:i], "/"))
+		if _, exists := index[subPath]; exists {
+			continue
+		}
+
+		now := time.Now().UnixMilli()
+		uuid := generateToken()
+		location := formatOFSPath(username, strings.Join(parts[:i-1], "/"))
+
+		entry := []any{
+			".folder",  // [0] type
+			parts[i-1], // [1] name
+			location,   // [2] location
+			[]any{},    // [3] data
+			nil,        // [4] data_secondary
+			int64(0),   // [5] x
+			int64(0),   // [6] y
+			now,        // [7] id
+			now,        // [8] created
+			now,        // [9] edited
+			"",         // [10] icon
+			0,          // [11] size
+			[]string{}, // [12] permissions
+			uuid,       // [13] uuid
+		}
+
+		if err := fs.handleAddUnsafe(username, UpdateChange{
+			Command: "UUIDa",
+			UUID:    uuid,
+			Dta:     entry,
+		}); err != nil {
+			return fmt.Errorf("failed to create folder %q: %w", subPath, err)
+		}
+
+		index, _ = fs.loadPathIndexUnsafe(username)
+	}
+	return nil
+}
+
+func (fs *FileSystem) WriteUserFileUnsafe(username Username, fullPath string, content string) error {
+	now := time.Now().UnixMilli()
+	lowerPath := strings.ToLower(fullPath)
+	index, _ := fs.loadPathIndexUnsafe(username)
+
+	prefix := strings.ToLower("origin/(c) users/" + string(username) + "/")
+	relativePath := strings.TrimPrefix(lowerPath, prefix)
+	lastSlash := strings.LastIndex(relativePath, "/")
+	var dir string
+	if lastSlash > 0 {
+		dir = relativePath[:lastSlash]
+	}
+
+	if err := fs.ensureFoldersUnsafe(username, dir); err != nil {
+		return err
+	}
+
+	index, _ = fs.loadPathIndexUnsafe(username)
+
+	fileUUID, exists := index[lowerPath]
+	if exists {
+		entry, err := fs.getFileByUUIDUnsafe(username, fileUUID)
+		if err != nil {
+			return fmt.Errorf("failed to read existing file: %w", err)
+		}
+		if len(entry) < 14 {
+			return fmt.Errorf("existing file entry is malformed")
+		}
+		entry[3] = content
+		entry[8] = now // edited time
+		entry[11] = len(content)
+		if err := fs.setFileByUUIDUnsafe(username, fileUUID, entry); err != nil {
+			return fmt.Errorf("failed to update file: %w", err)
+		}
+	} else {
+		fileUUID = generateToken()
+
+		fileName := relativePath
+		if lastSlash >= 0 {
+			fileName = relativePath[lastSlash+1:]
+		}
+		ext := ""
+		name := fileName
+		if dotIdx := strings.LastIndex(fileName, "."); dotIdx > 0 {
+			ext = fileName[dotIdx:]
+			name = fileName[:dotIdx]
+		}
+
+		location := formatOFSPath(username, dir)
+		entry := []any{
+			ext,          // [0] type
+			name,         // [1] name
+			location,     // [2] location
+			content,      // [3] data
+			nil,          // [4] data_secondary
+			int64(0),     // [5] x
+			int64(0),     // [6] y
+			now,          // [7] id
+			now,          // [8] created
+			now,          // [9] edited
+			"",           // [10] icon
+			len(content), // [11] size
+			[]string{},   // [12] permissions
+			fileUUID,     // [13] uuid
+		}
+
+		if err := fs.handleAddUnsafe(username, UpdateChange{
+			Command: "UUIDa",
+			UUID:    fileUUID,
+			Dta:     entry,
+		}); err != nil {
+			return fmt.Errorf("failed to create file: %w", err)
+		}
+	}
+	return nil
+}
+
+func (fs *FileSystem) ReadUserFileUnsafe(username Username, fullPath string) string {
+	index, _ := fs.loadPathIndexUnsafe(username)
+	fileUUID, ok := index[strings.ToLower(fullPath)]
+	if !ok {
+		return ""
+	}
+	entry, err := fs.getFileByUUIDUnsafe(username, fileUUID)
+	if err != nil || len(entry) < 4 {
+		return ""
+	}
+	dataStr, ok := entry[3].(string)
+	if !ok {
+		return ""
+	}
+	return dataStr
+}
+
 func (fs *FileSystem) HandleOFSFUpdate(username Username, updates []UpdateChange, maxSize int) UpdateResult {
 
 	fmt.Printf("\033[92m[+] OFSF\033[0m | %s processing %d file updates\n", username, len(updates))
@@ -363,7 +512,9 @@ func (fs *FileSystem) HandleOFSFUpdate(username Username, updates []UpdateChange
 	for _, change := range updates {
 		switch change.Command {
 		case "UUIDa":
-			fs.handleAddUnsafe(username, change)
+			if err := fs.handleAddUnsafe(username, change); err != nil {
+				log.Printf("[OFSF] Error handling UUIDa for %s: %v", username, err)
+			}
 		case "UUIDr":
 			fs.handleReplaceUnsafe(username, change)
 		case "UUIDd":
@@ -415,19 +566,24 @@ func extractIndex(v any) int {
 }
 
 // handleAddUnsafe assumes the lock is already held
-func (fs *FileSystem) handleAddUnsafe(username Username, change UpdateChange) {
+func (fs *FileSystem) handleAddUnsafe(username Username, change UpdateChange) error {
 	if len(change.UUID) != 32 {
-		return
+		return fmt.Errorf("invalid UUID length: %d", len(change.UUID))
 	}
-	path := filepath.Join(fileDir, string(username), change.UUID+".json")
+	userDir := filepath.Join(fileDir, string(username))
+	if err := os.MkdirAll(userDir, 0755); err != nil {
+		log.Printf("Error creating user directory %s: %v", userDir, err)
+		return fmt.Errorf("failed to create user directory: %w", err)
+	}
+	path := filepath.Join(userDir, change.UUID+".json")
 
 	if _, err := os.Stat(path); err == nil {
-		return
+		return nil
 	}
 
 	dta, ok := change.Dta.([]any)
 	if !ok || len(dta) > fileEntrySize {
-		return
+		return fmt.Errorf("invalid entry data")
 	}
 
 	dta[7] = time.Now().UnixMilli()
@@ -441,24 +597,25 @@ func (fs *FileSystem) handleAddUnsafe(username Username, change UpdateChange) {
 	data, err := json.Marshal(meta)
 	if err != nil {
 		log.Printf("Error marshaling metadata: %v", err)
-		return
+		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		log.Printf("Error writing file %s: %v", path, err)
-		return
+		return fmt.Errorf("failed to write file: %w", err)
 	}
 
 	// Load and update path index (unsafe version - no locking)
 	idx, _ := fs.loadPathIndexUnsafe(username)
 	idx[entryToPath(dta, username)] = change.UUID
 	fs.savePathIndexUnsafe(username, idx)
+	return nil
 }
 
 // handleReplaceUnsafe assumes the lock is already held
-func (fs *FileSystem) handleReplaceUnsafe(username Username, change UpdateChange) {
+func (fs *FileSystem) handleReplaceUnsafe(username Username, change UpdateChange) error {
 	entry, err := fs.getFileByUUIDUnsafe(username, change.UUID)
 	if err != nil {
-		return
+		return err
 	}
 
 	oldPath := entryToPath(entry, username)
@@ -471,7 +628,9 @@ func (fs *FileSystem) handleReplaceUnsafe(username Username, change UpdateChange
 
 	newPath := entryToPath(entry, username)
 
-	fs.setFileByUUIDUnsafe(username, change.UUID, entry)
+	if err := fs.setFileByUUIDUnsafe(username, change.UUID, entry); err != nil {
+		return err
+	}
 
 	if oldPath != newPath {
 		index, _ := fs.loadPathIndexUnsafe(username)
@@ -479,10 +638,11 @@ func (fs *FileSystem) handleReplaceUnsafe(username Username, change UpdateChange
 		index[newPath] = change.UUID
 		fs.savePathIndexUnsafe(username, index)
 	}
+	return nil
 }
 
 // handleDeleteUnsafe assumes the lock is already held
-func (fs *FileSystem) handleDeleteUnsafe(username Username, change UpdateChange) {
+func (fs *FileSystem) handleDeleteUnsafe(username Username, change UpdateChange) error {
 	filePath := filepath.Join(fileDir, string(username), change.UUID+".json")
 	os.Remove(filePath)
 
@@ -495,6 +655,7 @@ func (fs *FileSystem) handleDeleteUnsafe(username Username, change UpdateChange)
 	}
 
 	fs.savePathIndexUnsafe(username, idx)
+	return nil
 }
 
 func userIndexPath(username Username) string {
@@ -857,6 +1018,9 @@ func (fs *FileSystem) GetFileByUUID(username Username, uuid string) (FileEntry, 
 // setFileByUUIDUnsafe assumes the lock is already held
 func (fs *FileSystem) setFileByUUIDUnsafe(username Username, uuid string, file FileEntry) error {
 	userDir := fs.GetUserPath(username)
+	if err := os.MkdirAll(userDir, 0755); err != nil {
+		return fmt.Errorf("failed to create user directory: %w", err)
+	}
 
 	filePath := filepath.Join(userDir, uuid+".json")
 

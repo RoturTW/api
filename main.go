@@ -37,7 +37,6 @@ func main() {
 	go checkSubscriptions()
 	go watchUsersFile()
 	go watchBadgesFile()
-	go cleanExpiredStatuses()
 	go cleanExpiredGifts()
 	// go enactInactivityTax()
 	go startStandingRecoveryChecker()
@@ -260,12 +259,17 @@ func main() {
 		link.POST("/code", requiresAuth, linkCodeToAccount)
 	}
 
-	// Status endpoints
+	// Services endpoints
+	services := r.Group("/services")
+	{
+		services.GET("/spotify", requiresAuth, linkSpotify)
+	services.GET("/spotify/auth", requiresAuth, spotifyAuthInit)
+	}
+
 	status := r.Group("/status")
 	{
-		status.GET("/update", requiresAuth, statusUpdate)
-		status.GET("/clear", requiresAuth, statusClear)
-		status.GET("/get", statusGet)
+		status.GET("/ws", statusWSHandler)
+		status.GET("/get", statusGetHTTP)
 	}
 
 	// DevFund endpoints
@@ -283,6 +287,20 @@ func main() {
 		gifts.POST("/claim/:code", rateLimit("default"), requiresAuth, requireStanding(StandingWarning), claimGift)
 		gifts.POST("/cancel/:id", requiresAuth, cancelGift)
 		gifts.GET("/mine", requiresAuth, getMyGifts)
+	}
+
+	notify := r.Group("/notify")
+	{
+		notify.GET("/vapid", rateLimit("notify"), getVAPIDKeys)
+		notify.POST("/register", rateLimit("notify"), requiresAuth, registerForNotifications)
+		notify.GET("/check", requiresAuth, checkNotifyRegistration)
+		notify.GET("/endpoints", requiresAuth, getNotifyEndpoints)
+		notify.DELETE("/device/:device_id", requiresAuth, deleteNotifyDevice)
+		notify.GET("/allowed", requiresAuth, getNotifyAllowedSenders)
+		notify.POST("/allowed/:username", requiresAuth, addNotifyAllowedSender)
+		notify.DELETE("/allowed/:username", requiresAuth, removeNotifyAllowedSender)
+		notify.GET("/log", rateLimit("notify"), requiresAuth, getNotifyLogHandler)
+		notify.POST("/:username", rateLimit("notify"), requiresAuth, notifyUser)
 	}
 
 	// Other endpoints
