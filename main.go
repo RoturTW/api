@@ -260,10 +260,9 @@ func main() {
 	}
 
 	// Services endpoints
-	services := r.Group("/services")
+	// services := r.Group("/services")
 	{
-		services.GET("/spotify", requiresAuth, linkSpotify)
-	services.GET("/spotify/auth", requiresAuth, spotifyAuthInit)
+		// for future integrations
 	}
 
 	status := r.Group("/status")
