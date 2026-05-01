@@ -458,6 +458,12 @@ func (c *Conn) handleAddActivity(msg map[string]json.RawMessage) {
 	if b, ok := msg["url"]; ok {
 		json.Unmarshal(b, &act.URL)
 	}
+	if b, ok := msg["status"]; ok {
+		json.Unmarshal(b, &act.Status)
+	}
+	if b, ok := msg["start_time"]; ok {
+		json.Unmarshal(b, &act.StartTime)
+	}
 	if b, ok := msg["media"]; ok {
 		var media ActivityMedia
 		json.Unmarshal(b, &media)

@@ -51,6 +51,8 @@ type Activity struct {
 	Application *ActivityApplication `json:"application,omitempty"`
 	Image       string               `json:"image,omitempty"`
 	URL         string               `json:"url,omitempty"`
+	Status      string               `json:"status,omitempty"`
+	StartTime   int64                `json:"start_time,omitempty"`
 	Media       *ActivityMedia       `json:"media,omitempty"`
 }
 
