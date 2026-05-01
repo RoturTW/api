@@ -433,6 +433,40 @@ func (c *Conn) handleSetStatus(msg map[string]json.RawMessage) {
 	}
 }
 
+func isIdenticalActivity(a, b Activity) bool {
+	if a.ID != b.ID ||
+		a.Title != b.Title ||
+		a.Image != b.Image ||
+		a.URL != b.URL ||
+		a.Status != b.Status ||
+		a.StartTime != b.StartTime {
+		return false
+	}
+
+	if (a.Application == nil) != (b.Application == nil) {
+		return false
+	}
+	if a.Application != nil &&
+		(a.Application.Name != b.Application.Name ||
+			a.Application.URL != b.Application.URL) {
+		return false
+	}
+
+	if (a.Media == nil) != (b.Media == nil) {
+		return false
+	}
+	if a.Media != nil &&
+		(a.Media.Title != b.Media.Title ||
+			a.Media.Artist != b.Media.Artist ||
+			a.Media.Album != b.Media.Album ||
+			a.Media.Start != b.Media.Start ||
+			a.Media.End != b.Media.End) {
+		return false
+	}
+
+	return true
+}
+
 func (c *Conn) handleAddActivity(msg map[string]json.RawMessage) {
 	var act Activity
 	raw, ok := msg["id"]
@@ -479,6 +513,10 @@ func (c *Conn) handleAddActivity(msg map[string]json.RawMessage) {
 	if len(us.Activities) >= maxActivitiesPerConn {
 		hub.Unlock()
 		c.sendError("activity limit reached")
+		return
+	}
+	if isIdenticalActivity(act, us.Activities[act.ID]) {
+		hub.Unlock()
 		return
 	}
 	us.Activities[act.ID] = act
