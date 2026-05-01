@@ -300,6 +300,8 @@ func main() {
 		notify.DELETE("/allowed/:username", requiresAuth, removeNotifyAllowedSender)
 		notify.GET("/log", rateLimit("notify"), requiresAuth, getNotifyLogHandler)
 		notify.POST("/:username", rateLimit("notify"), requiresAuth, notifyUser)
+		notify.POST("/", rateLimit("notify"), requiresAuth, notifyManyUsers)
+		notify.GET("/:source/users", rateLimit("notify"), requiresAuth, getNotifiableUsers)
 	}
 
 	// Other endpoints

@@ -596,6 +596,115 @@ func getNotifyLogHandler(c *gin.Context) {
 	})
 }
 
+type NotificationRequest struct {
+	Source string         `json:"source" binding:"required"`
+	Title  string         `json:"title"`
+	Body   string         `json:"body"`
+	Data   map[string]any `json:"data"`
+	Users  []string       `json:"users"`
+}
+
+func sendPushNotificationToUser(target User, sender User, req NotificationRequest) (int, map[string]any) {
+	if len(req.Title) > 256 {
+		req.Title = req.Title[:256]
+	}
+	if len(req.Body) > 1024 {
+		req.Body = req.Body[:1024]
+	}
+
+	username := target.GetUsername()
+	mu := getNotifyMutex(username)
+	mu.RLock()
+	fs.mu.RLock()
+	endpointsFile := loadNotifyEndpoints(username)
+	fs.mu.RUnlock()
+	mu.RUnlock()
+
+	var targetEndpoints []NotificationEndpoint
+	for _, ep := range endpointsFile.Endpoints {
+		if ep.Source == req.Source {
+			targetEndpoints = append(targetEndpoints, ep)
+		}
+	}
+	if len(targetEndpoints) == 0 {
+		return 404, gin.H{
+			"error":  "target user has no registered endpoints for this source",
+			"source": req.Source,
+		}
+	}
+
+	payload := map[string]any{
+		"type":    "notification",
+		"source":  req.Source,
+		"from":    sender.GetUsername(),
+		"title":   req.Title,
+		"body":    req.Body,
+		"data":    req.Data,
+		"sent_at": time.Now().UnixMilli(),
+	}
+	payloadBytes, _ := json.Marshal(payload)
+
+	for _, ep := range targetEndpoints {
+		go sendWebPush(username, ep, payloadBytes)
+	}
+
+	targetMu := getUserMutex(username)
+	targetMu.Lock()
+	incrementNotifyCount(target, req.Source, sender.GetId())
+	addNotifyLogEntry(target, NotifyLogEntry{
+		From:   sender.GetUsername(),
+		Source: req.Source,
+		Title:  req.Title,
+		Body:   req.Body,
+		At:     time.Now().UnixMilli(),
+	})
+	targetMu.Unlock()
+
+	addUserEvent(target.GetId(), "notification", map[string]any{
+		"from":   string(sender.GetUsername()),
+		"source": req.Source,
+		"title":  req.Title,
+	})
+
+	return 200, gin.H{
+		"success": true,
+		"message": "notification sent",
+		"title":   req.Title,
+		"body":    req.Body,
+		"data":    req.Data,
+	}
+}
+
+func getNotifiableUsers(c *gin.Context) {
+	ensureVAPIDKeys()
+
+	sender := c.MustGet("user").(*User)
+	targetSource := c.Param("source")
+	if targetSource == "" {
+		c.JSON(400, gin.H{"error": "source is required"})
+		return
+	}
+
+	usersMutex.RLock()
+	defer usersMutex.RUnlock()
+	var ableUsers []User
+	for _, user := range users {
+		if !isNotifyAllowed(user, targetSource, sender.GetId()) {
+			continue
+		}
+		ableUsers = append(ableUsers, map[string]any{
+			"username": user.GetUsername(),
+			"id":       user.GetId(),
+		})
+	}
+
+	c.JSON(200, gin.H{
+		"success": true,
+		"source":  targetSource,
+		"users":   ableUsers,
+	})
+}
+
 func notifyUser(c *gin.Context) {
 	ensureVAPIDKeys()
 
@@ -605,13 +714,8 @@ func notifyUser(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "username is required"})
 		return
 	}
+	var req NotificationRequest
 
-	var req struct {
-		Source string         `json:"source" binding:"required"`
-		Title  string         `json:"title"`
-		Body   string         `json:"body"`
-		Data   map[string]any `json:"data"`
-	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": "source is required"})
 		return
@@ -647,63 +751,67 @@ func notifyUser(c *gin.Context) {
 		return
 	}
 
-	username := target.GetUsername()
-	mu := getNotifyMutex(username)
-	mu.RLock()
-	fs.mu.RLock()
-	endpointsFile := loadNotifyEndpoints(username)
-	fs.mu.RUnlock()
-	mu.RUnlock()
+	c.JSON(sendPushNotificationToUser(target, *sender, req))
+}
 
-	var targetEndpoints []NotificationEndpoint
-	for _, ep := range endpointsFile.Endpoints {
-		if ep.Source == req.Source {
-			targetEndpoints = append(targetEndpoints, ep)
-		}
+// take a list of usernames and send a notification to each of them
+// return a list of usernames that worked for
+func notifyManyUsers(c *gin.Context) {
+	ensureVAPIDKeys()
+
+	sender := c.MustGet("user").(*User)
+	var req NotificationRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "source is required"})
+		return
 	}
-	if len(targetEndpoints) == 0 {
-		c.JSON(404, gin.H{"error": "target user has no registered endpoints for this source", "source": req.Source})
+	if len(req.Title) > 256 {
+		c.JSON(400, gin.H{"error": "title too long (max 256 chars)"})
+		return
+	}
+	if len(req.Body) > 1024 {
+		c.JSON(400, gin.H{"error": "body too long (max 1024 chars)"})
 		return
 	}
 
-	payload := map[string]any{
-		"type":    "notification",
-		"source":  req.Source,
-		"from":    sender.GetUsername(),
-		"title":   req.Title,
-		"body":    req.Body,
-		"data":    req.Data,
-		"sent_at": time.Now().UnixMilli(),
-	}
-	payloadBytes, _ := json.Marshal(payload)
-
-	for _, ep := range targetEndpoints {
-		go sendWebPush(username, ep, payloadBytes)
+	senderId := sender.GetId()
+	if senderId == "" {
+		c.JSON(403, gin.H{"error": "invalid sender"})
+		return
 	}
 
-	targetMu := getUserMutex(username)
-	targetMu.Lock()
-	incrementNotifyCount(target, req.Source, senderId)
-	addNotifyLogEntry(target, NotifyLogEntry{
-		From:   sender.GetUsername(),
-		Source: req.Source,
-		Title:  req.Title,
-		Body:   req.Body,
-		At:     time.Now().UnixMilli(),
-	})
-	targetMu.Unlock()
+	var users []User
+	for _, username := range req.Users {
+		username = strings.ToLower(username)
+		target, err := getAccountByUsername(username)
+		if err != nil {
+			continue
+		}
+		if target.HasBlocked(senderId) {
+			continue
+		}
+		if !isNotifyAllowed(target, req.Source, senderId) {
+			continue
+		}
+		users = append(users, target)
+	}
 
-	addUserEvent(target.GetId(), "notification", map[string]any{
-		"from":   string(sender.GetUsername()),
-		"source": req.Source,
-		"title":  req.Title,
-	})
+	results := make([]map[string]any, len(users))
+	for i, user := range users {
+		code, result := sendPushNotificationToUser(user, *sender, req)
+		results[i] = map[string]any{
+			"username": user.GetUsername(),
+			"code":     code,
+			"result":   result,
+		}
+	}
 
 	c.JSON(200, gin.H{
-		"message":       "notification sent",
-		"endpoints_hit": len(targetEndpoints),
-		"source":        req.Source,
+		"success": true,
+		"results": results,
 	})
+
 }
 
 func pruneNotifyDevice(username Username, deviceID string) {
