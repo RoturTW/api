@@ -510,7 +510,12 @@ func (c *Conn) handleAddActivity(msg map[string]json.RawMessage) {
 		us = &UserStatus{Presence: PresenceOnline, Activities: make(map[string]Activity)}
 		hub.userStatus[c.userId] = us
 	}
-	if len(us.Activities) >= maxActivitiesPerConn {
+
+	if c.activities == nil {
+		c.activities = make(map[string]struct{})
+	}
+
+	if len(c.activities) >= maxActivitiesPerConn {
 		hub.Unlock()
 		c.sendError("activity limit reached")
 		return
@@ -520,6 +525,7 @@ func (c *Conn) handleAddActivity(msg map[string]json.RawMessage) {
 		return
 	}
 	us.Activities[act.ID] = act
+	c.activities[act.ID] = struct{}{}
 
 	roomNames := hub.allRoomsForUserLocked(c.userId)
 	hub.Unlock()
@@ -545,6 +551,10 @@ func (c *Conn) handleRemoveActivity(msg map[string]json.RawMessage) {
 		return
 	}
 	delete(us.Activities, id)
+
+	if c.activities != nil {
+		delete(c.activities, id)
+	}
 
 	roomNames := hub.allRoomsForUserLocked(c.userId)
 	hub.Unlock()

@@ -82,6 +82,7 @@ type Conn struct {
 	rooms           map[string]struct{}
 	presence        Presence
 	lastPresenceSet time.Time
+	activities      map[string]struct{}
 }
 
 type Hub struct {
@@ -112,9 +113,31 @@ func (h *Hub) register(c *Conn) {
 	h.Unlock()
 }
 
+func (h *Hub) removeConnActivitiesLocked(c *Conn) {
+	if len(c.activities) == 0 {
+		return
+	}
+
+	us := h.userStatus[c.userId]
+	if us == nil {
+		c.activities = nil
+		return
+	}
+
+	if us.Activities == nil {
+		us.Activities = make(map[string]Activity)
+	}
+
+	for id := range c.activities {
+		delete(us.Activities, id)
+	}
+	c.activities = nil
+}
+
 func (h *Hub) unregister(c *Conn) {
 	h.Lock()
 	delete(h.conns, c)
+	h.removeConnActivitiesLocked(c)
 
 	conns := h.userConns[c.userId]
 	for i, cc := range conns {

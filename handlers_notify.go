@@ -1,17 +1,12 @@
 package main
 
 import (
-	"crypto/ecdh"
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"log"
@@ -58,55 +53,49 @@ var notifyMutexes sync.RWMutex
 var notifyUserMutexes = map[Username]*sync.RWMutex{}
 
 var (
-	vapidPrivateKeyB64 string
-	vapidPublicKeyB64  string
-	vapidOnce          sync.Once
+	vapidPrivateKey string
+	vapidPublicKey  string
+	vapidOnce       sync.Once
 )
 
 func loadOrGenerateVAPIDKeys() {
-	keyPath := mustEnv("VAPID_KEY_PATH", "./vapid_key.pem")
+	keyPath := mustEnv("VAPID_KEY_PATH", "./vapid_keys.json")
 
 	data, err := os.ReadFile(keyPath)
-	if err == nil && len(data) > 0 {
-		block, _ := pem.Decode(data)
-		if block != nil {
-			key, err := x509.ParseECPrivateKey(block.Bytes)
-			if err == nil {
-				if pub, privB64, err := marshalVAPIDKey(key); err == nil {
-					vapidPrivateKeyB64 = privB64
-					vapidPublicKeyB64 = pub
-					log.Println("[VAPID] Loaded existing key from", keyPath)
-					return
-				}
-			}
+	if err == nil {
+		var stored struct {
+			PublicKey  string `json:"public_key"`
+			PrivateKey string `json:"private_key"`
 		}
-		log.Printf("[VAPID] Could not parse existing key file, generating new key")
+		if json.Unmarshal(data, &stored) == nil &&
+			stored.PublicKey != "" &&
+			stored.PrivateKey != "" {
+
+			vapidPublicKey = stored.PublicKey
+			vapidPrivateKey = stored.PrivateKey
+			log.Println("[VAPID] Loaded existing keys from", keyPath)
+			return
+		}
 	}
 
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	privateKey, publicKey, err := webpush.GenerateVAPIDKeys()
 	if err != nil {
-		log.Fatalf("[VAPID] Failed to generate key: %v", err)
+		log.Fatalf("[VAPID] Failed to generate keys: %v", err)
 	}
 
-	der, err := x509.MarshalECPrivateKey(key)
-	if err != nil {
-		log.Fatalf("[VAPID] Failed to marshal private key: %v", err)
-	}
-	pemBlock := &pem.Block{Type: "EC PRIVATE KEY", Bytes: der}
-	pemBytes := pem.EncodeToMemory(pemBlock)
+	vapidPrivateKey = privateKey
+	vapidPublicKey = publicKey
 
-	if err := os.WriteFile(keyPath, pemBytes, 0600); err != nil {
-		log.Printf("[VAPID] Warning: could not save key to %s: %v", keyPath, err)
+	out, _ := json.MarshalIndent(map[string]string{
+		"public_key":  publicKey,
+		"private_key": privateKey,
+	}, "", "  ")
+
+	if err := os.WriteFile(keyPath, out, 0600); err != nil {
+		log.Printf("[VAPID] Warning: could not save keys: %v", err)
 	} else {
-		log.Println("[VAPID] Generated and saved new key to", keyPath)
+		log.Println("[VAPID] Generated and saved new keys to", keyPath)
 	}
-
-	pub, privB64, err := marshalVAPIDKey(key)
-	if err != nil {
-		log.Fatalf("[VAPID] Failed to marshal key for webpush: %v", err)
-	}
-	vapidPrivateKeyB64 = privB64
-	vapidPublicKeyB64 = pub
 }
 
 func marshalVAPIDKey(key *ecdsa.PrivateKey) (pubB64 string, privB64 string, err error) {
@@ -144,7 +133,7 @@ func getVAPIDKeys(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"public_key": vapidPublicKeyB64,
+		"public_key": vapidPublicKey,
 		"subject":    subject,
 	})
 }
@@ -333,19 +322,20 @@ func registerForNotifications(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "endpoint must be a valid HTTP(S) URL"})
 		return
 	}
-	if _, err := base64.RawURLEncoding.DecodeString(req.P256dh); err != nil {
-		c.JSON(400, gin.H{"error": "p256dh must be base64url encoded"})
+	p256dhBytes, err := base64.RawURLEncoding.DecodeString(req.P256dh)
+	if err != nil || len(p256dhBytes) != 65 || p256dhBytes[0] != 0x04 {
+		c.JSON(400, gin.H{"error": "invalid p256dh key"})
 		return
 	}
-	if _, err := base64.RawURLEncoding.DecodeString(req.Auth); err != nil {
-		c.JSON(400, gin.H{"error": "auth must be base64url encoded"})
+
+	authBytes, err := base64.RawURLEncoding.DecodeString(req.Auth)
+	if err != nil || len(authBytes) != 16 {
+		c.JSON(400, gin.H{"error": "invalid auth key"})
 		return
 	}
-	p256dhBytes, _ := base64.RawURLEncoding.DecodeString(req.P256dh)
-	if _, err := ecdh.P256().NewPublicKey(p256dhBytes); err != nil {
-		c.JSON(400, gin.H{"error": "p256dh is not a valid P-256 public key"})
-		return
-	}
+
+	log.Printf("[Notify] Registered endpoint key lengths → p256dh: %d, auth: %d",
+		len(p256dhBytes), len(authBytes))
 
 	deviceID := generateDeviceID(username, req.Source, req.Fingerprint)
 	mu := getNotifyMutex(username)
@@ -635,11 +625,9 @@ func sendPushNotificationToUser(target User, sender User, req NotificationReques
 
 	payload := map[string]any{
 		"type":    "notification",
-		"source":  req.Source,
 		"from":    sender.GetUsername(),
 		"title":   req.Title,
 		"body":    req.Body,
-		"data":    req.Data,
 		"sent_at": time.Now().UnixMilli(),
 	}
 	payloadBytes, _ := json.Marshal(payload)
@@ -844,28 +832,41 @@ func sendWebPush(username Username, ep NotificationEndpoint, payload []byte) {
 		},
 	}
 
-	resp, err := webpush.SendNotification(payload, sub, &webpush.Options{
+	options := &webpush.Options{
 		Subscriber:      vapidSubject(),
-		VAPIDPublicKey:  vapidPublicKeyB64,
-		VAPIDPrivateKey: vapidPrivateKeyB64,
+		VAPIDPublicKey:  vapidPublicKey,
+		VAPIDPrivateKey: vapidPrivateKey,
 		TTL:             30,
-	})
-	if err != nil {
-		log.Printf("[Notify] Web Push error for device %s: %v", ep.DeviceID, err)
-		return
+		RecordSize:      3000,
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusNotFound {
-		pruneNotifyDevice(username, ep.DeviceID)
-	} else if resp.StatusCode == http.StatusUnauthorized {
+	for true {
+		resp, err := webpush.SendNotification(payload, sub, options)
+		if err != nil {
+			log.Printf("[Notify] Web Push error for device %s: %v", ep.DeviceID, err)
+			return
+		}
+
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		bodyString := string(bodyBytes)
-		log.Printf("[Notify] Push service returned 401 for device %s (not pruning, likely transient): %s", ep.DeviceID, bodyString)
-	} else if resp.StatusCode >= 400 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		bodyString := string(bodyBytes)
-		log.Printf("[Notify] Push service returned %s (%d) for device %s", bodyString, resp.StatusCode, ep.DeviceID)
-		pruneNotifyDevice(username, ep.DeviceID)
+		resp.Body.Close()
+
+		if resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusNotFound {
+			pruneNotifyDevice(username, ep.DeviceID)
+			break
+		} else if resp.StatusCode == http.StatusRequestEntityTooLarge {
+			if options.RecordSize <= 1000 {
+				log.Printf("[Notify] Push service returned 413 for device %s (too large), giving up", ep.DeviceID)
+				break
+			}
+			options.RecordSize = options.RecordSize / 2
+			log.Printf("[Notify] Push service returned 413 for device %s (too large), retrying with smaller record size: %d", ep.DeviceID, options.RecordSize)
+		} else if resp.StatusCode >= 400 {
+			bodyString := string(bodyBytes)
+			log.Printf("[Notify] Push service returned %s (%d) for device %s", bodyString, resp.StatusCode, ep.DeviceID)
+			pruneNotifyDevice(username, ep.DeviceID)
+			break
+		} else {
+			break
+		}
 	}
 }
