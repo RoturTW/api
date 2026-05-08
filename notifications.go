@@ -214,7 +214,7 @@ func patchUserUpdate(username Username, key string, value any) bool {
 }
 
 func broadcastUserUpdate(username Username, key string, value any) bool {
-	mu := getUserMutex(username)
+	mu := getMutexForUser(username.Id().User())
 	mu.Lock()
 	defer mu.Unlock()
 	payload := createEventPayload("user_account_update", map[string]any{

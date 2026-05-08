@@ -312,6 +312,28 @@ func main() {
 	r.GET("/ai", rateLimit("ai"), requiresAuth, handleAI)
 	r.GET("/status", rateLimit("default"), getStatus)
 
+	go func() {
+		avatars := gin.Default()
+
+		avatars.Use(corsMiddleware())
+
+		avatars.GET("/:username", avatarHandler)
+		avatars.HEAD("/:username", avatarHandler)
+		avatars.GET("/.overlay/:username", overlayHandler)
+		avatars.HEAD("/.overlay/:username", overlayHandler)
+		avatars.GET("/.banners/:username", bannerHandler)
+		avatars.HEAD("/.banners/:username", bannerHandler)
+		avatars.POST("/rotur-upload-pfp", uploadPfpHandler)
+		avatars.POST("/rotur-upload-banner", uploadBannerHandler)
+
+		avatars.POST("/reload-overlays", requiresAuth, reloadOverlays)
+
+		log.Println("Avatar server starting on port 5604...")
+		if err := avatars.Run("0.0.0.0:5604"); err != nil {
+			log.Fatalf("Failed to start avatar server: %v", err)
+		}
+	}()
+
 	log.Println("Claw server starting on port 5602...")
 	if err := r.Run("0.0.0.0:5602"); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

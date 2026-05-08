@@ -538,10 +538,6 @@ func addNotifyAllowedSender(c *gin.Context) {
 		return
 	}
 
-	mu := getUserMutex(user.GetUsername())
-	mu.Lock()
-	defer mu.Unlock()
-
 	addNotifyAllowed(*user, req.Source, targetId)
 	c.JSON(200, gin.H{
 		"message":  "sender allowed",
@@ -564,10 +560,6 @@ func removeNotifyAllowedSender(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "user not found"})
 		return
 	}
-
-	mu := getUserMutex(user.GetUsername())
-	mu.Lock()
-	defer mu.Unlock()
 
 	removeNotifyAllowed(*user, source, targetId)
 	c.JSON(200, gin.H{
@@ -636,8 +628,6 @@ func sendPushNotificationToUser(target User, sender User, req NotificationReques
 		go sendWebPush(username, ep, payloadBytes)
 	}
 
-	targetMu := getUserMutex(username)
-	targetMu.Lock()
 	incrementNotifyCount(target, req.Source, sender.GetId())
 	addNotifyLogEntry(target, NotifyLogEntry{
 		From:   sender.GetUsername(),
@@ -646,7 +636,6 @@ func sendPushNotificationToUser(target User, sender User, req NotificationReques
 		Body:   req.Body,
 		At:     time.Now().UnixMilli(),
 	})
-	targetMu.Unlock()
 
 	addUserEvent(target.GetId(), "notification", map[string]any{
 		"from":   string(sender.GetUsername()),

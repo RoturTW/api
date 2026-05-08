@@ -198,10 +198,22 @@ func copyUser(u User) User {
 	if u == nil {
 		return nil
 	}
+
+	mu := getMutexForUser(u)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	return deepCopyUser(u)
+}
+
+func deepCopyUser(u User) User {
 	out := make(User, len(u))
+
 	for k, v := range u {
 		out[k] = deepCopyValue(v)
 	}
+
 	return out
 }
 

@@ -416,19 +416,7 @@ type GroupData struct {
 }
 
 var userMutexesLock sync.Mutex
-var userMutexes = map[Username]*sync.Mutex{}
 var userPtrMutexes = map[uintptr]*sync.Mutex{}
-
-func getUserMutex(username Username) *sync.Mutex {
-	userMutexesLock.Lock()
-	defer userMutexesLock.Unlock()
-	mu, ok := userMutexes[username]
-	if !ok {
-		mu = &sync.Mutex{}
-		userMutexes[username] = mu
-	}
-	return mu
-}
 
 func getMutexForUser(u User) *sync.Mutex {
 	ptr := reflect.ValueOf(u).Pointer()
