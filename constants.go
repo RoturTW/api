@@ -18,6 +18,7 @@ var (
 	EVENTS_HISTORY_PATH           string
 	SYSTEMS_FILE_PATH             string
 	GROUPS_FILE_PATH              string
+	USERDATA_PATH                 string
 	WEBSOCKET_SERVER_URL          string
 	EVENT_SERVER_URL              string
 	SUBSCRIPTION_CHECK_INTERVAL   int
@@ -75,6 +76,7 @@ func loadConfigFromEnv() {
 	FOLLOWERS_FILE_PATH = mustEnv("FOLLOWERS_FILE_PATH", "./clawusers.json")
 	ITEMS_FILE_PATH = mustEnv("ITEMS_FILE_PATH", "./items.json")
 	GROUPS_FILE_PATH = mustEnv("GROUPS_FILE_PATH", "./rotur/groups")
+	USERDATA_PATH = mustEnv("USERDATA_PATH", "./rotur/userdata")
 	KEYS_FILE_PATH = mustEnv("KEYS_FILE_PATH", "./keys.json")
 	EVENTS_HISTORY_PATH = mustEnv("EVENTS_HISTORY_PATH", "./events_history.json")
 	SYSTEMS_FILE_PATH = mustEnv("SYSTEMS_FILE_PATH", "./systems.json")

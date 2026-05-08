@@ -787,17 +787,14 @@ func updateUserAdmin(c *gin.Context) {
 		return
 	}
 
-	// Parse request body - expects user_data object from Python client
 	var userData map[string]any
 	if err := c.ShouldBindJSON(&userData); err != nil {
 		c.JSON(400, gin.H{"error": "Invalid request body"})
 		return
 	}
 
-	// Check if this is a typed operation (update/remove)
 	operationType, hasType := userData["type"].(string)
 	if hasType {
-		// Handle typed operations from Python client
 		username, ok := userData["username"].(string)
 		if !ok || username == "" {
 			c.JSON(400, gin.H{"error": "username is required"})
@@ -808,12 +805,17 @@ func updateUserAdmin(c *gin.Context) {
 		case "update":
 			key, hasKey := userData["key"].(string)
 			value, hasValue := userData["value"]
+
+			if slices.Contains(lockedKeys, key) {
+				c.JSON(400, gin.H{"error": "Key '" + key + "' cannot be updated"})
+				return
+			}
+
 			if !hasKey || !hasValue {
 				c.JSON(400, gin.H{"error": "key and value are required for update operation"})
 				return
 			}
 
-			// Find the user by username
 			userIndex := getIdxOfAccountBy("username", username)
 
 			if userIndex == -1 {
@@ -821,7 +823,6 @@ func updateUserAdmin(c *gin.Context) {
 				return
 			}
 
-			// Validate key and value constraints
 			if !strings.HasPrefix(key, "sys.") {
 				if len(key) > 50 {
 					c.JSON(400, gin.H{"error": fmt.Sprintf("Key '%s' length exceeds 50 characters", key)})
@@ -829,7 +830,6 @@ func updateUserAdmin(c *gin.Context) {
 				}
 			}
 
-			// Ensure sys.currency stays a float64 when updated via admin endpoint
 			usersMutex.RLock()
 			user := users[userIndex]
 			usersMutex.RUnlock()
@@ -866,7 +866,6 @@ func updateUserAdmin(c *gin.Context) {
 				return
 			}
 
-			// Find the user by username
 			userIndex := getIdxOfAccountBy("username", username)
 
 			if userIndex == -1 {
@@ -903,7 +902,6 @@ func updateUserAdmin(c *gin.Context) {
 		}
 	}
 
-	// If no type specified, return error
 	c.JSON(400, gin.H{"error": "type parameter is required. Must be 'update' or 'remove'"})
 }
 
@@ -929,8 +927,16 @@ func deleteUserKey(c *gin.Context) {
 
 	user := authenticateWithKey(authKey)
 	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
+		subUser, subToken, err := authenticateWithSubTokenFast(authKey)
+		if err != nil || subUser == nil {
+			c.JSON(403, gin.H{"error": "Invalid authentication key"})
+			return
+		}
+		user = subUser
+		if !subToken.hasPermission(PermDeleteAccount) {
+			c.JSON(403, gin.H{"error": "Token lacks permission: " + string(PermDeleteAccount)})
+			return
+		}
 	}
 
 	username := user.GetUsername()

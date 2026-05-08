@@ -8,6 +8,9 @@ import (
 )
 
 func setStandingAdmin(c *gin.Context) {
+	if !authenticateAdmin(c) {
+		return
+	}
 	type Request struct {
 		Username string        `json:"username"`
 		Level    StandingLevel `json:"level"`
@@ -64,6 +67,9 @@ func setStandingAdmin(c *gin.Context) {
 }
 
 func getStandingHistoryAdmin(c *gin.Context) {
+	if !authenticateAdmin(c) {
+		return
+	}
 	type Request struct {
 		Username string `json:"username"`
 	}
@@ -104,6 +110,9 @@ func getStandingHistoryAdmin(c *gin.Context) {
 }
 
 func recoverStandingAdmin(c *gin.Context) {
+	if !authenticateAdmin(c) {
+		return
+	}
 	type Request struct {
 		Username string `json:"username"`
 		Reason   string `json:"reason"`

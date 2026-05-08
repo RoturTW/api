@@ -125,21 +125,28 @@ func handleKofiTransaction(c *gin.Context) {
 					"timestamp": time.Now().Format(time.RFC3339),
 				},
 			})
-			switch item["direct_link_code"].(string) {
-			case "eebeb7269f":
-				// add 50 rotur credits to the user
+
+			addCredits := func(credits int) {
 				now := time.Now().UnixMilli()
-				balance := float64(account.GetCredits()) + 50
+				balance := float64(account.GetCredits()) + float64(credits)
 				account.SetBalance(balance)
 				account.addTransaction(Transaction{
-					Note:      "50 credit purchase",
+					Note:      fmt.Sprintf("%d credit purchase", credits),
 					User:      Username("rotur").Id(),
 					Timestamp: now,
-					Amount:    50,
+					Amount:    float64(credits),
 					Type:      "transfer",
 					NewTotal:  balance,
 				})
 				go saveUsers()
+			}
+			switch item["direct_link_code"].(string) {
+			case "eebeb7269f":
+				addCredits(50)
+			case "0638cbfd65":
+				addCredits(250)
+			case "e0ce188c8f":
+				addCredits(500)
 			}
 		}
 	}
