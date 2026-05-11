@@ -148,21 +148,11 @@ func (c *Conn) handleAuth(msg map[string]json.RawMessage) {
 
 	hub.Lock()
 	us := hub.userStatus[c.userId]
-	if us == nil {
-		presenceStr := "online"
-		statusStr := ""
-		if raw := user.Get("sys.status"); raw != nil {
-			if m, ok := raw.(map[string]any); ok {
-				presenceStr = strings.ToLower(getStringOrDefault(m["presence"], "online"))
-				statusStr = getStringOrDefault(m["status"], "")
-			}
+	if raw := user.Get("sys.status"); raw != nil {
+		if m, ok := raw.(map[string]any); ok {
+			us.Presence = Presence(strings.ToLower(getStringOrDefault(m["presence"], "online")))
+			us.Status = getStringOrDefault(m["status"], "")
 		}
-		us = &UserStatus{
-			Presence:   Presence(presenceStr),
-			Status:     statusStr,
-			Activities: make(map[string]Activity),
-		}
-		hub.userStatus[c.userId] = us
 	}
 	c.presence = us.Presence
 	c.lastPresenceSet = time.Now()
@@ -393,16 +383,10 @@ func (c *Conn) handleSetStatus(msg map[string]json.RawMessage) {
 
 	newMerged := hub.mergedPresenceLocked(c.userId)
 	roomNames := hub.allRoomsForUserLocked(c.userId)
-	hub.Unlock()
 
-	user := getUserById(c.userId)
-	if user != nil {
-		user.Set("sys.status", map[string]any{
-			"presence": string(us.Presence),
-			"status":   us.Status,
-		})
-		go saveUsers()
-	}
+	hub.persistStatusLocked(c.userId, us)
+
+	hub.Unlock()
 
 	wasVisible := oldMerged.visible()
 	nowVisible := newMerged.visible()

@@ -355,26 +355,99 @@ func rateLimit(limitType string) gin.HandlerFunc {
 func requiresAuth(c *gin.Context) {
 	authKey := c.Query("auth")
 	if authKey == "" {
+		authHeader := c.GetHeader("Authorization")
+		if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+			authKey = authHeader[7:]
+		} else if authHeader != "" {
+			authKey = authHeader
+		}
+	}
+	if authKey == "" {
 		c.JSON(403, gin.H{"error": "auth key is required"})
 		c.Abort()
 		return
 	}
 
 	user := authenticateWithKey(authKey)
-	if user == nil {
+	if user != nil {
+		if user.IsBanned() {
+			c.JSON(403, gin.H{"error": "User is banned"})
+			c.Abort()
+			return
+		}
+		user.GetSubscription()
+		c.Set("user", user)
+		c.Set("token_type", "main")
+		c.Next()
+		return
+	}
+
+	subUser, subToken, err := authenticateWithSubTokenFast(authKey)
+	if err != nil || subUser == nil {
 		c.JSON(403, gin.H{"error": "Invalid authentication key"})
 		c.Abort()
 		return
 	}
-
-	if user.IsBanned() {
+	if subUser.IsBanned() {
 		c.JSON(403, gin.H{"error": "User is banned"})
+		c.Abort()
 		return
 	}
-	user.GetSubscription()
-
-	c.Set("user", user)
+	subUser.GetSubscription()
+	c.Set("user", subUser)
+	c.Set("token_type", "sub")
+	c.Set("sub_token", subToken)
 	c.Next()
+}
+
+func requirePermission(perm TokenPermission) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tokenType, exists := c.Get("token_type")
+		if !exists {
+			c.JSON(403, gin.H{"error": "Authentication required"})
+			c.Abort()
+			return
+		}
+
+		if tokenType == "main" {
+			c.Next()
+			return
+		}
+
+		subTokenVal, exists := c.Get("sub_token")
+		if !exists {
+			c.JSON(403, gin.H{"error": "Invalid token context"})
+			c.Abort()
+			return
+		}
+
+		subToken, ok := subTokenVal.(*SubToken)
+		if !ok {
+			c.JSON(403, gin.H{"error": "Invalid token context"})
+			c.Abort()
+			return
+		}
+
+		if !subToken.hasPermission(perm) {
+			c.JSON(403, gin.H{"error": fmt.Sprintf("Token lacks permission: %s", string(perm))})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
+func requireMainToken() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tokenType, exists := c.Get("token_type")
+		if !exists || tokenType != "main" {
+			c.JSON(403, gin.H{"error": "This action requires the main account token"})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
 }
 
 func getBannedIPs() []string {

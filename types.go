@@ -1141,21 +1141,33 @@ func (u User) DelKey(key string) error {
 func (u User) Set(key string, value any) {
 	mu := getMutexForUser(u)
 	mu.Lock()
-	defer mu.Unlock()
 	oldValue := u[key]
 	if reflect.DeepEqual(oldValue, value) {
+		mu.Unlock()
 		return
 	}
 	u[key] = value
 	valueCopy := deepCopyValue(value)
-	if key != "key" && key != "password" {
-		var username Username
-		if v, ok := u["username"]; ok {
-			if str, ok := v.(string); ok {
-				username = Username(str)
-			}
+
+	var uid UserId
+	if v, ok := u["sys.id"]; ok && v != nil {
+		if str, ok := v.(string); ok && str != "" {
+			uid = UserId(str)
 		}
+	}
+	var username Username
+	if v, ok := u["username"]; ok {
+		if str, ok := v.(string); ok {
+			username = Username(str)
+		}
+	}
+	mu.Unlock()
+
+	if key != "key" && key != "password" {
 		go broadcastUserUpdate(username, key, valueCopy)
+		if uid != "" {
+			go OnUserUpdate(uid, key, value)
+		}
 	}
 }
 

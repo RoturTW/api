@@ -180,6 +180,11 @@ func getUser(c *gin.Context) {
 				c.JSON(403, gin.H{"error": "Invalid authentication credentials"})
 				return
 			}
+		} else {
+			subUser, _, err := authenticateWithSubTokenFast(authKey)
+			if err == nil && subUser != nil {
+				foundUser = *subUser
+			}
 		}
 	}
 
@@ -274,14 +279,26 @@ func checkAuth(c *gin.Context) {
 	}
 
 	usersMutex.RLock()
-	defer usersMutex.RUnlock()
-
 	for _, user := range users {
 		if user.GetKey() == auth {
-			c.JSON(200, gin.H{"auth": true, "username": user.GetUsername()})
+			usersMutex.RUnlock()
+			c.JSON(200, gin.H{"auth": true, "username": user.GetUsername(), "token_type": "main"})
 			return
 		}
 	}
+	usersMutex.RUnlock()
+
+	subUser, subToken, err := authenticateWithSubTokenFast(auth)
+	if err == nil && subUser != nil {
+		c.JSON(200, gin.H{
+			"auth":        true,
+			"username":    subUser.GetUsername(),
+			"token_type":  "sub",
+			"permissions": subToken.Permissions,
+		})
+		return
+	}
+
 	c.JSON(200, gin.H{"auth": false, "username": ""})
 }
 
@@ -592,9 +609,25 @@ func updateUser(c *gin.Context) {
 	}
 
 	user := authenticateWithKey(authKey)
+	tokenType := "main"
+	var subToken *SubToken
+
 	if user == nil {
-		c.JSON(403, gin.H{"error": "Invalid authentication key"})
-		return
+		subUser, st, err := authenticateWithSubTokenFast(authKey)
+		if err != nil || subUser == nil {
+			c.JSON(403, gin.H{"error": "Invalid authentication key"})
+			return
+		}
+		user = subUser
+		tokenType = "sub"
+		subToken = st
+	}
+
+	if tokenType == "sub" {
+		if !subToken.hasPermission(PermManageProfile) {
+			c.JSON(403, gin.H{"error": "Token lacks permission: " + string(PermManageProfile)})
+			return
+		}
 	}
 
 	username := user.GetUsername()
@@ -641,6 +674,7 @@ func updateUser(c *gin.Context) {
 		}
 		go doAfter(func(data any) {
 			user.Set("sys.banner", "https://avatars.rotur.dev/.banners/"+user.GetUsername())
+			go OnUserUpdate(user.GetId(), "sys.banner", "https://avatars.rotur.dev/.banners/"+user.GetUsername())
 			go saveUsers()
 		}, nil, time.Second*2)
 		c.JSON(200, gin.H{"message": "Banner uploaded successfully"})
@@ -676,6 +710,7 @@ func updateUser(c *gin.Context) {
 		}
 		go doAfter(func(data any) {
 			broadcastUserUpdate(user.GetUsername(), "pfp", "https://avatars.rotur.dev/"+user.GetUsername())
+			go OnUserUpdate(user.GetId(), "pfp", "https://avatars.rotur.dev/"+user.GetUsername())
 			go saveUsers()
 		}, nil, time.Second*2)
 		c.JSON(200, gin.H{"message": "Profile picture uploaded successfully"})

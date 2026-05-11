@@ -117,17 +117,14 @@ func (h *Hub) removeConnActivitiesLocked(c *Conn) {
 	if len(c.activities) == 0 {
 		return
 	}
-
 	us := h.userStatus[c.userId]
 	if us == nil {
 		c.activities = nil
 		return
 	}
-
 	if us.Activities == nil {
 		us.Activities = make(map[string]Activity)
 	}
-
 	for id := range c.activities {
 		delete(us.Activities, id)
 	}
@@ -138,7 +135,6 @@ func (h *Hub) unregister(c *Conn) {
 	h.Lock()
 	delete(h.conns, c)
 	h.removeConnActivitiesLocked(c)
-
 	conns := h.userConns[c.userId]
 	for i, cc := range conns {
 		if cc == c {
@@ -147,14 +143,20 @@ func (h *Hub) unregister(c *Conn) {
 		}
 	}
 	if len(h.userConns[c.userId]) == 0 {
-		us := h.userStatus[c.userId]
-		if us != nil {
-			h.persistStatusLocked(c.userId, us)
+		// Persist status to user account before removing from hub
+		if us := h.userStatus[c.userId]; us != nil {
+			user := getUserById(c.userId)
+			if user != nil {
+				user.Set("sys.status", map[string]any{
+					"presence": string(us.Presence),
+					"status":   us.Status,
+				})
+				go saveUsers()
+			}
 		}
 		delete(h.userConns, c.userId)
 		delete(h.userStatus, c.userId)
 	}
-
 	leftRooms := make([]string, 0, len(c.rooms))
 	for name := range c.rooms {
 		leftRooms = append(leftRooms, name)
@@ -274,7 +276,6 @@ func (h *Hub) broadcastStatusToAllRooms(uid UserId, roomNames []string) {
 		h.Unlock()
 		return
 	}
-
 	seen := make(map[*Conn]struct{})
 	for _, name := range roomNames {
 		r, ok := h.rooms[name]
@@ -335,6 +336,105 @@ func (h *Hub) broadcastToUserConns(uid UserId, cmd string, payload map[string]an
 	}
 }
 
+func (h *Hub) broadcastProfileUpdate(uid UserId, key string, value any) {
+	h.Lock()
+	state := h.mergedStateLocked(uid)
+	username := state.Username
+	if username == "" {
+		username = uid.User().GetUsername()
+	}
+
+	roomNames := h.allRoomsForUserLocked(uid)
+
+	seen := make(map[*Conn]struct{})
+	for _, name := range roomNames {
+		r, ok := h.rooms[name]
+		if !ok {
+			continue
+		}
+		for memberUid := range r.members {
+			for _, conn := range h.userConns[memberUid] {
+				if _, inRoom := conn.rooms[name]; !inRoom {
+					continue
+				}
+				seen[conn] = struct{}{}
+			}
+		}
+	}
+	h.Unlock()
+
+	payload := map[string]any{
+		"cmd":      "profile_update",
+		"user_id":  string(uid),
+		"username": string(username),
+		"key":      key,
+		"value":    value,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	for conn := range seen {
+		select {
+		case conn.send <- data:
+		default:
+		}
+	}
+}
+
+func (h *Hub) pushKeyUpdate(uid UserId, key string, value any) {
+	user := getUserById(uid)
+	if user == nil {
+		return
+	}
+	switch key {
+	case "sys.blocked":
+		value = user.GetBlockedUsers()
+	case "sys.requests":
+		value = user.GetRequestedUsers()
+	case "sys.friends":
+		value = user.GetFriendUsers()
+	case "sys.transactions":
+		transactions := user.GetTransactions()
+		netTransactions := make([]TransactionNet, len(transactions))
+		for i, transaction := range transactions {
+			netTransactions[i] = transaction.ToNet()
+		}
+		value = netTransactions
+	}
+	payload := map[string]any{
+		"cmd":   "key_update",
+		"key":   key,
+		"value": value,
+	}
+	h.broadcastToUserConns(uid, "key_update", payload)
+}
+
+func OnUserUpdate(uid UserId, key string, value any) {
+	if uid == "" {
+		return
+	}
+
+	switch key {
+	case "pfp", "sys.banner", "sys.overlay", "display_name":
+		hub.broadcastProfileUpdate(uid, key, value)
+		return
+	case "username":
+		hub.Lock()
+		username := Username(getStringOrEmpty(value))
+		for _, c := range hub.userConns[uid] {
+			c.username = username
+		}
+		hub.Unlock()
+		hub.broadcastProfileUpdate(uid, key, value)
+		return
+	case "sys.status":
+		return
+	}
+
+	hub.pushKeyUpdate(uid, key, value)
+}
+
 func (h *Hub) sendToUser(userId UserId, data []byte) {
 	h.Lock()
 	defer h.Unlock()
@@ -387,12 +487,10 @@ func (h *Hub) mergedStateLocked(uid UserId) RoomMember {
 		}
 	}
 	presence := h.mergedPresenceLocked(uid)
-
 	activities := make([]Activity, 0, len(us.Activities))
 	for _, a := range us.Activities {
 		activities = append(activities, a)
 	}
-
 	return RoomMember{
 		UserID:     uid,
 		Username:   username,
@@ -436,6 +534,7 @@ func (h *Hub) getUserStatus(uid UserId) *RoomMember {
 			Activities: activities,
 		}
 	}
+
 	state := h.mergedStateLocked(uid)
 	if !state.Presence.visible() {
 		return nil

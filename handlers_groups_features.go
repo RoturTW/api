@@ -316,15 +316,32 @@ func sendTip(c *gin.Context) {
 		return
 	}
 
+	nAmount := roundVal(amount)
+	userCredits := user.GetCredits()
+	if userCredits < nAmount {
+		c.JSON(400, gin.H{"error": "Insufficient funds", "required": nAmount, "available": userCredits})
+		return
+	}
+
+	user.SetBalance(roundVal(userCredits - nAmount))
+	user.addTransaction(Transaction{
+		Note:      "Tip to group " + groupTag,
+		User:      UserId(""),
+		Amount:    nAmount,
+		Type:      "group_tip",
+		Timestamp: time.Now().UnixMilli(),
+		NewTotal:  roundVal(userCredits - nAmount),
+	})
+
 	tip := GroupTip{
 		Id:            uuid.New().String(),
 		GroupTag:      groupTag,
 		FromUserId:    user.GetId(),
-		AmountCredits: amount,
+		AmountCredits: nAmount,
 		CreatedAt:     time.Now().Unix(),
 	}
-
 	addGroupTip(groupTag, tip)
+	go saveUsers()
 
 	c.JSON(201, tip)
 }

@@ -25,6 +25,7 @@ func main() {
 	loadEventsHistory()
 	loadGifts()
 
+	buildSubTokenIndex()
 	// doAfter(reconnectFriends, nil, time.Second*20)
 
 	if err := loadJSONBadges(); err != nil {
@@ -38,6 +39,7 @@ func main() {
 	go watchUsersFile()
 	go watchBadgesFile()
 	go cleanExpiredGifts()
+	go cleanExpiredSubTokens()
 	// go enactInactivityTax()
 	go startStandingRecoveryChecker()
 
@@ -47,23 +49,23 @@ func main() {
 	r.Use(corsMiddleware())
 
 	// Posts endpoints
-	r.GET("/post", rateLimit("default"), requiresAuth, requireStanding(StandingGood), createPost)
+	r.GET("/post", rateLimit("default"), requiresAuth, requirePermission(PermCreatePost), requireStanding(StandingGood), createPost)
 	r.GET("/limits", getLimits)
-	r.GET("/reply", rateLimit("default"), requiresAuth, requireStanding(StandingGood), replyToPost)
-	r.GET("/follow", rateLimit("follow"), requiresAuth, requireStanding(StandingWarning), followUser)
-	r.GET("/unfollow", rateLimit("follow"), requiresAuth, unfollowUser)
+	r.GET("/reply", rateLimit("default"), requiresAuth, requirePermission(PermReplyPost), requireStanding(StandingGood), replyToPost)
+	r.GET("/follow", rateLimit("follow"), requiresAuth, requirePermission(PermFollow), requireStanding(StandingWarning), followUser)
+	r.GET("/unfollow", rateLimit("follow"), requiresAuth, requirePermission(PermUnfollow), unfollowUser)
 	r.GET("/followers", rateLimit("profile"), getFollowers)
 	r.GET("/following", rateLimit("profile"), getFollowing)
-	r.GET("/notifications", rateLimit("default"), requiresAuth, getNotifications)
+	r.GET("/notifications", rateLimit("default"), requiresAuth, requirePermission(PermViewNotifications), getNotifications)
 	r.GET("/profile", rateLimit("profile"), getProfile)
 	r.GET("/exists", rateLimit("profile"), getExists)
 	r.GET("/feed", rateLimit("default"), getFeed)
-	r.GET("/following_feed", rateLimit("default"), requiresAuth, getFollowingFeed)
-	r.GET("/delete", requiresAuth, deletePost)
-	r.GET("/rate", requiresAuth, ratePost)
-	r.GET("/repost", rateLimit("default"), requiresAuth, requireStanding(StandingGood), repost)
-	r.GET("/pin_post", requiresAuth, pinPost)
-	r.GET("/unpin_post", requiresAuth, unpinPost)
+	r.GET("/following_feed", rateLimit("default"), requiresAuth, requirePermission(PermViewPosts), getFollowingFeed)
+	r.GET("/delete", requiresAuth, requirePermission(PermDeletePost), deletePost)
+	r.GET("/rate", requiresAuth, requirePermission(PermLikePost), ratePost)
+	r.GET("/repost", rateLimit("default"), requiresAuth, requirePermission(PermRepost), requireStanding(StandingGood), repost)
+	r.GET("/pin_post", requiresAuth, requirePermission(PermManagePosts), pinPost)
+	r.GET("/unpin_post", requiresAuth, requirePermission(PermManagePosts), unpinPost)
 	r.GET("/top_posts", rateLimit("search"), getTopPosts)
 	r.GET("/search_posts", rateLimit("search"), searchPosts)
 
@@ -80,49 +82,49 @@ func main() {
 
 	// Systems endpoints
 	r.GET("/systems", getSystems)
-	r.GET("/system/users", requiresAuth, getSystemUsers)
-	r.GET("/reload_systems", requiresAuth, reloadSystemsEndpoint)
-	r.POST("/update_system", requiresAuth, updateSystem)
+	r.GET("/system/users", requiresAuth, requirePermission(PermViewGroups), getSystemUsers)
+	r.GET("/reload_systems", requiresAuth, requirePermission(PermManageSettings), reloadSystemsEndpoint)
+	r.POST("/update_system", requiresAuth, requirePermission(PermManageSettings), updateSystem)
 
 	// Validator endpoints
-	r.GET("/generate_validator", requiresAuth, generateValidator)
+	r.GET("/generate_validator", requiresAuth, requirePermission(PermGenerateValidator), generateValidator)
 	r.GET("/validate", validateToken)
 
 	// Items endpoints
 	items := r.Group("/items")
 	{
-		items.GET("/create", requiresAuth, requireStanding(StandingGood), createItem)
+		items.GET("/create", requiresAuth, requirePermission(PermManageItems), requireStanding(StandingGood), createItem)
 		items.GET("/get/:name", getItem)
 		items.GET("/list/:username", listItems)
 		items.GET("/selling", getSellingItems)
 
-		items.GET("/buy/:name", requiresAuth, requireStanding(StandingWarning), buyItem)
-		items.GET("/transfer/:name", requiresAuth, requireStanding(StandingGood), transferItem)
-		items.GET("/sell/:name", requiresAuth, requireStanding(StandingGood), sellItem)
-		items.GET("/stop_selling/:name", requiresAuth, stopSellingItem)
-		items.GET("/set_price/:name", requiresAuth, setItemPrice)
+		items.GET("/buy/:name", requiresAuth, requirePermission(PermBuyItems), requireStanding(StandingWarning), buyItem)
+		items.GET("/transfer/:name", requiresAuth, requirePermission(PermManageItems), requireStanding(StandingGood), transferItem)
+		items.GET("/sell/:name", requiresAuth, requirePermission(PermSellItems), requireStanding(StandingGood), sellItem)
+		items.GET("/stop_selling/:name", requiresAuth, requirePermission(PermSellItems), stopSellingItem)
+		items.GET("/set_price/:name", requiresAuth, requirePermission(PermManageItems), setItemPrice)
 
-		items.GET("/update/:name", requiresAuth, updateItem)
-		items.GET("/delete/:name", requiresAuth, deleteItem)
-		items.GET("/admin_add/:id", requiresAuth, adminAddUserToItem)
+		items.GET("/update/:name", requiresAuth, requirePermission(PermManageItems), updateItem)
+		items.GET("/delete/:name", requiresAuth, requirePermission(PermManageItems), deleteItem)
+		items.GET("/admin_add/:id", requiresAuth, requirePermission(PermManageItems), adminAddUserToItem)
 	}
 
 	// Keys endpoints
 	keys := r.Group("/keys")
 	{
-		keys.GET("/create", requiresAuth, createKey)
-		keys.GET("/mine", requiresAuth, getMyKeys)
+		keys.GET("/create", requiresAuth, requirePermission(PermManageKeys), createKey)
+		keys.GET("/mine", requiresAuth, requirePermission(PermViewKeys), getMyKeys)
 		keys.GET("/get/:id", getKey)
 		keys.GET("/check/:username", checkKey)
-		keys.GET("/name/:id", requiresAuth, setKeyName)
-		keys.GET("/update/:id", requiresAuth, updateKey)
-		keys.GET("/revoke/:id", requiresAuth, revokeKey)
-		keys.GET("/delete/:id", requiresAuth, deleteKey)
-		keys.GET("/admin_add/:id", requiresAuth, adminAddUserToKey)
-		keys.GET("/admin_remove/:id", requiresAuth, adminRemoveUserFromKey)
-		keys.GET("/buy/:id", requiresAuth, buyKey)
-		keys.GET("/cancel/:id", requiresAuth, cancelKey)
-		keys.GET("/debug_subscriptions", requiresAuth, debugSubscriptionsEndpoint)
+		keys.GET("/name/:id", requiresAuth, requirePermission(PermManageKeys), setKeyName)
+		keys.GET("/update/:id", requiresAuth, requirePermission(PermManageKeys), updateKey)
+		keys.GET("/revoke/:id", requiresAuth, requirePermission(PermManageKeys), revokeKey)
+		keys.GET("/delete/:id", requiresAuth, requirePermission(PermManageKeys), deleteKey)
+		keys.GET("/admin_add/:id", requiresAuth, requirePermission(PermManageKeys), adminAddUserToKey)
+		keys.GET("/admin_remove/:id", requiresAuth, requirePermission(PermManageKeys), adminRemoveUserFromKey)
+		keys.GET("/buy/:id", requiresAuth, requirePermission(PermManageKeys), buyKey)
+		keys.GET("/cancel/:id", requiresAuth, requirePermission(PermManageKeys), cancelKey)
+		keys.GET("/debug_subscriptions", requiresAuth, requirePermission(PermViewKeys), debugSubscriptionsEndpoint)
 	}
 
 	// Admin endpoints
@@ -149,7 +151,7 @@ func main() {
 	r.GET("/get_user", rateLimit("profile"), getUser)
 	r.GET("/get_user_new", rateLimit("profile"), getUser)
 
-	r.GET("/check_auth", requiresAuth, checkAuth)
+	r.GET("/check_auth", requiresAuth, requirePermission(PermViewProfile), checkAuth)
 
 	r.POST("/create_user", rateLimit("register"), registerUser)
 	auth := r.Group("/auth")
@@ -161,92 +163,93 @@ func main() {
 	me := r.Group("/me")
 	{
 		me.POST("/update", updateUser)
-		me.POST("/refresh_token", requiresAuth, refreshToken)
-		me.POST("/transfer", requiresAuth, transferCredits)
-		me.POST("/gamble", requiresAuth, gambleCredits)
-		me.DELETE("/delete", deleteUserKey)
+		me.POST("/refresh_token", requiresAuth, requireMainToken(), refreshToken)
+		me.POST("/transfer", requiresAuth, requirePermission(PermTransferCredits), transferCredits)
+		me.POST("/gamble", requiresAuth, requirePermission(PermManageCredits), gambleCredits)
+		me.DELETE("/delete", requiresAuth, requirePermission(PermDeleteAccount), deleteUserKey)
 
-		me.GET("/blocked", requiresAuth, getBlocking)
-		me.POST("/block/:username", requiresAuth, blockUser)
-		me.POST("/unblock/:username", requiresAuth, unblockUser)
+		me.GET("/blocked", requiresAuth, requirePermission(PermViewBlocked), getBlocking)
+		me.POST("/block/:username", requiresAuth, requirePermission(PermManageBlocked), blockUser)
+		me.POST("/unblock/:username", requiresAuth, requirePermission(PermManageBlocked), unblockUser)
 
 		// notes endpoints, get not needed, stored in user["sys.notes"]
-		me.POST("/note/:username", requiresAuth, requireTier("Plus"), noteUser)
-		me.DELETE("/note/:username", requiresAuth, requireTier("Plus"), deleteNote)
+		me.POST("/note/:username", requiresAuth, requirePermission(PermManageProfile), requireTier("Plus"), noteUser)
+		me.DELETE("/note/:username", requiresAuth, requirePermission(PermManageProfile), requireTier("Plus"), deleteNote)
+		me.GET("/able", requiresAuth, getTokenAbilities)
 	}
 
 	groups := r.Group("/groups")
 	{
-		groups.GET("/mine", requiresAuth, getMyGroups)
-		groups.GET("/search", requiresAuth, searchGroups)
-		groups.POST("/create", requiresAuth, requireStanding(StandingGood), createGroup)
-		groups.POST("/:grouptag/rep", requiresAuth, representGroup)
-		groups.POST("/:grouptag/disrep", requiresAuth, disrepresentGroup)
-		groups.POST("/:grouptag/report", requiresAuth, reportGroup)
-		groups.POST("/:grouptag/join", requiresAuth, joinGroup)
-		groups.POST("/:grouptag/leave", requiresAuth, leaveGroup)
-		groups.GET("/:grouptag", requiresAuth, getGroup)
-		groups.PATCH("/:grouptag", requiresAuth, updateGroup)
-		groups.DELETE("/:grouptag", requiresAuth, deleteGroup)
+		groups.GET("/mine", requiresAuth, requirePermission(PermViewGroups), getMyGroups)
+		groups.GET("/search", requiresAuth, requirePermission(PermViewGroups), searchGroups)
+		groups.POST("/create", requiresAuth, requirePermission(PermManageGroups), requireStanding(StandingGood), createGroup)
+		groups.POST("/:grouptag/rep", requiresAuth, requirePermission(PermManageSettings), representGroup)
+		groups.POST("/:grouptag/disrep", requiresAuth, requirePermission(PermManageSettings), disrepresentGroup)
+		groups.POST("/:grouptag/report", requiresAuth, requirePermission(PermViewGroups), reportGroup)
+		groups.POST("/:grouptag/join", requiresAuth, requirePermission(PermJoinGroup), joinGroup)
+		groups.POST("/:grouptag/leave", requiresAuth, requirePermission(PermLeaveGroup), leaveGroup)
+		groups.GET("/:grouptag", requiresAuth, requirePermission(PermViewGroups), getGroup)
+		groups.PATCH("/:grouptag", requiresAuth, requirePermission(PermManageGroups), updateGroup)
+		groups.DELETE("/:grouptag", requiresAuth, requirePermission(PermManageGroups), deleteGroup)
 
 		groups.GET("/:grouptag/announcements", getAnnouncements)
-		groups.POST("/:grouptag/announcements", requiresAuth, createAnnouncement)
-		groups.DELETE("/:grouptag/announcements/:announcementid", requiresAuth, deleteAnnouncement)
-		groups.POST("/:grouptag/announcements/mute", requiresAuth, toggleAnnouncementMute)
+		groups.POST("/:grouptag/announcements", requiresAuth, requirePermission(PermManageGroups), createAnnouncement)
+		groups.DELETE("/:grouptag/announcements/:announcementid", requiresAuth, requirePermission(PermManageGroups), deleteAnnouncement)
+		groups.POST("/:grouptag/announcements/mute", requiresAuth, requirePermission(PermManageGroups), toggleAnnouncementMute)
 
-		groups.GET("/:grouptag/events", requiresAuth, getEvents)
-		groups.POST("/:grouptag/events", requiresAuth, createEvent)
+		groups.GET("/:grouptag/events", requiresAuth, requirePermission(PermViewGroups), getEvents)
+		groups.POST("/:grouptag/events", requiresAuth, requirePermission(PermManageGroups), createEvent)
 
-		groups.GET("/:grouptag/tips", requiresAuth, getTips)
-		groups.POST("/:grouptag/tips", requiresAuth, sendTip)
+		groups.GET("/:grouptag/tips", requiresAuth, requirePermission(PermViewGroups), getTips)
+		groups.POST("/:grouptag/tips", requiresAuth, requirePermission(PermManageCredits), sendTip)
 
-		groups.GET("/:grouptag/roles", requiresAuth, getRoles)
-		groups.POST("/:grouptag/roles", requiresAuth, createRole)
-		groups.PATCH("/:grouptag/roles/:roleid", requiresAuth, updateRole)
-		groups.DELETE("/:grouptag/roles/:roleid", requiresAuth, deleteRole)
+		groups.GET("/:grouptag/roles", requiresAuth, requirePermission(PermViewGroups), getRoles)
+		groups.POST("/:grouptag/roles", requiresAuth, requirePermission(PermManageGroups), createRole)
+		groups.PATCH("/:grouptag/roles/:roleid", requiresAuth, requirePermission(PermManageGroups), updateRole)
+		groups.DELETE("/:grouptag/roles/:roleid", requiresAuth, requirePermission(PermManageGroups), deleteRole)
 
-		groups.GET("/:grouptag/members/:userid/roles", requiresAuth, getUserRoles)
-		groups.GET("/:grouptag/members/:userid/permissions", requiresAuth, getUserPermissions)
-		groups.GET("/:grouptag/members/:userid/benefits", requiresAuth, getUserBenefits)
-		groups.POST("/:grouptag/members/:userid/roles/:roleid", requiresAuth, assignRole)
-		groups.DELETE("/:grouptag/members/:userid/roles/:roleid", requiresAuth, removeRole)
+		groups.GET("/:grouptag/members/:userid/roles", requiresAuth, requirePermission(PermViewGroups), getUserRoles)
+		groups.GET("/:grouptag/members/:userid/permissions", requiresAuth, requirePermission(PermViewGroups), getUserPermissions)
+		groups.GET("/:grouptag/members/:userid/benefits", requiresAuth, requirePermission(PermViewGroups), getUserBenefits)
+		groups.POST("/:grouptag/members/:userid/roles/:roleid", requiresAuth, requirePermission(PermManageGroups), assignRole)
+		groups.DELETE("/:grouptag/members/:userid/roles/:roleid", requiresAuth, requirePermission(PermManageGroups), removeRole)
 	}
-	r.POST("/accept_tos", requiresAuth, acceptTos)
+	r.POST("/accept_tos", requiresAuth, requirePermission(PermManageSettings), acceptTos)
 
 	r.PATCH("/users", updateUser)
 	r.DELETE("/users", deleteUserKey)
-	r.DELETE("/users/:username", requiresAuth, deleteUser)
+	r.DELETE("/users/:username", requiresAuth, requirePermission(PermDeleteAccount), deleteUser)
 
 	files := r.Group("/files")
 	{
-		files.GET("", requiresAuth, getFileByUUID)
-		files.POST("", requiresAuth, updateFiles)
-		files.DELETE("", requiresAuth, deleteAllUserFiles)
+		files.GET("", requiresAuth, requirePermission(PermViewFiles), getFileByUUID)
+		files.POST("", requiresAuth, requirePermission(PermManageFiles), updateFiles)
+		files.DELETE("", requiresAuth, requirePermission(PermDeleteFiles), deleteAllUserFiles)
 
-		files.GET("/usage", requiresAuth, getUserFileSize)
-		files.GET("/index", requiresAuth, getFilesIndex)
-		files.GET("/entries", requiresAuth, getFilesAll)
+		files.GET("/usage", requiresAuth, requirePermission(PermViewFiles), getUserFileSize)
+		files.GET("/index", requiresAuth, requirePermission(PermViewFiles), getFilesIndex)
+		files.GET("/entries", requiresAuth, requirePermission(PermViewFiles), getFilesAll)
 
-		files.POST("/by-uuid", requiresAuth, getFilesByUUIDs)
-		files.GET("/by-uuid", requiresAuth, getFileByUUID)
-		files.GET("/by-path/*path", requiresAuth, getFileByPath)
+		files.POST("/by-uuid", requiresAuth, requirePermission(PermViewFiles), getFilesByUUIDs)
+		files.GET("/by-uuid", requiresAuth, requirePermission(PermViewFiles), getFileByUUID)
+		files.GET("/by-path/*path", requiresAuth, requirePermission(PermViewFiles), getFileByPath)
 
-		files.POST("/stats", requiresAuth, getFileSizes)
-		files.GET("/path-index", requiresAuth, getPathIndex)
+		files.POST("/stats", requiresAuth, requirePermission(PermViewFiles), getFileSizes)
+		files.GET("/path-index", requiresAuth, requirePermission(PermViewFiles), getPathIndex)
 	}
 
-	r.GET("/read-files", requiresAuth, getFilesAll)
-	r.GET("/read-file", requiresAuth, getFileByUUID)
-	r.GET("/read-index", requiresAuth, getFilesIndex)
+	r.GET("/read-files", requiresAuth, requirePermission(PermViewFiles), getFilesAll)
+	r.GET("/read-file", requiresAuth, requirePermission(PermViewFiles), getFileByUUID)
+	r.GET("/read-index", requiresAuth, requirePermission(PermViewFiles), getFilesIndex)
 
 	// Friends endpoints
 	friends := r.Group("/friends")
 	{
-		friends.GET("", requiresAuth, getFriends)
-		friends.POST("/request/:username", requiresAuth, requireStanding(StandingGood), sendFriendRequest)
-		friends.POST("/accept/:username", requiresAuth, acceptFriendRequest)
-		friends.POST("/reject/:username", requiresAuth, rejectFriendRequest)
-		friends.POST("/remove/:username", requiresAuth, removeFriend)
+		friends.GET("", requiresAuth, requirePermission(PermViewFriends), getFriends)
+		friends.POST("/request/:username", requiresAuth, requirePermission(PermSendFriendReq), requireStanding(StandingGood), sendFriendRequest)
+		friends.POST("/accept/:username", requiresAuth, requirePermission(PermAcceptFriend), acceptFriendRequest)
+		friends.POST("/reject/:username", requiresAuth, requirePermission(PermAcceptFriend), rejectFriendRequest)
+		friends.POST("/remove/:username", requiresAuth, requirePermission(PermRemoveFriend), removeFriend)
 	}
 
 	// Linking endpoints
@@ -256,7 +259,7 @@ func main() {
 		link.GET("/status", getLinkStatus)
 		link.GET("/user", getLinkedUser)
 
-		link.POST("/code", requiresAuth, linkCodeToAccount)
+		link.POST("/code", requiresAuth, requirePermission(PermManageSettings), linkCodeToAccount)
 	}
 
 	// Services endpoints
@@ -264,6 +267,8 @@ func main() {
 	{
 		// for future integrations
 	}
+
+	r.GET("/ws", statusWSHandler)
 
 	status := r.Group("/status")
 	{
@@ -274,42 +279,56 @@ func main() {
 	// DevFund endpoints
 	devfund := r.Group("/devfund")
 	{
-		devfund.POST("/escrow_transfer", requiresAuth, escrowTransfer)
-		devfund.POST("/escrow_release", requiresAuth, escrowRelease)
+		devfund.POST("/escrow_transfer", requiresAuth, requirePermission(PermTransferCredits), escrowTransfer)
+		devfund.POST("/escrow_release", requiresAuth, requirePermission(PermManageCredits), escrowRelease)
+	}
+
+	tokens := r.Group("/tokens")
+	{
+		tokens.GET("/permissions", listPermissions)
+		tokens.GET("", requiresAuth, requirePermission(PermManageTokens), listSubTokens)
+		tokens.GET("/active", requiresAuth, requirePermission(PermManageTokens), listActiveSubTokens)
+		tokens.POST("/create", requiresAuth, requireMainToken(), createSubToken)
+		tokens.GET("/:id", requiresAuth, requirePermission(PermManageTokens), getSubToken)
+		tokens.GET("/:id/activity", requiresAuth, requirePermission(PermManageTokens), getSubTokenActivity)
+		tokens.PATCH("/:id", requiresAuth, requireMainToken(), updateSubToken)
+		tokens.POST("/:id/rename", requiresAuth, requireMainToken(), renameSubToken)
+		tokens.POST("/:id/revoke", requiresAuth, requireMainToken(), revokeSubToken)
+		tokens.DELETE("/:id", requiresAuth, requireMainToken(), deleteSubToken)
 	}
 
 	// Gifts endpoints
 	gifts := r.Group("/gifts")
 	{
-		gifts.POST("/create", rateLimit("default"), requiresAuth, requireStanding(StandingGood), createGift)
+		gifts.POST("/create", rateLimit("default"), requiresAuth, requirePermission(PermCreateGift), requireStanding(StandingGood), createGift)
 		gifts.GET("/:code", getGift)
-		gifts.POST("/claim/:code", rateLimit("default"), requiresAuth, requireStanding(StandingWarning), claimGift)
-		gifts.POST("/cancel/:id", requiresAuth, cancelGift)
-		gifts.GET("/mine", requiresAuth, getMyGifts)
+		gifts.POST("/claim/:code", rateLimit("default"), requiresAuth, requirePermission(PermClaimGift), requireStanding(StandingWarning), claimGift)
+		gifts.POST("/cancel/:id", requiresAuth, requirePermission(PermCancelGift), cancelGift)
+		gifts.GET("/mine", requiresAuth, requirePermission(PermViewGifts), getMyGifts)
 	}
 
 	notify := r.Group("/notify")
 	{
 		notify.GET("/vapid", rateLimit("notify"), getVAPIDKeys)
-		notify.POST("/register", rateLimit("notify"), requiresAuth, registerForNotifications)
-		notify.GET("/check", requiresAuth, checkNotifyRegistration)
-		notify.GET("/endpoints", requiresAuth, getNotifyEndpoints)
-		notify.DELETE("/device/:device_id", requiresAuth, deleteNotifyDevice)
-		notify.GET("/allowed", requiresAuth, getNotifyAllowedSenders)
-		notify.POST("/allowed/:username", requiresAuth, addNotifyAllowedSender)
-		notify.DELETE("/allowed/:username", requiresAuth, removeNotifyAllowedSender)
-		notify.GET("/log", rateLimit("notify"), requiresAuth, getNotifyLogHandler)
-		notify.POST("/:username", rateLimit("notify"), requiresAuth, notifyUser)
-		notify.POST("/", rateLimit("notify"), requiresAuth, notifyManyUsers)
-		notify.GET("/:source/users", rateLimit("notify"), requiresAuth, getNotifiableUsers)
+		notify.POST("/register", rateLimit("notify"), requiresAuth, requirePermission(PermManageSettings), registerForNotifications)
+		notify.GET("/check", requiresAuth, requirePermission(PermViewNotifications), checkNotifyRegistration)
+		notify.GET("/endpoints", requiresAuth, requirePermission(PermViewNotifications), getNotifyEndpoints)
+		notify.DELETE("/device/:device_id", requiresAuth, requirePermission(PermManageSettings), deleteNotifyDevice)
+		notify.GET("/allowed", requiresAuth, requirePermission(PermViewNotifications), getNotifyAllowedSenders)
+		notify.POST("/allowed/:username", requiresAuth, requirePermission(PermManageSettings), addNotifyAllowedSender)
+		notify.DELETE("/allowed/:username", requiresAuth, requirePermission(PermManageSettings), removeNotifyAllowedSender)
+		notify.GET("/log", rateLimit("notify"), requiresAuth, requirePermission(PermViewNotifications), getNotifyLogHandler)
+		notify.POST("/:username", rateLimit("notify"), requiresAuth, requirePermission(PermSendNotifications), notifyUser)
+		notify.POST("/", rateLimit("notify"), requiresAuth, requirePermission(PermSendNotifications), notifyManyUsers)
+		notify.GET("/:source/users", rateLimit("notify"), requiresAuth, requirePermission(PermViewNotifications), getNotifiableUsers)
 	}
 
 	// Other endpoints
-	r.GET("/claim_daily", rateLimit("default"), requiresAuth, requireStanding(StandingGood), claimDaily)
-	r.GET("/claim_time", rateLimit("default"), requiresAuth, timeUntilNextClaim)
+	r.GET("/claim_daily", rateLimit("default"), requiresAuth, requirePermission(PermClaimDaily), requireStanding(StandingGood), claimDaily)
+	r.GET("/claim_time", rateLimit("default"), requiresAuth, requirePermission(PermClaimDaily), timeUntilNextClaim)
 	r.GET("/supporters", rateLimit("default"), getSupporters)
-	r.GET("/badges", rateLimit("default"), requiresAuth, getBadges)
-	r.GET("/ai", rateLimit("ai"), requiresAuth, handleAI)
+	r.GET("/badges", rateLimit("default"), requiresAuth, requirePermission(PermViewProfile), getBadges)
+	r.GET("/ai", rateLimit("ai"), requiresAuth, requirePermission(PermViewPosts), handleAI)
 	r.GET("/status", rateLimit("default"), getStatus)
 
 	go func() {
@@ -326,7 +345,7 @@ func main() {
 		avatars.POST("/rotur-upload-pfp", uploadPfpHandler)
 		avatars.POST("/rotur-upload-banner", uploadBannerHandler)
 
-		avatars.POST("/reload-overlays", requiresAuth, reloadOverlays)
+		avatars.POST("/reload-overlays", requiresAuth, requirePermission(PermManageSettings), reloadOverlays)
 
 		log.Println("Avatar server starting on port 5604...")
 		if err := avatars.Run("0.0.0.0:5604"); err != nil {
