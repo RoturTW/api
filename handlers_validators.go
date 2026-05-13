@@ -26,7 +26,7 @@ func windowStart(t int64) int64 {
 }
 
 func windowEnd(t int64) int64 {
-	return windowStart(t) + validatorWindowSeconds
+	return t + validatorWindowSeconds
 }
 
 func hashValidator(key, authKey string, roundedTs int64) string {
