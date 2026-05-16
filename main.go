@@ -24,7 +24,7 @@ func main() {
 	loadSystems()
 	loadEventsHistory()
 	loadGifts()
-
+	loadCosmeticsCatalog()
 	buildSubTokenIndex()
 	// doAfter(reconnectFriends, nil, time.Second*20)
 
@@ -321,6 +321,22 @@ func main() {
 		notify.POST("/:username", rateLimit("notify"), requiresAuth, requirePermission(PermSendNotifications), notifyUser)
 		notify.POST("/", rateLimit("notify"), requiresAuth, requirePermission(PermSendNotifications), notifyManyUsers)
 		notify.GET("/:source/users", rateLimit("notify"), requiresAuth, requirePermission(PermViewNotifications), getNotifiableUsers)
+	}
+
+	// Cosmetics endpoints
+	cosmetics := r.Group("/cosmetics")
+	{
+		cosmetics.GET("/shop", rateLimit("default"), getShop)
+		cosmetics.GET("/items/:id", rateLimit("default"), getCosmeticDetail)
+		cosmetics.GET("/mine", requiresAuth, requirePermission(PermViewProfile), getMyCosmetics)
+		cosmetics.POST("/purchase/:id", rateLimit("default"), requiresAuth, requirePermission(PermBuyItems), requireStanding(StandingWarning), purchaseCosmetic)
+		cosmetics.POST("/equip/:id", requiresAuth, requirePermission(PermManageProfile), equipCosmetic)
+		cosmetics.POST("/unequip", requiresAuth, requirePermission(PermManageProfile), unequipCosmetic)
+		cosmetics.GET("/overlays/*filepath", rateLimit("default"), serveOverlayAsset)
+		cosmetics.GET("/admin/list", rateLimit("default"), adminListCosmetics)
+		cosmetics.POST("/admin/create", rateLimit("default"), adminCreateCosmetic)
+		cosmetics.PATCH("/admin/update/:id", rateLimit("default"), adminUpdateCosmetic)
+		cosmetics.DELETE("/admin/delete/:id", rateLimit("default"), adminDeleteCosmetic)
 	}
 
 	// Other endpoints

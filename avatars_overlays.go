@@ -19,7 +19,7 @@ var (
 )
 
 func loadOverlays() {
-	overlaysPath := filepath.Join("./overlays", "-manifest.json")
+	overlaysPath := filepath.Join(COSMETICS_ASSETS_PATH, "overlays", "-manifest.json")
 	data, err := os.ReadFile(overlaysPath)
 	if err != nil {
 		log.Printf("[avatars] no overlay manifest found: %v", err)
